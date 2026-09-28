@@ -25,13 +25,22 @@ public class TranscriptionJobStore {
     }
 
     public void createQueued(String id, String visualAnalysisMode) {
-        jdbc.update("INSERT INTO transcription_jobs (id, status, visual_analysis_mode) VALUES (?, 'queued', ?)",
-            id, visualAnalysisMode);
+        createQueued(id, visualAnalysisMode, 2.0);
+    }
+
+    public void createQueued(String id, String visualAnalysisMode, double coarseChangePercent) {
+        jdbc.update("INSERT INTO transcription_jobs (id, status, visual_analysis_mode, coarse_change_percent) VALUES (?, 'queued', ?, ?)",
+            id, visualAnalysisMode, coarseChangePercent);
     }
 
     public String findVisualAnalysisMode(String id) {
         return jdbc.query("SELECT visual_analysis_mode FROM transcription_jobs WHERE id = ?",
             (row, number) -> row.getString(1), id).stream().findFirst().orElse("both");
+    }
+
+    public double findCoarseChangePercent(String id) {
+        return jdbc.query("SELECT coarse_change_percent FROM transcription_jobs WHERE id = ?",
+            (row, number) -> row.getDouble(1), id).stream().findFirst().orElse(2.0);
     }
 
     public void markProcessing(String id) {

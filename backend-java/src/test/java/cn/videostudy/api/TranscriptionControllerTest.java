@@ -53,7 +53,53 @@ class TranscriptionControllerTest {
                     .param("visualAnalysisMode", "ocr_only"))
                 .andExpect(status().isAccepted());
             org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000))
-                .createQueued(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("ocr_only"));
+                .createQueued(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("ocr_only"),
+                    org.mockito.ArgumentMatchers.eq(2.0));
+        } finally {
+            controller.close();
+        }
+    }
+
+    @Test
+    void rejectsUnsupportedCoarseThresholdBeforeSavingUpload() throws Exception {
+        var controller = new TranscriptionController(temporaryDirectory.toString(), "full", mock(TranscriptionJobStore.class),
+            (id, mode) -> { throw new IllegalStateException("unused"); });
+        try {
+            MockMvcBuilders.standaloneSetup(controller).build().perform(multipart("/api/transcriptions")
+                    .file(new MockMultipartFile("file", "lesson.mp4", "video/mp4", new byte[] {1}))
+                    .param("coarseChangePercent", "9"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_coarse_change_percent"));
+        } finally {
+            controller.close();
+        }
+    }
+
+    @Test
+    void selectedCoarseThresholdIsPersistedAndSentToAnalyzer() throws Exception {
+        var store = mock(TranscriptionJobStore.class);
+        var actual = new java.util.concurrent.atomic.AtomicReference<Double>();
+        MediaAnalyzer analyzer = new MediaAnalyzer() {
+            public TranscriptionController.TranscriptResult analyze(String id, String mode) { throw new AssertionError(); }
+            public TranscriptionController.TranscriptResult analyze(String id, String mode, String visualMode,
+                                                                     double percent) {
+                actual.set(percent);
+                return new TranscriptionController.TranscriptResult("zh", List.of(), List.of(), null, null,
+                    new TranscriptionController.ReviewResult("completed", "test", "test", "v1", List.of(), List.of()));
+            }
+        };
+        var controller = new TranscriptionController(temporaryDirectory.toString(), "full", store, analyzer);
+        try {
+            MockMvcBuilders.standaloneSetup(controller).build().perform(multipart("/api/transcriptions")
+                    .file(new MockMultipartFile("file", "lesson.mp4", "video/mp4", new byte[] {1}))
+                    .param("coarseChangePercent", "3"))
+                .andExpect(status().isAccepted());
+            org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000))
+                .createQueued(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("both"),
+                    org.mockito.ArgumentMatchers.eq(3.0));
+            org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000))
+                .complete(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
+            org.junit.jupiter.api.Assertions.assertEquals(3.0, actual.get());
         } finally {
             controller.close();
         }
@@ -174,13 +220,17 @@ class TranscriptionControllerTest {
             new TranscriptionController.TranscriptionJob(id, "failed", null, "analysis_failed")));
         org.mockito.Mockito.when(store.markQueuedIfFailed(id)).thenReturn(true);
         org.mockito.Mockito.when(store.findVisualAnalysisMode(id)).thenReturn("ocr_only");
+        org.mockito.Mockito.when(store.findCoarseChangePercent(id)).thenReturn(3.0);
         var actualMode = new java.util.concurrent.atomic.AtomicReference<String>();
+        var actualPercent = new java.util.concurrent.atomic.AtomicReference<Double>();
         MediaAnalyzer analyzer = new MediaAnalyzer() {
             public TranscriptionController.TranscriptResult analyze(String fileId, String mode) {
                 throw new AssertionError("three-argument analysis required");
             }
-            public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualMode) {
+            public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualMode,
+                                                                     double coarsePercent) {
                 actualMode.set(visualMode);
+                actualPercent.set(coarsePercent);
                 return new TranscriptionController.TranscriptResult("zh", List.of(), List.of(), null, null,
                     new TranscriptionController.ReviewResult("completed", "test", "test", "v1", List.of(), List.of()));
             }
@@ -192,6 +242,7 @@ class TranscriptionControllerTest {
             org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000)).complete(org.mockito.ArgumentMatchers.eq(id),
                 org.mockito.ArgumentMatchers.any());
             org.junit.jupiter.api.Assertions.assertEquals("ocr_only", actualMode.get());
+            org.junit.jupiter.api.Assertions.assertEquals(3.0, actualPercent.get());
         } finally {
             controller.close();
         }

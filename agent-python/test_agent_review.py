@@ -44,6 +44,38 @@ class AgentReviewTest(unittest.TestCase):
         self.assertEqual(review["status"], "completed")
         self.assertEqual(review["resampledTimesMs"], [1500])
 
+    def test_one_review_can_request_more_than_three_distinct_times(self):
+        captured = []
+        answers = iter([
+            {"resampleTimesMs": [500, 1000, 1500, 2000, 2500], "concerns": []},
+            {"resampleTimesMs": [], "concerns": []},
+        ])
+        _, review = review_visual_coverage(
+            duration_ms=4000,
+            segments=[],
+            visuals=[{"frameTimeMs": 0, "ocrBlocks": []}],
+            ask_json=lambda payload: next(answers),
+            capture=lambda time_ms: captured.append(time_ms) or [],
+        )
+        self.assertEqual(captured, [500, 1000, 1500, 2000, 2500])
+        self.assertEqual(review["resampledTimesMs"], captured)
+
+    def test_whole_video_safety_limit_still_stops_excess_suggestions(self):
+        captured = []
+        calls = []
+        _, review = review_visual_coverage(
+            duration_ms=20000,
+            segments=[],
+            visuals=[{"frameTimeMs": 0, "ocrBlocks": []}],
+            ask_json=lambda payload: calls.append(payload) or {
+                "resampleTimesMs": [time_ms for time_ms in range(500, 10000, 500)],
+                "concerns": []},
+            capture=lambda time_ms: captured.append(time_ms) or [],
+        )
+        self.assertEqual(len(captured), 12)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(review["resampledTimesMs"], captured)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -10,7 +10,7 @@ type VisualEvidence = { frameTimeMs: number; ocrBlocks: OcrBlock[]; imageAnalysi
 type OcrLine = { text: string; sourceFrameTimeMs: number; sourceBlockIndex: number }
 type PageGroup = { pageIndex: number; firstFrameTimeMs: number; lastFrameTimeMs: number;
   memberFrameTimesMs: number[]; representativeFrameTimesMs: number[];
-  decision: string; decisionReason: string; ocrLines: OcrLine[]; imageAnalysis?: ImageAnalysis }
+  decision: string; decisionReason: string; ocrLines: OcrLine[]; imageAnalysis?: ImageAnalysis; textAnalysis?: ImageAnalysis }
 type Review = { status: string; resampledTimesMs: number[]; concerns: string[] }
 type TranscriptionJob = { id: string; status: string; result?: { language: string; segments: Segment[]; visualEvidence?: VisualEvidence[]; pageGroups?: PageGroup[]; visualAnalysisMode?: 'ocr_only' | 'both'; ocrModelId?: string; imageModelId?: string; review?: Review }; error?: string }
 
@@ -26,6 +26,8 @@ const transcript = ref<Segment[]>([])
 const visualEvidence = ref<VisualEvidence[]>([])
 const pageGroups = ref<PageGroup[]>([])
 const visualAnalysisMode = ref<'ocr_only' | 'both'>('both')
+const coarseChangePercent = ref('2')
+const advancedOpen = ref(false)
 const review = ref<Review | null>(null)
 const failedJobId = ref('')
 const existingJobId = ref(localStorage.getItem('lastAnalysisId') ?? '')
@@ -66,10 +68,13 @@ async function waitForAnalysis(id: string) {
         pageGroups.value = job.result?.pageGroups ?? []
         review.value = job.result?.review ?? null
         failedJobId.value = ''
-        const imageCount = pageGroups.value.length
-          ? pageGroups.value.filter(page => page.imageAnalysis?.status === 'completed').length
-          : visualEvidence.value.filter(frame => frame.imageAnalysis?.status === 'completed').length
-        status.value = `分析完成：转写 ${transcript.value.length} 段；候选画面 ${visualEvidence.value.length} 张、归为 ${pageGroups.value.length} 页；OCR ${job.result?.ocrModelId || '未记录'}；图片理解成功 ${imageCount} 页`
+        const pageStatuses = pageGroups.value.map(page =>
+          (job.result?.visualAnalysisMode === 'ocr_only' ? page.textAnalysis : page.imageAnalysis)?.status)
+        const completedCount = pageStatuses.filter(value => value === 'completed').length
+        const inferredCount = pageStatuses.filter(value => value === 'inferred').length
+        const unverifiedCount = pageStatuses.filter(value => value === 'unverified').length
+        const routeName = job.result?.visualAnalysisMode === 'ocr_only' ? '语音＋OCR 文字理解' : '语音＋图片理解'
+        status.value = `分析完成：转写 ${transcript.value.length} 段；候选画面 ${visualEvidence.value.length} 张、归为 ${pageGroups.value.length} 页；OCR ${job.result?.ocrModelId || '未记录'}；${routeName}确认 ${completedCount} 页、含推导 ${inferredCount} 页、待核实 ${unverifiedCount} 页`
         return
       }
     }
@@ -93,6 +98,7 @@ async function runTranscription() {
     const form = new FormData()
     form.append('file', selectedFile.value)
     form.append('visualAnalysisMode', visualAnalysisMode.value)
+    form.append('coarseChangePercent', coarseChangePercent.value)
     const response = await fetch(`${apiBase}/transcriptions`, { method: 'POST', body: form })
     if (!response.ok) throw new Error(`上传失败：HTTP ${response.status}`)
     const created: TranscriptionJob = await response.json()
@@ -188,7 +194,20 @@ onUnmounted(() => { if (videoUrl.value) URL.revokeObjectURL(videoUrl.value) })
       </div>
       <div class="panel results-panel">
         <div class="section-title"><h2>分析结果</h2><span>接口联调版</span></div>
-        <label class="mode-picker">画面分析方式 <select v-model="visualAnalysisMode"><option value="both">OCR + 每页代表图理解</option><option value="ocr_only">只发文字给模型，不发截图</option></select></label>
+        <label class="mode-picker">画面分析方式 <select v-model="visualAnalysisMode"><option value="both">语音文字＋每页代表图</option><option value="ocr_only">语音文字＋OCR 文字</option></select></label>
+        <div class="advanced-options">
+          <button type="button" class="advanced-toggle" :aria-expanded="advancedOpen" aria-controls="advanced-settings" @click="advancedOpen = !advancedOpen">{{ advancedOpen ? '收起高级选项' : '高级选项' }}</button>
+          <div v-if="advancedOpen" id="advanced-settings" class="advanced-row">
+            <label for="coarse-change-percent">粗选画面变化阈值</label>
+            <span class="help-tooltip" tabindex="0" aria-label="粗选画面变化阈值说明">?
+              <span role="tooltip">每隔 2 秒比较一次画面。相邻画面变化区域超过所选比例时，保留候选截图；渐进书写另有保留规则。默认 2%。数值越低通常候选图越多，越不容易漏掉小变化；越高则候选图越少，但可能漏掉新画面。此值只影响第一轮粗选。</span>
+            </span>
+            <select id="coarse-change-percent" v-model="coarseChangePercent">
+              <option value="0.5">0.5%</option><option value="1">1%</option>
+              <option value="2">2%（默认）</option><option value="3">3%</option>
+            </select>
+          </div>
+        </div>
         <div class="actions"><button class="run" :disabled="!filename" @click="runTranscription">上传并分析视频</button><button class="secondary" :disabled="!filename" @click="runDemo">运行接口演示</button></div>
         <div class="restore"><label for="analysis-id">已有分析编号</label><div class="actions"><input id="analysis-id" v-model="existingJobId" placeholder="粘贴任务编号" /><button class="secondary" :disabled="!existingJobId.trim()" @click="loadExistingAnalysis">读取结果</button></div><small>已分析过的视频可直接读取结果；播放原片段时仍需选择本地视频。</small></div>
         <button v-if="failedJobId" class="secondary" @click="retryAnalysis">重试这次分析</button>
@@ -207,12 +226,13 @@ onUnmounted(() => { if (videoUrl.value) URL.revokeObjectURL(videoUrl.value) })
         </div>
         <div v-if="pageGroups.length" class="points"><h3>PPT 页面（{{ pageGroups.length }} 页）</h3>
           <details v-for="page in pageGroups" :key="page.pageIndex" class="visual-frame">
-            <summary><span class="time">{{ formatTime(page.firstFrameTimeMs) }}</span>第 {{ page.pageIndex }} 页 · {{ page.imageAnalysis?.title || page.ocrLines.slice(0, 2).map(line => line.text).join(' · ') || '画面内容' }}<span v-if="page.imageAnalysis?.status === 'failed'"> · 图片理解失败</span></summary>
+            <summary><span class="time">{{ formatTime(page.firstFrameTimeMs) }}</span>第 {{ page.pageIndex }} 页 · {{ page.imageAnalysis?.title || page.textAnalysis?.title || page.ocrLines.slice(0, 2).map(line => line.text).join(' · ') || '画面内容' }}<span v-if="page.imageAnalysis?.status === 'failed' || page.textAnalysis?.status === 'failed'"> · 本页理解失败</span><span v-if="page.imageAnalysis?.status === 'inferred' || page.textAnalysis?.status === 'inferred'"> · 含推导内容</span><span v-if="page.imageAnalysis?.status === 'unverified' || page.textAnalysis?.status === 'unverified'"> · 部分内容未核实 ？</span></summary>
             <div class="actions page-actions"><button class="secondary" @click="seekTo(page.firstFrameTimeMs)">从本页开始播放</button><button class="secondary" @click="seekTo(page.representativeFrameTimesMs[0] ?? page.firstFrameTimeMs)">跳到代表画面</button></div>
             <img v-for="timeMs in page.representativeFrameTimesMs" :key="timeMs" loading="lazy" :src="`${apiBase}/transcriptions/${existingJobId}/frames/${timeMs}`" :alt="`${formatTime(timeMs)} 的课程画面`" />
             <div class="evidence-columns"><section><h4>本页 OCR 文字</h4><p v-if="!page.ocrLines.length">未识别出文字</p><p v-for="line in page.ocrLines" :key="`${line.sourceFrameTimeMs}-${line.sourceBlockIndex}`"><button class="text-link" @click="seekTo(line.sourceFrameTimeMs)">{{ formatTime(line.sourceFrameTimeMs) }}</button> {{ line.text }}</p></section>
-              <section v-if="page.imageAnalysis"><h4>图片理解</h4><p>{{ page.imageAnalysis.content }}</p><p v-if="page.imageAnalysis.visualElements.length">图表/图形：{{ page.imageAnalysis.visualElements.join('；') }}</p><p v-if="page.imageAnalysis.uncertainties.length">未看清：{{ page.imageAnalysis.uncertainties.join('；') }}</p></section>
-              <section v-else><h4>图片理解</h4><p>本次未向图片模型发送截图。</p></section>
+              <section v-if="page.imageAnalysis"><h4>语音＋图片理解</h4><p class="analysis-content">{{ page.imageAnalysis.content }}</p><p v-if="page.imageAnalysis.visualElements.length">图表/图形：{{ page.imageAnalysis.visualElements.join('；') }}</p><p v-if="page.imageAnalysis.uncertainties.length">待核实：{{ page.imageAnalysis.uncertainties.join('；') }}</p></section>
+              <section v-else-if="page.textAnalysis"><h4>语音＋OCR 文字理解</h4><p class="analysis-content">{{ page.textAnalysis.content }}</p><p v-if="page.textAnalysis.visualElements.length">图表/图形：{{ page.textAnalysis.visualElements.join('；') }}</p><p v-if="page.textAnalysis.uncertainties.length">待核实：{{ page.textAnalysis.uncertainties.join('；') }}</p></section>
+              <section v-else><h4>本页理解</h4><p>这份结果尚无页面理解内容。</p></section>
             </div>
             <details class="source-frames"><summary>查看本页 {{ page.memberFrameTimesMs.length }} 张原始候选截图</summary><div v-for="timeMs in page.memberFrameTimesMs" :key="timeMs"><button class="text-link" @click="seekTo(timeMs)">{{ formatTime(timeMs) }}</button> {{ frameAt(timeMs)?.ocrBlocks.map(block => block.text).join(' · ') || '无 OCR 文字' }}<img loading="lazy" :src="`${apiBase}/transcriptions/${existingJobId}/frames/${timeMs}`" :alt="`${formatTime(timeMs)} 的原始候选截图`" /></div></details>
           </details>

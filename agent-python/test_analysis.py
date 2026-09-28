@@ -23,13 +23,34 @@ class AnalysisTest(unittest.TestCase):
                  patch("analysis.media_duration_ms", return_value=3000), \
                  patch("analysis.review_visual_coverage", return_value=(visuals, {"status": "completed"})), \
                  patch("analysis.group_pages", return_value=([page], [])), \
-                 patch("analysis.describe_frames") as describe:
+                 patch("analysis.analyze_page", side_effect=lambda page, pages, frames, root, segments, mode:
+                       {**page, "textAnalysis": {"status": "completed", "title": "OCR page", "content": "speech+OCR",
+                                                  "visualElements": [], "uncertainties": []}}) as analyze:
                 worker.return_value.__enter__.return_value.analyze.return_value = visuals
                 result = analyze_file(file_id, "ocr_only")
-            describe.assert_not_called()
+            analyze.assert_called_once()
+            self.assertEqual(analyze.call_args.args[-1], "ocr_only")
             self.assertEqual(result["pageGroups"][0]["memberFrameTimesMs"], [1000, 2000])
+            self.assertEqual(result["pageGroups"][0]["textAnalysis"]["title"], "OCR page")
             self.assertIsNone(result["imageModelId"])
             self.assertEqual(result["visualAnalysisMode"], "ocr_only")
+            worker.assert_called_once()
+            self.assertEqual(worker.call_args.kwargs["page_change_fraction"], 0.02)
+
+    def test_selected_threshold_reaches_visual_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file_id = str(uuid4())
+            (Path(directory) / file_id).write_bytes(b"fake media")
+            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": directory}), \
+                 patch("analysis.transcribe_file", return_value={"language": "zh", "segments": []}), \
+                 patch("analysis.VisualOcrWorker") as worker, \
+                 patch("analysis.media_duration_ms", return_value=3000), \
+                 patch("analysis.review_visual_coverage", return_value=([], {"status": "not_applicable"})), \
+                 patch("analysis.group_pages", return_value=([], [])):
+                worker.return_value.__enter__.return_value.analyze.return_value = []
+                result = analyze_file(file_id, coarse_change_percent=3)
+            self.assertEqual(worker.call_args.kwargs["page_change_fraction"], 0.03)
+            self.assertEqual(result["coarseChangePercent"], 3)
 
     def test_both_sends_only_page_representatives(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -40,20 +61,20 @@ class AnalysisTest(unittest.TestCase):
                     "memberFrameTimesMs": [1000, 2000, 3000], "representativeFrameTimesMs": [3000],
                     "ocrLines": [], "imageAnalysis": None}
             sent = []
-            def fake_describe(frames, _):
-                sent.extend(frame["frameTimeMs"] for frame in frames)
-                return [{**frame, "imageAnalysis": {"status": "completed", "title": "Final", "content": "visible",
-                                                   "visualElements": [], "uncertainties": []}} for frame in frames]
+            def fake_analyze(page, pages, frames, root, segments, mode):
+                sent.append((page["representativeFrameTimesMs"], mode, segments))
+                return {**page, "imageAnalysis": {"status": "completed", "title": "Final", "content": "visible",
+                                                 "visualElements": [], "uncertainties": []}}
             with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": directory}), \
                  patch("analysis.transcribe_file", return_value={"language": "zh", "segments": []}), \
                  patch("analysis.VisualOcrWorker") as worker, \
                  patch("analysis.media_duration_ms", return_value=4000), \
                  patch("analysis.review_visual_coverage", return_value=(visuals, {"status": "completed"})), \
                  patch("analysis.group_pages", return_value=([page], [])), \
-                 patch("analysis.describe_frames", side_effect=fake_describe):
+                 patch("analysis.analyze_page", side_effect=fake_analyze):
                 worker.return_value.__enter__.return_value.analyze.return_value = visuals
                 result = analyze_file(file_id)
-            self.assertEqual(sent, [3000])
+            self.assertEqual(sent, [([3000], "both", [])])
             self.assertEqual(result["pageGroups"][0]["imageAnalysis"]["title"], "Final")
             self.assertEqual(len(result["visualEvidence"]), 3)
 
@@ -69,11 +90,9 @@ class AnalysisTest(unittest.TestCase):
                      patch("analysis.group_pages", return_value=([{"pageIndex": 1, "firstFrameTimeMs": 1000,
                          "lastFrameTimeMs": 1000, "memberFrameTimesMs": [1000],
                          "representativeFrameTimesMs": [1000], "ocrLines": [], "imageAnalysis": None}], [])), \
-                     patch("analysis.describe_frames", side_effect=lambda visuals, _: [
-                         {**frame, "imageAnalysis": {"status": "completed", "title": "Slide", "content": "Text",
-                                                     "visualElements": [], "uncertainties": []}}
-                         for frame in visuals
-                     ]), \
+                     patch("analysis.analyze_page", side_effect=lambda page, pages, frames, root, segments, mode:
+                           {**page, "imageAnalysis": {"status": "completed", "title": "Slide", "content": "Text",
+                                                      "visualElements": [], "uncertainties": []}}), \
                      patch("analysis.review_visual_coverage", return_value=(
                          [{"frameTimeMs": 1000, "ocrBlocks": []}],
                          {"status": "completed", "resampledTimesMs": [], "concerns": []},

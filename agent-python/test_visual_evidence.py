@@ -7,10 +7,26 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from visual_evidence import analyze_visuals
+from visual_evidence import _candidate_times, analyze_visuals
 
 
 class VisualEvidenceTest(unittest.TestCase):
+    def test_small_annotation_does_not_create_its_own_candidate_before_slide_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "annotation.avi"
+            writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"MJPG"), 2, (640, 360))
+            self.assertTrue(writer.isOpened())
+            for frame_index in range(16):
+                image = np.full((360, 640, 3), 255, np.uint8)
+                if frame_index >= 4:
+                    cv2.rectangle(image, (20, 20), (79, 79), (0, 0, 0), -1)
+                if frame_index >= 12:
+                    cv2.rectangle(image, (80, 80), (560, 280), (0, 0, 0), -1)
+                writer.write(image)
+            writer.release()
+
+            self.assertEqual(_candidate_times(path), [4000, 6000])
+
     def test_repeated_frames_are_skipped_but_each_slide_is_retained(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "slides.avi"

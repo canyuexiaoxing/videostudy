@@ -17,6 +17,7 @@ class AnalyzeRequest(BaseModel):
 class TranscribeRequest(BaseModel):
     fileId: str
     visualAnalysisMode: str = "both"
+    coarseChangePercent: float = 2.0
 
 
 @app.get("/health")
@@ -48,6 +49,6 @@ def transcribe(request: TranscribeRequest) -> dict:
 @app.post("/analyze")
 def analyze(request: TranscribeRequest) -> dict:
     try:
-        return analyze_file(request.fileId, request.visualAnalysisMode)
+        return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent)
     except (FileNotFoundError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

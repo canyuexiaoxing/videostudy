@@ -52,10 +52,14 @@ public class TranscriptionController {
 
     @PostMapping
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file,
-                                    @RequestParam(value = "visualAnalysisMode", defaultValue = "both") String visualAnalysisMode)
+                                    @RequestParam(value = "visualAnalysisMode", defaultValue = "both") String visualAnalysisMode,
+                                    @RequestParam(value = "coarseChangePercent", defaultValue = "2") double coarseChangePercent)
                                     throws IOException {
         if (!List.of("ocr_only", "both").contains(visualAnalysisMode))
             return ResponseEntity.badRequest().body(Map.of("error", "invalid_visual_analysis_mode"));
+        if (coarseChangePercent != 0.5 && coarseChangePercent != 1.0 &&
+            coarseChangePercent != 2.0 && coarseChangePercent != 3.0)
+            return ResponseEntity.badRequest().body(Map.of("error", "invalid_coarse_change_percent"));
         if (file.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "empty_file"));
         Files.createDirectories(uploadRoot);
         var id = UUID.randomUUID().toString();
@@ -63,13 +67,13 @@ public class TranscriptionController {
         file.transferTo(path);
         var job = new TranscriptionJob(id, "queued", null, null);
         try {
-            store.createQueued(id, visualAnalysisMode);
+            store.createQueued(id, visualAnalysisMode, coarseChangePercent);
         } catch (RuntimeException error) {
             Files.deleteIfExists(path);
             throw error;
         }
         try {
-            worker.execute(() -> process(id, path, visualAnalysisMode));
+            worker.execute(() -> process(id, path, visualAnalysisMode, coarseChangePercent));
         } catch (RejectedExecutionException error) {
             store.delete(id);
             Files.deleteIfExists(path);
@@ -78,7 +82,7 @@ public class TranscriptionController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
 
-    public ResponseEntity<?> upload(MultipartFile file) throws IOException { return upload(file, "both"); }
+    public ResponseEntity<?> upload(MultipartFile file) throws IOException { return upload(file, "both", 2.0); }
 
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable String id) {
@@ -96,7 +100,9 @@ public class TranscriptionController {
         if (!store.markQueuedIfFailed(id)) return ResponseEntity.status(409).body(Map.of("error", "job_not_failed"));
         try {
             var visualAnalysisMode = store.findVisualAnalysisMode(id);
-            worker.execute(() -> process(id, path, visualAnalysisMode == null ? "both" : visualAnalysisMode));
+            var coarseChangePercent = store.findCoarseChangePercent(id);
+            worker.execute(() -> process(id, path, visualAnalysisMode == null ? "both" : visualAnalysisMode,
+                                          coarseChangePercent));
         } catch (RejectedExecutionException error) {
             store.markFailed(id, "analysis_queue_full");
             return ResponseEntity.status(429).body(Map.of("error", "analysis_queue_full"));
@@ -127,11 +133,11 @@ public class TranscriptionController {
         if (count > 0) log.info("Marked {} interrupted analysis jobs as retryable", count);
     }
 
-    private void process(String id, Path path, String visualAnalysisMode) {
+    private void process(String id, Path path, String visualAnalysisMode, double coarseChangePercent) {
         boolean saved = false;
         try {
             store.markProcessing(id);
-            var result = agent.analyze(id, analysisMode, visualAnalysisMode);
+            var result = agent.analyze(id, analysisMode, visualAnalysisMode, coarseChangePercent);
             if (result == null) throw new IllegalStateException("Agent returned no transcription result");
             if (analysisMode.equals("full") &&
                 (result.review() == null || !List.of("completed", "not_applicable").contains(result.review().status()))) {
@@ -161,18 +167,34 @@ public class TranscriptionController {
     public record PageGroup(int pageIndex, long firstFrameTimeMs, long lastFrameTimeMs,
                             List<Long> memberFrameTimesMs, List<Long> representativeFrameTimesMs,
                             String decision, String decisionReason, List<OcrLine> ocrLines,
-                            ImageAnalysis imageAnalysis) {}
+                            ImageAnalysis imageAnalysis, ImageAnalysis textAnalysis) {
+        public PageGroup(int pageIndex, long firstFrameTimeMs, long lastFrameTimeMs,
+                         List<Long> memberFrameTimesMs, List<Long> representativeFrameTimesMs,
+                         String decision, String decisionReason, List<OcrLine> ocrLines,
+                         ImageAnalysis imageAnalysis) {
+            this(pageIndex, firstFrameTimeMs, lastFrameTimeMs, memberFrameTimesMs,
+                 representativeFrameTimesMs, decision, decisionReason, ocrLines, imageAnalysis, null);
+        }
+    }
     public record ReviewResult(String status, String provider, String modelId, String promptVersion,
                                List<Long> resampledTimesMs, List<String> concerns) {}
     public record TranscriptResult(String language, List<TranscriptSegment> segments,
                                    List<VisualEvidence> visualEvidence, String ocrModelId,
                                    String imageModelId, ReviewResult review,
                                    List<PageGroup> pageGroups, List<Long> transitionFrameTimesMs,
-                                   String visualAnalysisMode, String groupingVersion) {
+                                   String visualAnalysisMode, String groupingVersion, Double coarseChangePercent) {
+        public TranscriptResult(String language, List<TranscriptSegment> segments,
+                                List<VisualEvidence> visualEvidence, String ocrModelId,
+                                String imageModelId, ReviewResult review,
+                                List<PageGroup> pageGroups, List<Long> transitionFrameTimesMs,
+                                String visualAnalysisMode, String groupingVersion) {
+            this(language, segments, visualEvidence, ocrModelId, imageModelId, review,
+                 pageGroups, transitionFrameTimesMs, visualAnalysisMode, groupingVersion, null);
+        }
         public TranscriptResult(String language, List<TranscriptSegment> segments,
                                 List<VisualEvidence> visualEvidence, String ocrModelId,
                                 String imageModelId, ReviewResult review) {
-            this(language, segments, visualEvidence, ocrModelId, imageModelId, review, null, null, null, null);
+            this(language, segments, visualEvidence, ocrModelId, imageModelId, review, null, null, null, null, null);
         }
     }
     public record TranscriptionJob(String id, String status, TranscriptResult result, String error) {}

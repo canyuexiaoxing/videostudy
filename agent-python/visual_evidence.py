@@ -15,7 +15,7 @@ PREVIEW_WIDTH = 320
 PREVIEW_HEIGHT = 180
 FRAME_BYTES = PREVIEW_WIDTH * PREVIEW_HEIGHT
 OCR_MODEL_ID = "PP-OCRv6_medium"
-PAGE_CHANGE_FRACTION = 0.005
+PAGE_CHANGE_FRACTION = 0.02
 PROGRESS_FRACTION = 0.001
 MAX_PROGRESS_INTERVAL_MS = 30_000
 
@@ -28,7 +28,7 @@ def _has_video(path: Path) -> bool:
     return bool(result.stdout.strip())
 
 
-def _candidate_times(path: Path) -> list[int]:
+def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACTION) -> list[int]:
     command = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(path),
         "-vf", f"fps=1/{SAMPLE_SECONDS},scale={PREVIEW_WIDTH}:{PREVIEW_HEIGHT}:force_original_aspect_ratio=decrease,"
@@ -54,7 +54,7 @@ def _candidate_times(path: Path) -> list[int]:
                 first_frame = frame.copy()
             if previous is not None:
                 changed_fraction = float(np.mean(cv2.absdiff(previous, frame) > 25))
-                if changed_fraction > PAGE_CHANGE_FRACTION:
+                if changed_fraction > page_change_fraction:
                     if not chosen or chosen[-1] != previous_ms:
                         chosen.append(previous_ms)
                     last_chosen_frame = previous.copy()
@@ -140,13 +140,14 @@ def _save_keyframe(frame: np.ndarray, keyframe_dir: Path, time_ms: int) -> None:
 
 
 def analyze_visuals(path: Path, recognize: Callable[[np.ndarray], list[dict]] | None = None,
-                    keyframe_dir: Path | None = None) -> list[dict]:
+                    keyframe_dir: Path | None = None,
+                    page_change_fraction: float = PAGE_CHANGE_FRACTION) -> list[dict]:
     """Return OCR from representative frames; audio-only input returns no visual evidence."""
     if not _has_video(path):
         return []
     recognize = recognize or _recognize
     evidence = []
-    for time_ms in _candidate_times(path):
+    for time_ms in _candidate_times(path, page_change_fraction):
         frame = _frame_at(path, time_ms)
         if keyframe_dir is not None:
             _save_keyframe(frame, keyframe_dir, time_ms)
@@ -154,14 +155,16 @@ def analyze_visuals(path: Path, recognize: Callable[[np.ndarray], list[dict]] | 
     return evidence
 
 
-def _serve_visual_requests(connection, media_path: str, keyframe_path: str | None) -> None:
+def _serve_visual_requests(connection, media_path: str, keyframe_path: str | None,
+                           page_change_fraction: float) -> None:
     path = Path(media_path)
     keyframe_dir = Path(keyframe_path) if keyframe_path else None
     try:
         while request := connection.recv():
             try:
                 if request["op"] == "analyze":
-                    response = analyze_visuals(path, keyframe_dir=keyframe_dir)
+                    response = analyze_visuals(path, keyframe_dir=keyframe_dir,
+                                               page_change_fraction=page_change_fraction)
                 elif request["op"] == "capture":
                     frame = _frame_at(path, request["timeMs"])
                     if keyframe_dir is not None:
@@ -181,11 +184,13 @@ def _serve_visual_requests(connection, media_path: str, keyframe_path: str | Non
 class VisualOcrWorker:
     """Keep PaddleOCR outside the process that runs faster-whisper."""
 
-    def __init__(self, path: Path, keyframe_dir: Path | None = None):
+    def __init__(self, path: Path, keyframe_dir: Path | None = None,
+                 page_change_fraction: float = PAGE_CHANGE_FRACTION):
         context = multiprocessing.get_context("spawn")
         self.connection, child = context.Pipe()
         self.process = context.Process(target=_serve_visual_requests,
-                                       args=(child, str(path), str(keyframe_dir) if keyframe_dir else None))
+                                       args=(child, str(path), str(keyframe_dir) if keyframe_dir else None,
+                                             page_change_fraction))
         self.process.start()
         child.close()
 

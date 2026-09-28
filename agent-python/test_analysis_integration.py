@@ -13,7 +13,6 @@ import numpy as np
 
 from agent_review import review_visual_coverage
 from analysis import analyze_file
-from image_understanding import describe_frames
 from slide_grouping import group_pages
 
 
@@ -41,19 +40,18 @@ class MediaIntegrationTest(unittest.TestCase):
             def fake_review(**kwargs):
                 return review_visual_coverage(**kwargs, ask_json=lambda payload: {"resampleTimesMs": [], "concerns": []})
 
-            def fake_images(visuals, keyframe_dir):
-                return describe_frames(visuals, keyframe_dir,
-                                       ask_json=lambda frames: {"frames": [
-                                           {"frameTimeMs": time, "title": "SLIDE", "content": "Visible slide",
-                                            "visualElements": [], "uncertainties": []}
-                                           for time, _ in frames]})
+            def fake_page(page, pages, frames, keyframe_dir, segments, mode):
+                self.assertEqual(mode, "both")
+                return {**page, "imageAnalysis": {"status": "completed", "title": "SLIDE",
+                                                 "content": "Visible slide", "visualElements": [],
+                                                 "uncertainties": []}}
 
             with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": str(root / "keyframes")}):
                 with patch("analysis.review_visual_coverage", side_effect=fake_review), \
                      patch("analysis.group_pages", side_effect=lambda visuals, keyframe_dir, segments:
                            group_pages(visuals, keyframe_dir, segments,
                                        ask_json=lambda payload: {"samePage": False, "reason": "test"})), \
-                     patch("analysis.describe_frames", side_effect=fake_images):
+                     patch("analysis.analyze_page", side_effect=fake_page):
                     result = analyze_file(media_id)
 
             self.assertEqual(result["review"]["status"], "completed")

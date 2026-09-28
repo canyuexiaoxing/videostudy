@@ -25,8 +25,15 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
 
     @Override
     public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode) {
+        return analyze(fileId, mode, visualAnalysisMode, 2.0);
+    }
+
+    @Override
+    public TranscriptionController.TranscriptResult analyze(String fileId, String mode,
+                                                             String visualAnalysisMode, double coarseChangePercent) {
         var endpoint = "full".equals(mode) ? "/analyze" : "/transcribe";
-        return agent.post().uri(endpoint).body(Map.of("fileId", fileId, "visualAnalysisMode", visualAnalysisMode))
+        return agent.post().uri(endpoint).body(Map.of("fileId", fileId, "visualAnalysisMode", visualAnalysisMode,
+                                                  "coarseChangePercent", coarseChangePercent))
             .retrieve().body(TranscriptionController.TranscriptResult.class);
     }
 }
