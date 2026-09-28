@@ -1,0 +1,32 @@
+package cn.videostudy.api;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
+
+import java.util.Map;
+
+@Component
+public class HttpMediaAnalyzer implements MediaAnalyzer {
+    private final RestClient agent;
+
+    public HttpMediaAnalyzer(@Value("${agent.base-url}") String agentBaseUrl) {
+        var requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(3000);
+        requestFactory.setReadTimeout(30 * 60 * 1000);
+        agent = RestClient.builder().baseUrl(agentBaseUrl).requestFactory(requestFactory).build();
+    }
+
+    @Override
+    public TranscriptionController.TranscriptResult analyze(String fileId, String mode) {
+        return analyze(fileId, mode, "both");
+    }
+
+    @Override
+    public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode) {
+        var endpoint = "full".equals(mode) ? "/analyze" : "/transcribe";
+        return agent.post().uri(endpoint).body(Map.of("fileId", fileId, "visualAnalysisMode", visualAnalysisMode))
+            .retrieve().body(TranscriptionController.TranscriptResult.class);
+    }
+}

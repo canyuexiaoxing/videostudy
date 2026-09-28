@@ -1,0 +1,63 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: videostudy
+      MYSQL_USER: videostudy
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  agent-python:
+    build: ./agent-python
+    volumes:
+      - ./.local/models:/models
+      - ./.local/uploads:/data/uploads
+      - ./.local/keyframes:/data/keyframes
+    environment:
+      MODEL_DIR: /models
+      MEDIA_TEMP_DIR: /data/uploads
+      KEYFRAME_DIR: /data/keyframes
+      HF_HOME: /models/huggingface
+      XDG_CACHE_HOME: /models/cache
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  java-api:
+    build: ./backend-java
+    volumes:
+      - ./.local/uploads:/data/uploads
+      - ./.local/keyframes:/data/keyframes
+    depends_on:
+      agent-python:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    environment:
+      AGENT_BASE_URL: http://agent-python:8000
+      SERVER_PORT: 18080
+      MEDIA_TEMP_DIR: /data/uploads
+      KEYFRAME_DIR: /data/keyframes
+      ANALYSIS_MODE: ${ANALYSIS_MODE:-transcription}
+      MYSQL_JDBC_URL: jdbc:mysql://mysql:3306/videostudy
+      MYSQL_USER: videostudy
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:18080:18080"
+    restart: unless-stopped
+
+volumes:
+  mysql-data:

@@ -1,0 +1,11 @@
+**/target/
+**/node_modules/
+**/dist/
+**/__pycache__/
+.npm-cache/
+agent-python/.venv/
+.local/
+.env
+30MIN.mp4
+# Local analysis of a user-provided course video.
+docs/ocr-only-30min-grouping-review.md
