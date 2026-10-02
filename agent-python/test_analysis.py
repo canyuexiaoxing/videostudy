@@ -9,6 +9,45 @@ from analysis import analyze_file
 
 
 class AnalysisTest(unittest.TestCase):
+    def test_later_failure_reuses_completed_media_stages_on_retry(self):
+        with tempfile.TemporaryDirectory() as d:
+            fid = str(uuid4())
+            (Path(d) / fid).write_bytes(b'media')
+            with patch.dict(os.environ, {'MEDIA_TEMP_DIR': d, 'KEYFRAME_DIR': str(Path(d) / 'frames')}), \
+                 patch('analysis.transcribe_file', return_value={'language':'zh','segments':[]}) as speech, \
+                 patch('analysis.VisualOcrWorker') as worker, \
+                 patch('analysis.media_duration_ms', return_value=3000), \
+                 patch('analysis.review_visual_coverage', return_value=([], {'status':'completed'})) as review, \
+                 patch('analysis.group_pages', side_effect=[RuntimeError('later failure'), ([], [])]) as group, \
+                 patch('analysis.build_mind_map', return_value={'status':'empty'}):
+                worker.return_value.__enter__.return_value.analyze.return_value = []
+                with self.assertRaises(RuntimeError): analyze_file(fid)
+                result = analyze_file(fid)
+                self.assertEqual(speech.call_count, 1)
+                self.assertEqual(worker.return_value.__enter__.return_value.analyze.call_count, 1)
+                self.assertEqual(review.call_count, 1)
+                self.assertEqual(group.call_count, 2)
+                self.assertEqual(result['reusedCheckpoints'], {'transcription':1, 'visualOcr':1, 'coverageReview':1})
+
+    def test_analysis_persists_grounded_mind_map_after_page_understanding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file_id = str(uuid4())
+            (Path(directory) / file_id).write_bytes(b"fake media")
+            speech = [{"id": "t_1", "startMs": 1000, "endMs": 1900, "text": "增长量等于现期减基期"}]
+            expected = {"status": "completed", "root": {"title": "课程知识导图", "children": []}}
+            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": str(Path(directory) / "keyframes")}), \
+                 patch("analysis.transcribe_file", return_value={"language": "zh", "segments": speech}), \
+                 patch("analysis.VisualOcrWorker") as worker, \
+                 patch("analysis.media_duration_ms", return_value=3000), \
+                 patch("analysis.review_visual_coverage", return_value=([], {"status": "not_applicable"})), \
+                 patch("analysis.group_pages", return_value=([], [])), \
+                 patch("analysis.build_mind_map", return_value=expected) as build:
+                worker.return_value.__enter__.return_value.analyze.return_value = []
+                result = analyze_file(file_id)
+            self.assertEqual(build.call_args.args, (speech, []))
+            self.assertIn('checkpoint', build.call_args.kwargs)
+            self.assertEqual(result["mindMap"], expected)
+
     def test_ocr_only_keeps_page_groups_without_sending_images(self):
         with tempfile.TemporaryDirectory() as directory:
             file_id = str(uuid4())
@@ -17,7 +56,7 @@ class AnalysisTest(unittest.TestCase):
                     "memberFrameTimesMs": [1000, 2000], "representativeFrameTimesMs": [2000],
                     "ocrLines": [], "imageAnalysis": None}
             visuals = [{"frameTimeMs": time, "ocrBlocks": []} for time in (1000, 2000)]
-            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": directory}), \
+            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": str(Path(directory) / "keyframes")}), \
                  patch("analysis.transcribe_file", return_value={"language": "zh", "segments": []}), \
                  patch("analysis.VisualOcrWorker") as worker, \
                  patch("analysis.media_duration_ms", return_value=3000), \
@@ -41,7 +80,7 @@ class AnalysisTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             file_id = str(uuid4())
             (Path(directory) / file_id).write_bytes(b"fake media")
-            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": directory}), \
+            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": str(Path(directory) / "keyframes")}), \
                  patch("analysis.transcribe_file", return_value={"language": "zh", "segments": []}), \
                  patch("analysis.VisualOcrWorker") as worker, \
                  patch("analysis.media_duration_ms", return_value=3000), \
@@ -65,7 +104,7 @@ class AnalysisTest(unittest.TestCase):
                 sent.append((page["representativeFrameTimesMs"], mode, segments))
                 return {**page, "imageAnalysis": {"status": "completed", "title": "Final", "content": "visible",
                                                  "visualElements": [], "uncertainties": []}}
-            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": directory}), \
+            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": str(Path(directory) / "keyframes")}), \
                  patch("analysis.transcribe_file", return_value={"language": "zh", "segments": []}), \
                  patch("analysis.VisualOcrWorker") as worker, \
                  patch("analysis.media_duration_ms", return_value=4000), \
@@ -83,7 +122,7 @@ class AnalysisTest(unittest.TestCase):
             file_id = str(uuid4())
             path = Path(directory) / file_id
             path.write_bytes(b"fake media")
-            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": directory}):
+            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": str(Path(directory) / "keyframes")}):
                 with patch("analysis.transcribe_file", return_value={"language": "zh", "segments": []}), \
                      patch("analysis.VisualOcrWorker") as worker, \
                      patch("analysis.media_duration_ms", return_value=3000), \

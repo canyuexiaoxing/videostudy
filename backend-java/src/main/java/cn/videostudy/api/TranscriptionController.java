@@ -34,6 +34,8 @@ public class TranscriptionController {
     private final MediaAnalyzer agent;
     private final String analysisMode;
     private final TranscriptionJobStore store;
+    @Value("${analysis.stage-attempts:2}") private int stageAttempts = 2;
+    @Value("${keyframe.dir:../.local/keyframes}") private String keyframeDirectory;
     private final ThreadPoolExecutor worker = new ThreadPoolExecutor(
         1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(4));
 
@@ -117,6 +119,7 @@ public class TranscriptionController {
             try {
                 store.markExpired(id);
                 Files.deleteIfExists(uploadRoot.resolve(id));
+                deleteTaskDirectory(id, false);
             } catch (Exception error) {
                 log.warn("Unable to clean failed upload {}", id, error);
             }
@@ -137,8 +140,10 @@ public class TranscriptionController {
         boolean saved = false;
         try {
             store.markProcessing(id);
-            var result = agent.analyze(id, analysisMode, visualAnalysisMode, coarseChangePercent);
+            var result = analyzeWithResume(id, visualAnalysisMode, coarseChangePercent);
             if (result == null) throw new IllegalStateException("Agent returned no transcription result");
+            if (result.mindMap() != null && !MindMapValidator.isGrounded(result.mindMap(), result.segments()))
+                throw new IllegalStateException("Agent returned an ungrounded mind map");
             if (analysisMode.equals("full") &&
                 (result.review() == null || !List.of("completed", "not_applicable").contains(result.review().status()))) {
                 throw new IllegalStateException("Full analysis has not completed Agent review");
@@ -146,6 +151,7 @@ public class TranscriptionController {
             store.complete(id, result);
             saved = true;
             Files.deleteIfExists(path);
+            deleteTaskDirectory(id, true);
         } catch (Exception error) {
             log.warn("Transcription job {} failed", id, error);
             if (!saved) {
@@ -153,6 +159,48 @@ public class TranscriptionController {
                 catch (RuntimeException persistenceError) { log.error("Unable to persist failure for job {}", id, persistenceError); }
             }
         }
+    }
+
+    private TranscriptResult analyzeWithResume(String id, String visualMode, double threshold) throws Exception {
+        for (int attempt = 1; ; attempt++) {
+            try {
+                var result = agent.analyze(id, analysisMode, visualMode, threshold);
+                if (result != null && analysisMode.equals("full")) {
+                    if (result.mindMap() != null && "failed".equals(result.mindMap().status()))
+                        throw new IllegalStateException("Mind-map chunks incomplete; resume successful checkpoints");
+                    if (result.pageGroups() != null && result.pageGroups().stream().anyMatch(page ->
+                        (page.imageAnalysis() != null && "failed".equals(page.imageAnalysis().status())) ||
+                        (page.textAnalysis() != null && "failed".equals(page.textAnalysis().status()))))
+                        throw new IllegalStateException("Page analysis incomplete; resume successful checkpoints");
+                }
+                return result;
+            } catch (Exception error) {
+                boolean permanent = error instanceof org.springframework.web.client.RestClientResponseException response &&
+                    response.getStatusCode().is4xxClientError() && response.getStatusCode().value() != 429;
+                if (permanent || attempt >= Math.max(1, stageAttempts) || Thread.currentThread().isInterrupted()) throw error;
+                log.warn("Job {} automatically resuming after attempt {}: {}", id, attempt, error.getClass().getSimpleName());
+                Thread.sleep(500);
+            }
+        }
+    }
+
+    private void deleteTaskDirectory(String id, boolean checkpointsOnly) throws IOException {
+        // Unit-test constructor calls may not have Spring-injected storage configuration.
+        if (keyframeDirectory == null) return;
+        var root = Path.of(keyframeDirectory).toAbsolutePath().normalize();
+        var target = root.resolve(UUID.fromString(id).toString());
+        if (checkpointsOnly) target = target.resolve(".analysis");
+        if (!target.startsWith(root) || target.equals(root)) throw new IllegalArgumentException("Invalid task path");
+        if (!Files.exists(target)) return;
+        Files.walkFileTree(target, new java.nio.file.SimpleFileVisitor<>() {
+            @Override public java.nio.file.FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) throws IOException {
+                Files.delete(file); return java.nio.file.FileVisitResult.CONTINUE;
+            }
+            @Override public java.nio.file.FileVisitResult postVisitDirectory(Path dir, IOException error) throws IOException {
+                if (error != null) throw error;
+                Files.delete(dir); return java.nio.file.FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     @PreDestroy
@@ -178,23 +226,57 @@ public class TranscriptionController {
     }
     public record ReviewResult(String status, String provider, String modelId, String promptVersion,
                                List<Long> resampledTimesMs, List<String> concerns) {}
+    public record MindMapEvidence(String sourceType, String sourceId, long startMs, long endMs, String quote) {}
+    public record MindMapNode(String id, String title, long startMs, long endMs,
+                              List<MindMapEvidence> evidenceRefs, List<MindMapNode> children) {}
+    public record MindMapResult(String status, String provider, String modelId, String promptVersion,
+                                String createdAt, MindMapNode root) {
+        public MindMapResult(String status, String modelId, String promptVersion, MindMapNode root) {
+            this(status, null, modelId, promptVersion, null, root);
+        }
+    }
     public record TranscriptResult(String language, List<TranscriptSegment> segments,
                                    List<VisualEvidence> visualEvidence, String ocrModelId,
                                    String imageModelId, ReviewResult review,
                                    List<PageGroup> pageGroups, List<Long> transitionFrameTimesMs,
-                                   String visualAnalysisMode, String groupingVersion, Double coarseChangePercent) {
+                                   String visualAnalysisMode, String groupingVersion, Double coarseChangePercent,
+                                   MindMapResult mindMap, Map<String, Long> stageTimingsMs,
+                                   Map<String, Integer> reusedCheckpoints) {
+        public TranscriptResult(String language, List<TranscriptSegment> segments,
+                                List<VisualEvidence> visualEvidence, String ocrModelId,
+                                String imageModelId, ReviewResult review,
+                                List<PageGroup> pageGroups, List<Long> transitionFrameTimesMs,
+                                String visualAnalysisMode, String groupingVersion, Double coarseChangePercent,
+                                MindMapResult mindMap) {
+            this(language, segments, visualEvidence, ocrModelId, imageModelId, review, pageGroups,
+                 transitionFrameTimesMs, visualAnalysisMode, groupingVersion, coarseChangePercent,
+                 mindMap, null, null);
+        }
+        public TranscriptResult withMindMap(MindMapResult updated) {
+            return new TranscriptResult(language, segments, visualEvidence, ocrModelId, imageModelId, review,
+                pageGroups, transitionFrameTimesMs, visualAnalysisMode, groupingVersion, coarseChangePercent, updated,
+                stageTimingsMs, reusedCheckpoints);
+        }
+        public TranscriptResult(String language, List<TranscriptSegment> segments,
+                                List<VisualEvidence> visualEvidence, String ocrModelId,
+                                String imageModelId, ReviewResult review,
+                                List<PageGroup> pageGroups, List<Long> transitionFrameTimesMs,
+                                String visualAnalysisMode, String groupingVersion, Double coarseChangePercent) {
+            this(language, segments, visualEvidence, ocrModelId, imageModelId, review,
+                 pageGroups, transitionFrameTimesMs, visualAnalysisMode, groupingVersion, coarseChangePercent, null);
+        }
         public TranscriptResult(String language, List<TranscriptSegment> segments,
                                 List<VisualEvidence> visualEvidence, String ocrModelId,
                                 String imageModelId, ReviewResult review,
                                 List<PageGroup> pageGroups, List<Long> transitionFrameTimesMs,
                                 String visualAnalysisMode, String groupingVersion) {
             this(language, segments, visualEvidence, ocrModelId, imageModelId, review,
-                 pageGroups, transitionFrameTimesMs, visualAnalysisMode, groupingVersion, null);
+                 pageGroups, transitionFrameTimesMs, visualAnalysisMode, groupingVersion, null, null);
         }
         public TranscriptResult(String language, List<TranscriptSegment> segments,
                                 List<VisualEvidence> visualEvidence, String ocrModelId,
                                 String imageModelId, ReviewResult review) {
-            this(language, segments, visualEvidence, ocrModelId, imageModelId, review, null, null, null, null, null);
+            this(language, segments, visualEvidence, ocrModelId, imageModelId, review, null, null, null, null, null, null);
         }
     }
     public record TranscriptionJob(String id, String status, TranscriptResult result, String error) {}

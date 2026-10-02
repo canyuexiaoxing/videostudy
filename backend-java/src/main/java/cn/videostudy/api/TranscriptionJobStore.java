@@ -56,6 +56,18 @@ public class TranscriptionJobStore {
         }
     }
 
+    public void saveMindMap(String id, TranscriptionController.MindMapResult mindMap) {
+        var existing = find(id).orElseThrow(() -> new IllegalStateException("Transcription job was not found"));
+        if (!"completed".equals(existing.status()) || existing.result() == null)
+            throw new IllegalStateException("Cannot update the mind map of an incomplete job");
+        try {
+            requireOne(jdbc.update("UPDATE transcription_jobs SET result_json = ? WHERE id = ? AND status = 'completed'",
+                json.writeValueAsString(existing.result().withMindMap(mindMap)), id));
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("Unable to serialize mind map", error);
+        }
+    }
+
     public void markFailed(String id, String errorCode) {
         requireOne(jdbc.update("UPDATE transcription_jobs SET status = 'failed', error_code = ? WHERE id = ?", errorCode, id));
     }

@@ -26,6 +26,25 @@ class TranscriptionControllerTest {
     @TempDir Path temporaryDirectory;
 
     @Test
+    void transientFailureAutomaticallyResumesWithoutAnotherUpload() throws Exception {
+        var store = mock(TranscriptionJobStore.class);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var controller = new TranscriptionController(temporaryDirectory.toString(), "full", store, (id, mode) -> {
+            assertTrue(Files.exists(temporaryDirectory.resolve(id)));
+            if (calls.incrementAndGet() == 1) throw new IllegalStateException("temporary failure");
+            return new TranscriptionController.TranscriptResult("zh", List.of(), List.of(), null, null,
+                new TranscriptionController.ReviewResult("completed", "test", "test", "v1", List.of(), List.of()));
+        });
+        try {
+            var response = controller.upload(new MockMultipartFile("file", "lesson.wav", "audio/wav", new byte[]{1}));
+            var id = ((TranscriptionController.TranscriptionJob)response.getBody()).id();
+            org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000)).complete(org.mockito.ArgumentMatchers.eq(id), org.mockito.ArgumentMatchers.any());
+            org.junit.jupiter.api.Assertions.assertEquals(2, calls.get());
+            org.mockito.Mockito.verify(store, org.mockito.Mockito.never()).markFailed(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+        } finally { controller.close(); }
+    }
+
+    @Test
     void rejectsUnknownVisualModeBeforeSavingUpload() throws Exception {
         var controller = new TranscriptionController(temporaryDirectory.toString(), "full", mock(TranscriptionJobStore.class),
             (id, mode) -> { throw new IllegalStateException("unused"); });
@@ -257,10 +276,17 @@ class TranscriptionControllerTest {
         org.mockito.Mockito.when(store.findOldFailedIds(org.mockito.ArgumentMatchers.any(Instant.class))).thenReturn(List.of(id));
         var controller = new TranscriptionController(temporaryDirectory.toString(), "full", store,
             (fileId, mode) -> { throw new IllegalStateException("unused"); });
+        var frames = Files.createDirectories(temporaryDirectory.resolve("frames"));
+        var checkpoint = Files.createDirectories(frames.resolve(id).resolve(".analysis")).resolve("speech.json");
+        Files.writeString(checkpoint, "{}");
+        var neighbor = Files.writeString(Files.createDirectories(frames.resolve(UUID.randomUUID().toString())).resolve("keep.jpg"), "keep");
+        org.springframework.test.util.ReflectionTestUtils.setField(controller, "keyframeDirectory", frames.toString());
         try {
             controller.cleanupStaleUploads();
             org.mockito.Mockito.verify(store).markExpired(id);
             assertFalse(Files.exists(path));
+            assertFalse(Files.exists(checkpoint));
+            assertTrue(Files.exists(neighbor));
         } finally {
             controller.close();
         }

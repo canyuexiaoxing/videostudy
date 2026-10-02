@@ -1,13 +1,18 @@
 """Select changed video frames before running OCR; keep timestamps in milliseconds."""
 
 from functools import lru_cache
+import atexit
 import multiprocessing
+import tempfile
+import threading
 from pathlib import Path
 import subprocess
 from typing import Callable
 
 import cv2
 import numpy as np
+import os
+from checkpoints import Checkpoints
 
 
 SAMPLE_SECONDS = 2
@@ -95,6 +100,31 @@ def _frame_at(path: Path, time_ms: int) -> np.ndarray:
     return frame
 
 
+def _frames_at(path: Path, times_ms: list[int]):
+    """Seek each requested time, batching up to eight outputs per FFmpeg process.
+
+    Separate fast-seeking inputs avoid decoding the entire interval between distant times.
+    Eight is a resource batch size, not a limit on how many frames may be requested.
+    """
+    times = list(dict.fromkeys(times_ms))
+    with tempfile.TemporaryDirectory(prefix="videostudy-frames-") as directory:
+        for start in range(0, len(times), 8):
+            batch = times[start:start + 8]
+            command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y"]
+            for t in batch:
+                command.extend(["-threads", "1", "-ss", f"{t / 1000:.3f}", "-i", str(path)])
+            outputs = [Path(directory) / f"{i}.jpg" for i in range(len(batch))]
+            for i, output in enumerate(outputs):
+                command.extend(["-map", f"{i}:v:0", "-frames:v", "1", "-threads", "1",
+                                "-q:v", "2", str(output)])
+            subprocess.run(command, capture_output=True, check=True)
+            for t, output in zip(batch, outputs):
+                frame = cv2.imread(str(output))
+                if frame is None:
+                    raise RuntimeError(f"Could not decode video frame at {t} ms")
+                yield t, frame
+
+
 @lru_cache(maxsize=1)
 def _ocr_model():
     from paddleocr import PaddleOCR
@@ -113,7 +143,7 @@ def _ocr_model():
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
         use_textline_orientation=False,
-        device="cpu",
+        device=os.environ.get("OCR_DEVICE", "cpu"),
     )
 
 
@@ -127,6 +157,16 @@ def _recognize(frame: np.ndarray) -> list[dict]:
          "polygon": polygon.tolist() if hasattr(polygon, "tolist") else polygon}
         for text, score, polygon in zip(texts, scores, polygons)
     ]
+
+
+def _frame_checkpoint(path: Path, keyframe_dir: Path | None):
+    if keyframe_dir is None:
+        return None
+    metadata = path.stat()
+    return Checkpoints(keyframe_dir / '.analysis', {
+        'media': str(path.resolve()), 'size': metadata.st_size, 'mtime': metadata.st_mtime_ns,
+        'ocr': OCR_MODEL_ID, 'device': os.environ.get('OCR_DEVICE', 'cpu'),
+    })
 
 
 def _save_keyframe(frame: np.ndarray, keyframe_dir: Path, time_ms: int) -> None:
@@ -147,29 +187,44 @@ def analyze_visuals(path: Path, recognize: Callable[[np.ndarray], list[dict]] | 
         return []
     recognize = recognize or _recognize
     evidence = []
-    for time_ms in _candidate_times(path, page_change_fraction):
-        frame = _frame_at(path, time_ms)
+    checkpoint = _frame_checkpoint(path, keyframe_dir)
+    for time_ms, frame in _frames_at(path, _candidate_times(path, page_change_fraction)):
         if keyframe_dir is not None:
             _save_keyframe(frame, keyframe_dir, time_ms)
-        evidence.append({"frameTimeMs": time_ms, "ocrBlocks": recognize(frame)})
+        blocks = checkpoint.run(f'ocrFrame:{time_ms}', {}, lambda: recognize(frame)) if checkpoint else recognize(frame)
+        evidence.append({"frameTimeMs": time_ms, "ocrBlocks": blocks})
     return evidence
 
 
-def _serve_visual_requests(connection, media_path: str, keyframe_path: str | None,
-                           page_change_fraction: float) -> None:
-    path = Path(media_path)
-    keyframe_dir = Path(keyframe_path) if keyframe_path else None
+def _serve_visual_requests(connection) -> None:
+    path = None
+    keyframe_dir = None
+    page_change_fraction = PAGE_CHANGE_FRACTION
+    checkpoint = None
     try:
         while request := connection.recv():
             try:
-                if request["op"] == "analyze":
+                if request["op"] == "bind":
+                    path = Path(request["mediaPath"])
+                    keyframe_dir = Path(request["keyframePath"]) if request["keyframePath"] else None
+                    page_change_fraction = request["pageChangeFraction"]
+                    checkpoint = _frame_checkpoint(path, keyframe_dir)
+                    response = None
+                elif request["op"] == "analyze":
                     response = analyze_visuals(path, keyframe_dir=keyframe_dir,
                                                page_change_fraction=page_change_fraction)
                 elif request["op"] == "capture":
                     frame = _frame_at(path, request["timeMs"])
                     if keyframe_dir is not None:
                         _save_keyframe(frame, keyframe_dir, request["timeMs"])
-                    response = _recognize(frame)
+                    response = checkpoint.run(f'ocrFrame:{request["timeMs"]}', {}, lambda: _recognize(frame)) if checkpoint else _recognize(frame)
+                elif request["op"] == "capture_batch":
+                    response = []
+                    for time_ms, frame in _frames_at(path, request["timesMs"]):
+                        if keyframe_dir is not None:
+                            _save_keyframe(frame, keyframe_dir, time_ms)
+                        blocks = checkpoint.run(f'ocrFrame:{time_ms}', {}, lambda: _recognize(frame)) if checkpoint else _recognize(frame)
+                        response.append({"frameTimeMs": time_ms, "ocrBlocks": blocks})
                 else:
                     raise ValueError("Unknown visual worker operation")
                 connection.send({"ok": True, "value": response})
@@ -181,27 +236,74 @@ def _serve_visual_requests(connection, media_path: str, keyframe_path: str | Non
         connection.close()
 
 
+_worker_lock = threading.Lock()
+_shared_connection = None
+_shared_process = None
+
+
+def _stop_shared_worker():
+    global _shared_connection, _shared_process
+    if _shared_connection is not None:
+        _shared_connection.close()
+    if _shared_process is not None:
+        _shared_process.join(timeout=5)
+        if _shared_process.is_alive():
+            _shared_process.terminate()
+            _shared_process.join(timeout=5)
+    _shared_connection = _shared_process = None
+
+
+def shutdown_visual_worker():
+    """Release the service-owned OCR process on service shutdown."""
+    with _worker_lock:
+        _stop_shared_worker()
+
+
+atexit.register(shutdown_visual_worker)
+
+
 class VisualOcrWorker:
-    """Keep PaddleOCR outside the process that runs faster-whisper."""
+    """Lease one persistent OCR process; serialize media sessions and pipe requests."""
 
     def __init__(self, path: Path, keyframe_dir: Path | None = None,
                  page_change_fraction: float = PAGE_CHANGE_FRACTION):
-        context = multiprocessing.get_context("spawn")
-        self.connection, child = context.Pipe()
-        self.process = context.Process(target=_serve_visual_requests,
-                                       args=(child, str(path), str(keyframe_dir) if keyframe_dir else None,
-                                             page_change_fraction))
-        self.process.start()
-        child.close()
+        global _shared_connection, _shared_process
+        self._closed = False
+        self._request_lock = threading.Lock()
+        _worker_lock.acquire()
+        try:
+            if _shared_process is None or not _shared_process.is_alive():
+                _stop_shared_worker()
+                context = multiprocessing.get_context("spawn")
+                _shared_connection, child = context.Pipe()
+                _shared_process = context.Process(target=_serve_visual_requests, args=(child,), daemon=True)
+                _shared_process.start()
+                child.close()
+            self.connection, self.process = _shared_connection, _shared_process
+            self._request("bind", mediaPath=str(path),
+                          keyframePath=str(keyframe_dir) if keyframe_dir else None,
+                          pageChangeFraction=page_change_fraction)
+        except BaseException:
+            _stop_shared_worker()
+            self._closed = True
+            _worker_lock.release()
+            raise
 
     def _request(self, operation: str, **kwargs):
-        self.connection.send({"op": operation, **kwargs})
-        if not self.connection.poll(30 * 60):
-            raise TimeoutError("Visual OCR worker timed out")
-        answer = self.connection.recv()
-        if not answer["ok"]:
-            raise RuntimeError(answer["error"])
-        return answer["value"]
+        with self._request_lock:
+            if self._closed:
+                raise RuntimeError("Visual worker lease is closed")
+            try:
+                self.connection.send({"op": operation, **kwargs})
+                if not self.connection.poll(30 * 60):
+                    raise TimeoutError("Visual OCR worker timed out")
+                answer = self.connection.recv()
+            except (EOFError, OSError, TimeoutError):
+                _stop_shared_worker()
+                raise
+            if not answer["ok"]:
+                raise RuntimeError(answer["error"])
+            return answer["value"]
 
     def analyze(self) -> list[dict]:
         return self._request("analyze")
@@ -209,12 +311,15 @@ class VisualOcrWorker:
     def capture(self, time_ms: int) -> list[dict]:
         return self._request("capture", timeMs=time_ms)
 
+    def capture_batch(self, times_ms: list[int]) -> list[dict]:
+        if not times_ms:
+            return []
+        return self._request("capture_batch", timesMs=list(dict.fromkeys(times_ms)))
+
     def close(self) -> None:
-        self.connection.close()
-        self.process.join(timeout=5)
-        if self.process.is_alive():
-            self.process.terminate()
-            self.process.join(timeout=5)
+        if not self._closed:
+            self._closed = True
+            _worker_lock.release()
 
     def __enter__(self):
         return self

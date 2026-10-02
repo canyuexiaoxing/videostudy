@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from transcription import transcribe_file
 from analysis import analyze_file
+from mind_map import build_mind_map
 
 app = FastAPI(title="VideoStudy Agent Demo")
 
@@ -18,6 +19,11 @@ class TranscribeRequest(BaseModel):
     fileId: str
     visualAnalysisMode: str = "both"
     coarseChangePercent: float = 2.0
+
+
+class MindMapRequest(BaseModel):
+    segments: list[dict]
+    pageGroups: list[dict] = []
 
 
 @app.get("/health")
@@ -52,3 +58,8 @@ def analyze(request: TranscribeRequest) -> dict:
         return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent)
     except (FileNotFoundError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/mind-map")
+def generate_mind_map(request: MindMapRequest) -> dict:
+    return build_mind_map(request.segments, request.pageGroups)

@@ -1,0 +1,9 @@
+# Optional GPU deployment: docker compose -f compose.yaml -f compose.gpu.yaml up --build -d
+services:
+  agent-python:
+    build:
+      context: ./agent-python
+      dockerfile: Dockerfile.gpu
+    environment:
+      OCR_DEVICE: gpu:0
+    gpus: all

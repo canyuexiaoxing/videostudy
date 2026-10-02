@@ -27,6 +27,44 @@ def response(*, occluded=False, missing=False, spoken=False, title="课程例题
 
 
 class PageUnderstandingTest(unittest.TestCase):
+    def test_third_format_attempt_keeps_only_latest_invalid_reply(self):
+        calls = []
+        incomplete = response()
+        del incomplete['corrections']
+        def fake_urlopen(request, timeout):
+            body = json.loads(request.data)
+            calls.append(body)
+            answer = incomplete if len(calls) < 3 else response()
+            return io.BytesIO(json.dumps({'choices': [{'finish_reason': 'stop',
+                'message': {'content': json.dumps(answer)}}]}).encode())
+        with patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test-only'}), \
+             patch('page_understanding.urlopen', side_effect=fake_urlopen):
+            answer = _deepseek_page_json({'route': 'ocr_only', 'transcript': [], 'ocrLines': []}, [])
+        self.assertEqual(answer['content'], '老师讲解的内容')
+        self.assertEqual(len(calls[2]['messages']), 4)
+
+    def test_invalid_response_retry_tells_model_missing_required_fields(self):
+        calls = []
+        incomplete = response()
+        del incomplete['corrections']
+        incomplete['inferences'] = [{'claim': 'unsupported shape'}]
+        def fake_urlopen(request, timeout):
+            body = json.loads(request.data)
+            calls.append(body)
+            if len(calls) == 1:
+                answer = incomplete
+            else:
+                repair = json.loads(body['messages'][-1]['content'])['responseRepair']
+                self.assertIn('corrections', repair['missingFields'])
+                answer = response()
+            return io.BytesIO(json.dumps({'choices': [{'finish_reason': 'stop',
+                'message': {'content': json.dumps(answer)}}]}).encode())
+        with patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test-only'}), \
+             patch('page_understanding.urlopen', side_effect=fake_urlopen):
+            answer = _deepseek_page_json({'route': 'ocr_only', 'transcript': [], 'ocrLines': []}, [])
+        self.assertEqual(answer['content'], '老师讲解的内容')
+        self.assertEqual(len(calls), 2)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)

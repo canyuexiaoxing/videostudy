@@ -28,4 +28,25 @@ class PageGroupResultTest {
         var oldResult = json.treeToValue(legacy, TranscriptionController.TranscriptResult.class);
         assertNull(oldResult.pageGroups().get(0).textAnalysis());
     }
+
+    @Test
+    void readsGroundedMindMapAndKeepsLegacyResultsReadable() throws Exception {
+        var current = """
+            {"language":"zh","segments":[],"visualEvidence":[],"mindMap":{
+             "status":"completed","modelId":"deepseek-flash","promptVersion":"grounded-mind-map-v1",
+             "root":{"id":"course","title":"课程知识导图","startMs":1000,"endMs":1900,
+             "evidenceRefs":[],"children":[{"id":"chapter_0","title":"增长量","startMs":1000,
+             "endMs":1900,"evidenceRefs":[],"children":[{"id":"concept_0_0",
+             "title":"增长量公式","startMs":1000,"endMs":1900,"children":[],
+             "evidenceRefs":[{"sourceType":"transcript","sourceId":"t_1","startMs":1000,
+             "endMs":1900,"quote":"增长量等于现期减基期"}]}]}]}}}
+            """;
+        var parsed = json.readValue(current, TranscriptionController.TranscriptResult.class);
+        assertEquals(1000, parsed.mindMap().root().children().get(0).children().get(0).startMs());
+        assertEquals("t_1", parsed.mindMap().root().children().get(0).children().get(0)
+            .evidenceRefs().get(0).sourceId());
+        var legacy = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(current);
+        legacy.remove("mindMap");
+        assertNull(json.treeToValue(legacy, TranscriptionController.TranscriptResult.class).mindMap());
+    }
 }

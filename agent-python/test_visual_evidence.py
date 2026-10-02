@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import cv2
@@ -11,6 +12,23 @@ from visual_evidence import _candidate_times, analyze_visuals
 
 
 class VisualEvidenceTest(unittest.TestCase):
+    def test_coarse_frames_use_batch_extraction_and_preserve_ocr_and_files(self):
+        frames = [(1000, np.full((20, 30, 3), 20, np.uint8)),
+                  (2500, np.full((20, 30, 3), 80, np.uint8))]
+        with tempfile.TemporaryDirectory() as d, \
+             patch('visual_evidence._has_video', return_value=True), \
+             patch('visual_evidence._candidate_times', return_value=[1000, 2500]), \
+             patch('visual_evidence._frames_at', return_value=iter(frames)), \
+             patch('visual_evidence._frame_at', side_effect=AssertionError('serial extraction used')):
+            root = Path(d)
+            path = root / 'lesson.mp4'
+            path.write_bytes(b'fixture')
+            result = analyze_visuals(path, keyframe_dir=root,
+                recognize=lambda frame: [{'text': str(int(frame[0, 0, 0])), 'score': 1, 'polygon': []}])
+            self.assertEqual([f['frameTimeMs'] for f in result], [1000, 2500])
+            self.assertEqual([f['ocrBlocks'][0]['text'] for f in result], ['20', '80'])
+            self.assertEqual(sorted(p.name for p in root.glob('*.jpg')), ['1000.jpg', '2500.jpg'])
+
     def test_small_annotation_does_not_create_its_own_candidate_before_slide_change(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "annotation.avi"

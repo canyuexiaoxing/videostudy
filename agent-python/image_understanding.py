@@ -45,7 +45,6 @@ def _deepseek_vision_json(frames: list[tuple[int, Path]]) -> dict:
         ],
         "response_format": {"type": "json_object"},
         "thinking": {"type": "disabled"},
-        "max_tokens": 3000,
         "stream": False,
     }
     request = Request(

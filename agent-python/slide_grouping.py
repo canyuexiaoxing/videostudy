@@ -109,7 +109,6 @@ def _deepseek_boundary_json(payload: dict) -> dict:
         ],
         "response_format": {"type": "json_object"},
         "thinking": {"type": "disabled"},
-        "max_tokens": 300,
         "stream": False,
     }
     request = Request(

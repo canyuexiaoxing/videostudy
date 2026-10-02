@@ -29,6 +29,11 @@ services:
       XDG_CACHE_HOME: /models/cache
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
+      REVIEW_CONCURRENCY: ${REVIEW_CONCURRENCY:-3}
+      PAGE_CONCURRENCY: ${PAGE_CONCURRENCY:-5}
+      MINDMAP_CONCURRENCY: ${MINDMAP_CONCURRENCY:-3}
+      OCR_DEVICE: ${OCR_DEVICE:-cpu}
+      MEDIA_PARALLEL: ${MEDIA_PARALLEL:-1}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s

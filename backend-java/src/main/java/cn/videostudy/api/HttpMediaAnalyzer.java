@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
+import java.util.List;
 
 @Component
 public class HttpMediaAnalyzer implements MediaAnalyzer {
@@ -35,5 +36,13 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
         return agent.post().uri(endpoint).body(Map.of("fileId", fileId, "visualAnalysisMode", visualAnalysisMode,
                                                   "coarseChangePercent", coarseChangePercent))
             .retrieve().body(TranscriptionController.TranscriptResult.class);
+    }
+
+    @Override
+    public TranscriptionController.MindMapResult generateMindMap(
+        List<TranscriptionController.TranscriptSegment> segments,
+        List<TranscriptionController.PageGroup> pageGroups) {
+        return agent.post().uri("/mind-map").body(Map.of("segments", segments, "pageGroups", pageGroups))
+            .retrieve().body(TranscriptionController.MindMapResult.class);
     }
 }

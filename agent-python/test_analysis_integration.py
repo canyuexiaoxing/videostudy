@@ -29,6 +29,10 @@ class MediaIntegrationTest(unittest.TestCase):
             for index in range(24):
                 image = np.full((540, 960, 3), 255, np.uint8)
                 cv2.putText(image, titles[index // 8], (55, 180), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 0), 5)
+                # Make each slide change exceed the configured 2% pixel threshold.
+                # Different short titles alone need not exceed it.
+                x = 50 + (index // 8) * 200
+                cv2.rectangle(image, (x, 330), (x + 140, 470), (0, 0, 0), -1)
                 writer.write(image)
             writer.release()
             subprocess.run([
@@ -38,7 +42,7 @@ class MediaIntegrationTest(unittest.TestCase):
             ], check=True)
 
             def fake_review(**kwargs):
-                return review_visual_coverage(**kwargs, ask_json=lambda payload: {"resampleTimesMs": [], "concerns": []})
+                return review_visual_coverage(**kwargs, ask_json=lambda payload: {"resampleRequests": [], "concerns": []})
 
             def fake_page(page, pages, frames, keyframe_dir, segments, mode):
                 self.assertEqual(mode, "both")
@@ -48,6 +52,7 @@ class MediaIntegrationTest(unittest.TestCase):
 
             with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": str(root / "keyframes")}):
                 with patch("analysis.review_visual_coverage", side_effect=fake_review), \
+                     patch("analysis.build_mind_map", return_value={"status": "completed", "root": {"children": []}}), \
                      patch("analysis.group_pages", side_effect=lambda visuals, keyframe_dir, segments:
                            group_pages(visuals, keyframe_dir, segments,
                                        ask_json=lambda payload: {"samePage": False, "reason": "test"})), \

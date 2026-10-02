@@ -2,15 +2,21 @@
 
 import os
 from pathlib import Path
-import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
+from time import perf_counter
 from uuid import UUID
 
 from agent_review import review_visual_coverage
+from mind_map import build_mind_map
 from page_understanding import analyze_page
 from slide_grouping import GROUPING_VERSION, group_pages
 from transcription import transcribe_file
 from visual_evidence import OCR_MODEL_ID, VisualOcrWorker
+from checkpoints import Checkpoints
+from mind_map import PROMPT_VERSION as MAP_VERSION
+from page_understanding import PAGE_PROMPT_VERSION
+from agent_review import PROMPT_VERSION as REVIEW_VERSION
 
 
 def media_duration_ms(path: Path) -> int:
@@ -35,28 +41,73 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
         raise FileNotFoundError("uploaded media not found")
 
     keyframe_dir = Path(os.environ.get("KEYFRAME_DIR", "../.local/keyframes")).resolve() / file_id
+    started = perf_counter()
+    timings = {}
+    metadata = media_path.stat()
+    checkpoint = Checkpoints(keyframe_dir / '.analysis', {
+        'size': metadata.st_size, 'mtime': metadata.st_mtime_ns,
+        'mode': visual_analysis_mode, 'threshold': coarse_change_percent,
+        'ocr': OCR_MODEL_ID, 'ocrDevice': os.environ.get('OCR_DEVICE', 'cpu'),
+        'speech': 'faster-whisper-base:beam5:vad:int8',
+        'model': os.environ.get('DEEPSEEK_MODEL', 'deepseek-flash'),
+        'endpoint': os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
+        'prompts': [MAP_VERSION, PAGE_PROMPT_VERSION, REVIEW_VERSION, GROUPING_VERSION],
+    })
+    def cached(stage, inputs, function, accept=lambda value: True):
+        return checkpoint.run(stage, inputs, function, accept)
+    def timed(name, function, *args):
+        before = perf_counter()
+        value = function(*args)
+        timings[name] = round((perf_counter() - before) * 1000)
+        return value
     try:
-        transcript = transcribe_file(file_id)
         with VisualOcrWorker(media_path, keyframe_dir,
                              page_change_fraction=coarse_change_percent / 100) as visual_worker:
-            visuals = visual_worker.analyze()
-            visuals, review = review_visual_coverage(
-                duration_ms=media_duration_ms(media_path),
-                segments=transcript["segments"],
-                visuals=visuals,
-                capture=visual_worker.capture,
-            )
-        page_groups, transition_times = group_pages(visuals, keyframe_dir, transcript["segments"])
+            if os.environ.get("MEDIA_PARALLEL", "1") == "1":
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    speech_job = pool.submit(timed, "transcription", cached, 'transcription', {},
+                                             lambda: transcribe_file(file_id))
+                    visual_job = pool.submit(timed, "visualOcr", cached, 'visualOcr', {}, visual_worker.analyze)
+                    transcript, visuals = speech_job.result(), visual_job.result()
+            else:
+                transcript = timed("transcription", cached, 'transcription', {}, lambda: transcribe_file(file_id))
+                visuals = timed("visualOcr", cached, 'visualOcr', {}, visual_worker.analyze)
+            before = perf_counter()
+            def coverage():
+                return review_visual_coverage(
+                    duration_ms=media_duration_ms(media_path),
+                    segments=transcript["segments"],
+                    visuals=visuals,
+                    capture=visual_worker.capture,
+                    capture_batch=visual_worker.capture_batch,
+                )
+            visuals, review = cached('coverageReview', {'speech': transcript, 'visuals': visuals}, coverage,
+                accept=lambda value: value[1].get('status') in ('completed', 'not_applicable'))
+            timings["coverageReview"] = round((perf_counter() - before) * 1000)
+        page_groups, transition_times = timed("pageGrouping", cached, 'pageGrouping',
+            {'visuals': visuals, 'speech': transcript['segments']},
+            lambda: group_pages(visuals, keyframe_dir, transcript['segments']))
+        before = perf_counter()
         if page_groups:
             by_time = {frame["frameTimeMs"]: frame for frame in visuals}
-            page_groups = [analyze_page(page, page_groups, by_time, keyframe_dir,
-                                        transcript["segments"], visual_analysis_mode)
-                           for page in page_groups]
+            with ThreadPoolExecutor(max_workers=max(1, int(os.environ.get("PAGE_CONCURRENCY", "5")))) as pool:
+                # map preserves order even when later pages finish first.
+                page_groups = list(pool.map(lambda page: cached(f'page:{page["pageIndex"]}',
+                    {'page': page, 'pages': page_groups, 'speech': transcript['segments']},
+                    lambda: analyze_page(page, page_groups, by_time, keyframe_dir,
+                                        transcript['segments'], visual_analysis_mode),
+                    accept=lambda result: (result.get('imageAnalysis') or result.get('textAnalysis') or {}).get('status') != 'failed'),
+                    page_groups))
+        timings["pageUnderstanding"] = round((perf_counter() - before) * 1000)
+        mind_map = timed("mindMap", lambda: build_mind_map(transcript['segments'], page_groups,
+                                                          checkpoint=checkpoint))
+        timings["total"] = round((perf_counter() - started) * 1000)
         return {
             "language": transcript["language"],
             "segments": transcript["segments"],
             "visualEvidence": visuals,
             "pageGroups": page_groups,
+            "mindMap": mind_map,
             "transitionFrameTimesMs": transition_times,
             "visualAnalysisMode": visual_analysis_mode,
             "coarseChangePercent": coarse_change_percent,
@@ -65,7 +116,10 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
             "imageModelId": os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")
                             if visual_analysis_mode == "both" and page_groups else None,
             "review": review,
+            "stageTimingsMs": timings,
+            "reusedCheckpoints": checkpoint.hits,
         }
     except Exception:
-        shutil.rmtree(keyframe_dir, ignore_errors=True)
+        # Keep task-local evidence/checkpoints for bounded automatic retries.
+        # Java removes this directory when the task is deleted or expires.
         raise

@@ -12,9 +12,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from slide_grouping import _difference, _normalized, _preview
+from evidence_payload import compact_payload
 
 
-PAGE_PROMPT_VERSION = "page-evidence-v3"
+PAGE_PROMPT_VERSION = "page-evidence-v5"
 
 
 class PageFormatError(ValueError):
@@ -129,7 +130,29 @@ def _deepseek_page_json(context: dict, frames: list[tuple[int, Path]]) -> dict:
         "conflicting numbers. If verification is supplied, independently re-read the evidence and "
         "recalculate each disputed claim; conflicts must contain only contradictions still unresolved."
     )
-    content: list[dict] = [{"type": "text", "text": instructions + "\n" + json.dumps(context, ensure_ascii=False)}]
+    expected_shape = {
+        "title": "", "content": "", "confirmedContent": "", "inferences": [],
+        "unresolvedPoints": [], "corrections": [], "visualElements": [],
+        "uncertainties": [], "conflicts": [], "calculationChecks": [],
+    }
+    if vision:
+        expected_shape["occlusion"] = {"hasOcclusion": False, "criticalContentMissing": False,
+                                      "speechCoversMissing": False}
+    instructions += (
+        " ALL fields in this example are REQUIRED even if empty. inferences, unresolvedPoints, "
+        "corrections, visualElements, uncertainties and conflicts MUST be arrays of STRINGS, "
+        "not objects. Put each correction's original reading, corrected reading and basis in "
+        "one string. confirmedContent may be a string or array of strings. calculationChecks "
+        "must be an array of objects with expression (string) and result (string or number). "
+        "Example shape: " + json.dumps(expected_shape, ensure_ascii=False)
+    )
+    instructions += (
+        " When evidenceEncoding is tables-v1, columns give the ordered field names and "
+        "each rows entry contains their corresponding values. Preserve every row and its "
+        "millisecond timestamps when citing evidence."
+    )
+    content: list[dict] = [{"type": "text", "text": instructions + "\n" +
+                          json.dumps(compact_payload(context), ensure_ascii=False, separators=(",", ":"))}]
     for frame_time, path in frames:
         encoded = base64.b64encode(path.read_bytes()).decode("ascii")
         content.append({"type": "text", "text": f"frameTimeMs={frame_time}; screenshot follows"})
@@ -143,16 +166,15 @@ def _deepseek_page_json(context: dict, frames: list[tuple[int, Path]]) -> dict:
         ],
         "response_format": {"type": "json_object"},
         "thinking": {"type": "disabled"},
-        "max_tokens": 3000,
         "stream": False,
     }
-    request = Request(
-        os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/") + "/chat/completions",
-        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-        method="POST",
-    )
     for format_attempt in range(3):
+        request = Request(
+            os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/") + "/chat/completions",
+            data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            method="POST",
+        )
         for network_attempt in range(3):
             try:
                 with urlopen(request, timeout=120) as response:
@@ -166,6 +188,7 @@ def _deepseek_page_json(context: dict, frames: list[tuple[int, Path]]) -> dict:
                     raise
             time.sleep(2 ** network_attempt)
         choice = data["choices"][0]
+        parsed = None
         if choice.get("finish_reason") == "stop":
             try:
                 parsed = json.loads(choice["message"]["content"])
@@ -175,6 +198,20 @@ def _deepseek_page_json(context: dict, frames: list[tuple[int, Path]]) -> dict:
                 pass
         if format_attempt == 2:
             raise PageFormatError("Page model returned malformed or incomplete JSON")
+        previous_content = choice.get("message", {}).get("content")
+        # Every HTTP request still carries the full original evidence. Older invalid
+        # replies add no useful context once the latest reply and repair are present.
+        body["messages"] = body["messages"][:2]
+        if isinstance(previous_content, str) and previous_content:
+            body["messages"].append({"role": "assistant", "content": previous_content})
+        body["messages"].append({"role": "user", "content": json.dumps({"responseRepair": {
+            "missingFields": [field for field in expected_shape
+                              if not isinstance(parsed, dict) or field not in parsed],
+            "expectedShape": expected_shape,
+            "instruction": "Return the full corrected JSON using the original evidence. All fields are required. "
+                           "inferences/corrections/unresolvedPoints/visualElements/uncertainties/conflicts are "
+                           "arrays of strings, never objects. Do not replace content to merely fit the format.",
+        }}, ensure_ascii=False)})
     raise AssertionError("unreachable")
 
 
