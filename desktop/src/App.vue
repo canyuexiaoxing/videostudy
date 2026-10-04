@@ -2,7 +2,14 @@
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import MindMapCanvas from './MindMapCanvas.vue'
 import StudyIcon from './StudyIcon.vue'
-import { toWebVtt } from './subtitles'
+import ChapterPlayer from './ChapterPlayer.vue'
+import SubtitleSettings from './SubtitleSettings.vue'
+import AiOverview from './AiOverview.vue'
+import PageGallery from './PageGallery.vue'
+import { appearanceCss, normalizeAppearance, positionCue } from './subtitleAppearance'
+import type { VideoChapter } from './chapters'
+import { createSubtitlePoller, selectSubtitleSource, setSubtitleVisibility, SubtitleRequestError, toWebVtt } from './subtitles'
+import type { SubtitleJob, SubtitleMode, SubtitleTarget } from './subtitles'
 import { jumpToMindMapNode, mediaFingerprint } from './mindMap'
 import type { MindMapNode as MindNode, MindMapResult } from './mindMap'
 
@@ -16,7 +23,7 @@ type PageGroup = { pageIndex: number; firstFrameTimeMs: number; lastFrameTimeMs:
   decision: string; decisionReason: string; ocrLines: OcrLine[]; imageAnalysis?: ImageAnalysis; textAnalysis?: ImageAnalysis }
 type Review = { status: string; resampledTimesMs: number[]; concerns: string[] }
 type TranscriptionJob = { id: string; status: string; result?: { language: string; segments: Segment[]; visualEvidence?: VisualEvidence[]; pageGroups?: PageGroup[]; mindMap?: MindMapResult; visualAnalysisMode?: 'ocr_only' | 'both'; ocrModelId?: string; imageModelId?: string; review?: Review }; error?: string }
-type RightTab = 'map' | 'transcript' | 'slides' | 'notes' | 'history'
+type RightTab = 'map' | 'overview' | 'transcript' | 'slides' | 'notes' | 'history'
 type StudyNote = { id: string; scope: string; timeMs: number; text: string; createdAt: string }
 type HistoryStatus = 'unknown' | 'queued' | 'processing' | 'completed' | 'failed'
 type HistoryEntry = { id: string; name: string; addedAt: string; status: HistoryStatus }
@@ -63,7 +70,7 @@ const video = ref<HTMLVideoElement | null>(null)
 const transcriptList = ref<HTMLElement | null>(null)
 const sidebarTranscriptList = ref<HTMLElement | null>(null)
 const rightTab = ref<RightTab>('map')
-const rightTabOrder: RightTab[] = ['map', 'transcript', 'slides', 'notes', 'history']
+const rightTabOrder: RightTab[] = ['map', 'overview', 'transcript', 'slides', 'notes', 'history']
 const transcriptQuery = ref('')
 const noteDraft = ref('')
 const studyNotes = ref<StudyNote[]>(readStudyNotes())
@@ -93,10 +100,162 @@ const error = ref('')
 const unavailableFrames = ref<Set<number>>(new Set())
 const currentPlaybackMs = ref(0)
 const subtitleEnabled = ref(true)
+const subtitleAppearance=ref(normalizeAppearance((()=>{try{return JSON.parse(localStorage.getItem('subtitleAppearance:v1')??'null')}catch{return null}})()))
+const cueStyleElement=document.createElement('style')
+document.head.append(cueStyleElement)
+watch(subtitleAppearance,value=>{
+  cueStyleElement.textContent=appearanceCss(value)
+  try{localStorage.setItem('subtitleAppearance:v1',JSON.stringify(value))}catch{/* Storage may be unavailable. */}
+  syncSubtitleVisibility()
+},{deep:true,immediate:true})
 const subtitleUrl = ref('')
+const sourceLanguage = ref('und')
+const videoChapters = ref<VideoChapter[]>([])
+const chapterStatus = ref('not_requested')
+let chapterController: AbortController | null = null
+watch([existingJobId, () => transcript.value.length], async ([id, count]) => {
+  chapterController?.abort()
+  videoChapters.value = []
+  chapterStatus.value = 'not_requested'
+  if (!id || !count) return
+  const controller = new AbortController()
+  chapterController = controller
+  let errors = 0
+  try {
+    for (let attempt = 0; attempt < 900 && !controller.signal.aborted; attempt++) {
+      try {
+        let response = await fetch(`${apiBase}/transcriptions/${id}/chapters`, { signal: controller.signal })
+        if (!response.ok) throw new SubtitleRequestError(response.status)
+        let job = await response.json()
+        if (job.status === 'not_requested') {
+          response = await fetch(`${apiBase}/transcriptions/${id}/chapters`, { method: 'POST', signal: controller.signal })
+          if (!response.ok) throw new SubtitleRequestError(response.status)
+          job = await response.json()
+        }
+        if (controller.signal.aborted) return
+        errors = 0
+        chapterStatus.value = job.status
+        if (job.status === 'completed') { videoChapters.value = job.result?.chapters ?? []; return }
+        if (job.status === 'failed') return
+      } catch (cause) {
+        if (controller.signal.aborted) return
+        const permanent = cause instanceof SubtitleRequestError && cause.status >= 400 && cause.status < 500 && ![408,429].includes(cause.status)
+        if (permanent || ++errors >= 3) throw cause
+      }
+      await new Promise(resolve => setTimeout(resolve, 1500))
+    }
+    if (!controller.signal.aborted) chapterStatus.value = 'failed'
+  } catch { if (!controller.signal.aborted) chapterStatus.value = 'failed' }
+})
+onUnmounted(() => chapterController?.abort())
+const aiSubtitlesEnabled = ref(true)
+const subtitleTargetLanguage = ref<SubtitleTarget>('source')
+const subtitleMode = ref<SubtitleMode>('original')
+const subtitleJob = ref<SubtitleJob | null>(null)
+const subtitleCourseId = ref('')
+const subtitleRequestError = ref('')
+const requestingSubtitles = ref(false)
+let subtitleRequestGeneration = 0
+const selectedSubtitles = computed(() => selectSubtitleSource(transcript.value, sourceLanguage.value, subtitleJob.value, subtitleMode.value))
+const aiSubtitlesAvailable = computed(() => selectSubtitleSource(transcript.value, sourceLanguage.value, subtitleJob.value, 'ai').mode === 'ai')
+const subtitleChanges = computed(() => subtitleJob.value?.result?.changes ?? [])
+const subtitleChangeById = computed(() => new Map(subtitleChanges.value.map(change => [change.segmentId, change])))
+const subtitleIsTranslation = computed(() => subtitleJob.value?.result?.mode === 'translation')
+const canGenerateSubtitles = computed(() => !!transcript.value.length && subtitleCourseId.value === existingJobId.value
+  && subtitleJob.value?.status === 'not_requested' && !isAnalysisPending.value && !requestingSubtitles.value)
+const subtitleStatusMessage = computed(() => {
+  if (!subtitleCourseId.value) return ''
+  if (subtitleRequestError.value) return 'AI 字幕暂时不可用；原文仍可使用。'
+  if (requestingSubtitles.value) return '正在提交 AI 字幕任务…'
+  const target = subtitleTargetLanguage.value === 'en' ? '英文' : subtitleTargetLanguage.value === 'zh' ? '中文' : '同语言'
+  switch (subtitleJob.value?.status) {
+    case 'awaiting_source': return 'AI 字幕等待语音与课件分析；课程分析继续进行。'
+    case 'queued': return `AI ${target}字幕排队中；原文可先使用。`
+    case 'processing': return `正在生成 AI ${target}字幕；原文可先使用。`
+    case 'partial': return 'AI 字幕部分完成；已通过校验的内容可使用，其余保留原文。'
+    case 'completed': return subtitleIsTranslation.value ? `AI ${subtitleJob.value?.result?.targetLanguage === 'en' ? '英文' : '中文'}翻译字幕已生成。`
+      : `AI 校正字幕已生成 · ${subtitleChanges.value.length} 处调整。`
+    case 'failed': return 'AI 字幕生成失败；原文仍可使用。'
+    case 'unsupported': return 'AI 字幕目前支持中文和英文；原文仍可使用。'
+    case 'not_requested': return '尚未生成该语言的 AI 字幕，可单独生成。'
+    default: return '正在读取 AI 字幕状态…'
+  }
+})
+const subtitlePoller = createSubtitlePoller({
+  fetchJob: async (id, target, signal) => {
+    const response = await fetch(`${apiBase}/transcriptions/${id}/subtitles?targetLanguage=${target}`, { signal })
+    if (!response.ok) throw new SubtitleRequestError(response.status)
+    return await response.json() as SubtitleJob
+  },
+  onJob: job => { subtitleJob.value = job; subtitleRequestError.value = '' },
+  onError: message => { subtitleRequestError.value = message }
+})
+
+function clearSubtitleJob() {
+  subtitleRequestGeneration++
+  subtitlePoller.stop()
+  subtitleCourseId.value = ''
+  subtitleJob.value = null
+  subtitleRequestError.value = ''
+  requestingSubtitles.value = false
+  subtitleMode.value = 'original'
+}
+
+function readSubtitleJob(id: string) {
+  clearSubtitleJob()
+  subtitleCourseId.value = id
+  void subtitlePoller.start(id, subtitleTargetLanguage.value)
+}
+
+async function generateSubtitles() {
+  if (!canGenerateSubtitles.value) return
+  const id = subtitleCourseId.value
+  const target = subtitleTargetLanguage.value
+  const token = ++subtitleRequestGeneration
+  requestingSubtitles.value = true
+  subtitleRequestError.value = ''
+  try {
+    const response = await fetch(`${apiBase}/transcriptions/${id}/subtitles`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetLanguage: target })
+    })
+    if (token !== subtitleRequestGeneration) return
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const job = await response.json() as SubtitleJob
+    if (token !== subtitleRequestGeneration) return
+    subtitleJob.value = job
+    void subtitlePoller.start(id, target)
+  } catch (cause) {
+    if (token === subtitleRequestGeneration) subtitleRequestError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    if (token === subtitleRequestGeneration) requestingSubtitles.value = false
+  }
+}
+
+watch(subtitleTargetLanguage, () => {
+  const id = subtitleCourseId.value
+  if (id) {
+    const mode=subtitleMode.value
+    readSubtitleJob(id)
+    subtitleMode.value=mode
+  }
+})
+watch(existingJobId, id => {
+  if (subtitleCourseId.value && id !== subtitleCourseId.value) clearSubtitleJob()
+})
 function syncSubtitleVisibility() {
+  setSubtitleVisibility(video.value, subtitleEnabled.value)
+  const track = video.value?.textTracks[0]
+  const cues = track?.cues
+  const active = new Set(track?.activeCues ? Array.from(track.activeCues) : [])
+  if (cues && track) for (const cue of Array.from(cues)) {
+    if (cue instanceof VTTCue) {
+      const changed=cue.snapToLines||cue.line!==subtitleAppearance.value.vertical
+      positionCue(cue,subtitleAppearance.value)
+      // Chromium may cache the active cue's layout while paused.
+      if(changed&&active.has(cue)){track.removeCue(cue);track.addCue(cue)}
+    }
+  }
   if (video.value?.textTracks[0]) {
-    video.value.textTracks[0].mode = subtitleEnabled.value ? 'showing' : 'hidden'
     video.value.textTracks.addEventListener('change', refreshSubtitleToggle)
   }
 }
@@ -104,7 +263,7 @@ function refreshSubtitleToggle() {
   const track = video.value?.textTracks[0]
   if (track?.cues?.length) subtitleEnabled.value = track.mode === 'showing'
 }
-watch(transcript, segments => {
+watch(() => selectedSubtitles.value.segments, segments => {
   if (subtitleUrl.value) URL.revokeObjectURL(subtitleUrl.value)
   subtitleUrl.value = segments.length ? URL.createObjectURL(new Blob([toWebVtt(segments)], { type: 'text/vtt;charset=utf-8' })) : ''
 })
@@ -143,6 +302,7 @@ function historyStatusLabel(status: HistoryStatus) {
 async function chooseVideo(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file) return
+  clearSubtitleJob()
   status.value = '正在核对本地媒体文件…'
   let fingerprint: string
   try {
@@ -167,6 +327,7 @@ async function chooseVideo(event: Event) {
   videoUrl.value = URL.createObjectURL(file)
   filename.value = file.name
   if (!relinking) {
+    sourceLanguage.value = 'und'
     transcript.value = []
     visualEvidence.value = []
     pageGroups.value = []
@@ -175,6 +336,8 @@ async function chooseVideo(event: Event) {
     activeSegmentId.value = ''
     review.value = null
     if (hadResult) existingJobId.value = ''
+  } else if (existingJobId.value) {
+    readSubtitleJob(existingJobId.value)
   }
   failedJobId.value = ''
   error.value = ''
@@ -200,6 +363,7 @@ async function waitForAnalysis(id: string) {
       if (job.status === 'completed') {
         unavailableFrames.value = new Set()
         transcript.value = job.result?.segments ?? []
+        sourceLanguage.value = job.result?.language || 'und'
         visualEvidence.value = job.result?.visualEvidence ?? []
         pageGroups.value = job.result?.pageGroups ?? []
         mindMap.value = job.result?.mindMap ?? null
@@ -244,6 +408,7 @@ async function runTranscription() {
   }
   isAnalysisPending.value = true
   error.value = ''
+  clearSubtitleJob()
   transcript.value = []
   visualEvidence.value = []
   pageGroups.value = []
@@ -258,6 +423,8 @@ async function runTranscription() {
     form.append('file', file)
     form.append('visualAnalysisMode', visualAnalysisMode.value)
     form.append('coarseChangePercent', coarseChangePercent.value)
+    form.append('aiSubtitles', String(aiSubtitlesEnabled.value))
+    form.append('subtitleTargetLanguage', subtitleTargetLanguage.value)
     const response = await fetch(`${apiBase}/transcriptions`, { method: 'POST', body: form })
     if (!response.ok) throw new Error(`上传失败：HTTP ${response.status}`)
     const created: TranscriptionJob = await response.json()
@@ -265,6 +432,7 @@ async function runTranscription() {
     localStorage.setItem('lastAnalysisId', created.id)
     localStorage.setItem(`analysisMedia:${created.id}`, JSON.stringify({ name: file.name, size: file.size, fingerprint }))
     rememberAnalysis(created.id, 'queued', file.name)
+    readSubtitleJob(created.id)
     await waitForAnalysis(created.id)
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
@@ -285,6 +453,7 @@ async function loadExistingAnalysis() {
   if (!analysisHistory.value.some(entry => entry.id === id)) rememberAnalysis(id, 'unknown')
   error.value = ''
   status.value = '正在读取已保存的分析结果…'
+  readSubtitleJob(id)
   try {
     await waitForAnalysis(id)
     localStorage.setItem('lastAnalysisId', id)
@@ -299,6 +468,7 @@ async function loadExistingAnalysis() {
 async function openHistory(entry: HistoryEntry) {
   if (isAnalysisPending.value) return
   if (existingJobId.value !== entry.id) {
+    clearSubtitleJob()
     transcript.value = []
     visualEvidence.value = []
     pageGroups.value = []
@@ -327,6 +497,8 @@ async function openHistory(entry: HistoryEntry) {
 async function deleteHistory(entry: HistoryEntry) {
   if (isAnalysisPending.value || deletingHistoryId.value) return
   if (!window.confirm(`永久删除“${entry.name}”的分析结果、服务器截图和本机笔记？此操作无法撤销。电脑上的原视频不会删除。`)) return
+  const deletingCurrentSubtitles = subtitleCourseId.value === entry.id
+  if (deletingCurrentSubtitles) clearSubtitleJob()
   deletingHistoryId.value = entry.id
   historyError.value = ''
   try {
@@ -340,6 +512,7 @@ async function deleteHistory(entry: HistoryEntry) {
     studyNotes.value = studyNotes.value.filter(note => note.scope !== entry.id)
     localStorage.setItem('studyNotes:v1', JSON.stringify(studyNotes.value))
     if (existingJobId.value === entry.id) {
+      clearSubtitleJob()
       existingJobId.value = ''
       transcript.value = []
       visualEvidence.value = []
@@ -354,6 +527,7 @@ async function deleteHistory(entry: HistoryEntry) {
     }
   } catch (cause) {
     historyError.value = cause instanceof Error ? cause.message : String(cause)
+    if (deletingCurrentSubtitles && existingJobId.value === entry.id) readSubtitleJob(entry.id)
   } finally {
     deletingHistoryId.value = ''
   }
@@ -368,6 +542,7 @@ async function retryAnalysis() {
     const id = failedJobId.value
     const response = await fetch(`${apiBase}/transcriptions/${id}/retry`, { method: 'POST' })
     if (!response.ok) throw new Error(`重试失败：HTTP ${response.status}`)
+    readSubtitleJob(id)
     await waitForAnalysis(id)
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause)
@@ -488,6 +663,8 @@ function syncPlayback(event: Event) {
 }
 
 onUnmounted(() => {
+  cueStyleElement.remove()
+  clearSubtitleJob()
   video.value?.textTracks.removeEventListener('change', refreshSubtitleToggle)
   if (videoUrl.value) URL.revokeObjectURL(videoUrl.value)
   if (subtitleUrl.value) URL.revokeObjectURL(subtitleUrl.value)
@@ -509,6 +686,7 @@ onUnmounted(() => {
       <div class="sidebar-heading"><div><span class="eyebrow">YOUR STUDY SPACE</span><h2>学习工作台</h2></div><span class="workspace-mark"><StudyIcon name="spark" />跟着课程，找到依据</span></div>
       <div class="sidebar-tabs" :style="{ '--tab-index': rightTabOrder.indexOf(rightTab) }" role="tablist" aria-label="学习工具视图" @keydown="handleSidebarTabKeydown">
         <button type="button" role="tab" aria-controls="tab-map" :aria-selected="rightTab === 'map'" :class="{ active: rightTab === 'map' }" @click="rightTab = 'map'"><StudyIcon name="map" />思维导图</button>
+        <button type="button" role="tab" aria-controls="tab-overview" :aria-selected="rightTab === 'overview'" :class="{ active: rightTab === 'overview' }" @click="rightTab = 'overview'"><StudyIcon name="spark" />AI 解读</button>
         <button type="button" role="tab" aria-controls="tab-transcript" :aria-selected="rightTab === 'transcript'" :class="{ active: rightTab === 'transcript' }" @click="rightTab = 'transcript'"><StudyIcon name="transcript" />字幕原文</button>
         <button type="button" role="tab" aria-controls="tab-slides" :aria-selected="rightTab === 'slides'" :class="{ active: rightTab === 'slides' }" @click="rightTab = 'slides'"><StudyIcon name="slides" />课件画面</button>
         <button type="button" role="tab" aria-controls="tab-notes" :aria-selected="rightTab === 'notes'" :class="{ active: rightTab === 'notes' }" @click="rightTab = 'notes'"><StudyIcon name="notes" />随手笔记</button>
@@ -536,15 +714,29 @@ onUnmounted(() => {
           <p class="empty-hint" :class="{ 'is-processing': isAnalysisPending }"><span v-if="isAnalysisPending" class="activity-spinner" aria-hidden="true"></span>{{ isAnalysisPending ? '正在分析课程，完成后导图将在这里显示。你可以继续观看本地视频。' : selectedFile ? '视频已选好，点击顶部“开始分析”；已有任务可在下方按编号读取结果。' : '先点击右上角“选择本地视频”；已有任务可在下方按编号读取结果。' }}</p>
         </div>
       </section>
+      <section v-show="rightTab === 'overview'" id="tab-overview" class="sidebar-pane" role="tabpanel" aria-label="AI 解读"><AiOverview :course-id="existingJobId" :ready="!!transcript.length" @seek="seekTo" /></section>
       <section v-show="rightTab === 'transcript'" id="tab-transcript" class="sidebar-pane" role="tabpanel" aria-label="字幕原文">
         <div class="sidebar-pane-heading"><div><span class="eyebrow">TRANSCRIPT</span><h3>字幕原文</h3></div><span>{{ transcript.length }} 段</span></div>
         <template v-if="transcript.length">
           <label class="sidebar-search-label" for="transcript-search">搜索课程内容</label>
           <input id="transcript-search" v-model="transcriptQuery" class="sidebar-search" type="search" placeholder="输入关键词查找讲解…" />
+          <p v-if="subtitleChanges.length" class="subtitle-review-hint">原文保留如下；展开标记可查看 AI {{ subtitleIsTranslation ? '翻译' : '校正' }}和依据。</p>
           <div ref="sidebarTranscriptList" class="sidebar-transcript-list">
-            <button v-for="segment in filteredTranscript" :id="`sidebar-transcript-${segment.id}`" :key="segment.id" type="button" class="sidebar-row" :class="{ 'active-segment': segment.id === activeSegmentId }" @click="seekTo(segment.startMs, segment.id)">
-              <span class="time">{{ formatTime(segment.startMs) }}</span><span>{{ segment.text }}</span>
-            </button>
+            <div v-for="segment in filteredTranscript" :key="segment.id" class="transcript-entry">
+              <button :id="`sidebar-transcript-${segment.id}`" type="button" class="sidebar-row" :class="{ 'active-segment': segment.id === activeSegmentId }" @click="seekTo(segment.startMs, segment.id)">
+                <span class="time">{{ formatTime(segment.startMs) }}</span><span>{{ segment.text }}</span>
+              </button>
+              <details v-if="subtitleChangeById.has(segment.id)" class="subtitle-change">
+                <summary>查看 AI {{ subtitleIsTranslation ? '翻译' : '校正' }}</summary>
+                <p><strong>原文</strong>{{ subtitleChangeById.get(segment.id)?.originalText }}</p>
+                <p><strong>AI {{ subtitleIsTranslation ? '翻译' : '校正' }}</strong>{{ subtitleChangeById.get(segment.id)?.text }}</p>
+                <p>{{ subtitleChangeById.get(segment.id)?.reason }}</p>
+                <div v-if="subtitleChangeById.get(segment.id)?.evidence?.length" class="subtitle-change-evidence">
+                  <span>相关课件文字</span>
+                  <button v-for="(evidence, index) in subtitleChangeById.get(segment.id)?.evidence" :key="index" type="button" @click="seekTo(evidence.sourceFrameTimeMs)">{{ formatTime(evidence.sourceFrameTimeMs) }} · {{ evidence.text }}</button>
+                </div>
+              </details>
+            </div>
             <p v-if="!filteredTranscript.length" class="sidebar-message">没有找到包含“{{ transcriptQuery }}”的讲解。</p>
           </div>
         </template>
@@ -552,10 +744,7 @@ onUnmounted(() => {
       </section>
       <section v-show="rightTab === 'slides'" id="tab-slides" class="sidebar-pane" role="tabpanel" aria-label="课件画面">
         <div class="sidebar-pane-heading"><div><span class="eyebrow">VISUAL EVIDENCE</span><h3>课件画面</h3></div><span>{{ pageGroups.length ? `${pageGroups.length} 页` : `${visualEvidence.length} 张候选图` }}</span></div>
-        <template v-if="pageGroups.length">
-          <div v-if="activeSlide" class="sidebar-current-slide"><img v-if="activeSlide.representativeFrameTimesMs.length && !unavailableFrames.has(activeSlide.representativeFrameTimesMs[0])" loading="lazy" :src="`${apiBase}/transcriptions/${existingJobId}/frames/${activeSlide.representativeFrameTimesMs[0]}`" :alt="`第 ${activeSlide.pageIndex} 页课件`" @error="markFrameUnavailable(activeSlide.representativeFrameTimesMs[0])" /><p>当前播放附近 · 第 {{ activeSlide.pageIndex }} 页</p></div>
-          <div class="sidebar-slide-list"><button v-for="page in pageGroups" :key="page.pageIndex" type="button" class="sidebar-slide-row" :class="{ active: activeSlide?.pageIndex === page.pageIndex }" @click="seekTo(page.representativeFrameTimesMs[0] ?? page.firstFrameTimeMs)"><span class="time">{{ formatTime(page.firstFrameTimeMs) }}</span><span><strong>第 {{ page.pageIndex }} 页</strong>{{ page.imageAnalysis?.title || page.textAnalysis?.title || page.ocrLines[0]?.text || '课程画面' }}</span></button></div>
-        </template>
+        <PageGallery v-if="pageGroups.length" :pages="pageGroups" :course-id="existingJobId" :time-ms="currentPlaybackMs" @seek="seekTo" />
         <template v-else-if="visualEvidence.length">
           <p class="sidebar-message">这是旧任务的候选截图记录；原图可能已被清理，文字和时间仍可查看。</p>
           <div class="sidebar-slide-list"><button v-for="frame in visualEvidence" :key="frame.frameTimeMs" type="button" class="sidebar-slide-row" @click="seekTo(frame.frameTimeMs)"><span class="time">{{ formatTime(frame.frameTimeMs) }}</span><span>{{ frame.imageAnalysis?.title || frame.ocrBlocks.slice(0, 2).map(block => block.text).join(' · ') || '候选画面' }}</span></button></div>
@@ -589,7 +778,19 @@ onUnmounted(() => {
     <section class="workspace">
       <div class="panel player-panel">
         <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button v-if="transcript.length && videoUrl" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>本地播放 · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
-        <video v-if="videoUrl" ref="video" :src="videoUrl" controls preload="metadata" @timeupdate="syncPlayback"><track v-if="subtitleUrl" :key="subtitleUrl" :src="subtitleUrl" kind="subtitles" label="课程转写字幕" srclang="zh" default @load="syncSubtitleVisibility" /></video>
+        <div v-if="transcript.length" class="subtitle-controls">
+          <SubtitleSettings v-model="subtitleAppearance" />
+          <div class="subtitle-mode" role="group" aria-label="字幕版本">
+            <button type="button" :aria-pressed="selectedSubtitles.mode === 'original'" @click="subtitleMode = 'original'">原文字幕</button>
+            <button type="button" :aria-pressed="selectedSubtitles.mode === 'ai'" :disabled="!aiSubtitlesAvailable" @click="subtitleMode = 'ai'">AI {{ subtitleIsTranslation ? '翻译' : '校正' }}字幕</button>
+          </div>
+          <label v-if="subtitleCourseId && subtitleMode === 'ai'" class="subtitle-target" for="player-subtitle-language">AI 字幕语言
+            <select id="player-subtitle-language" v-model="subtitleTargetLanguage" :disabled="requestingSubtitles || isAnalysisPending"><option value="source">保持原语言（仅校正）</option><option value="zh">中文</option><option value="en">English</option></select>
+          </label>
+          <button v-if="subtitleJob?.status === 'not_requested'" type="button" class="subtitle-generate" :disabled="!canGenerateSubtitles" @click="generateSubtitles">生成 AI 字幕</button>
+        </div>
+        <p v-if="subtitleStatusMessage" class="subtitle-status" :class="{ 'subtitle-status-warning': subtitleRequestError || ['failed', 'partial', 'unsupported'].includes(subtitleJob?.status ?? '') }" role="status" aria-atomic="true">{{ subtitleStatusMessage }}</p>
+        <ChapterPlayer v-if="videoUrl" :src="videoUrl" :chapters="videoChapters" :chapter-status="chapterStatus" @ready="video = $event" @timeupdate="syncPlayback"><track v-if="subtitleUrl" :key="subtitleUrl" :src="subtitleUrl" kind="subtitles" :label="selectedSubtitles.mode === 'ai' ? 'AI 字幕' : '原文字幕'" :srclang="selectedSubtitles.language" default @load="syncSubtitleVisibility" /></ChapterPlayer>
         <div v-else class="empty-player">
           <div class="player-orbit orbit-one" aria-hidden="true"></div><div class="player-orbit orbit-two" aria-hidden="true"></div>
           <div class="player-welcome"><span class="player-play-mark"><StudyIcon name="play" /></span><span class="player-kicker">WATCH. UNDERSTAND. CONNECT.</span><h3>从一节课，连接每个知识点</h3><p>选择本地视频或录音，开启你的学习工作台</p><label class="player-file-picker"><StudyIcon name="upload" />选择课程文件<input type="file" accept="video/*,audio/*" @change="chooseVideo" /></label></div>
@@ -606,7 +807,8 @@ onUnmounted(() => {
         <label class="mode-picker">画面分析方式 <select v-model="visualAnalysisMode"><option value="both">语音文字＋每页代表图</option><option value="ocr_only">语音文字＋OCR 文字</option></select></label>
         <div class="advanced-options">
           <button type="button" class="advanced-toggle" :aria-expanded="advancedOpen" aria-controls="advanced-settings" @click="advancedOpen = !advancedOpen">{{ advancedOpen ? '收起高级选项' : '高级选项' }}</button>
-          <div v-if="advancedOpen" id="advanced-settings" class="advanced-row">
+          <div v-if="advancedOpen" id="advanced-settings" class="advanced-fields">
+          <div class="advanced-row">
             <label for="coarse-change-percent">粗选画面变化阈值</label>
             <span class="help-tooltip" tabindex="0" aria-label="粗选画面变化阈值说明">?
               <span role="tooltip">每隔 2 秒比较一次画面。相邻画面变化区域超过所选比例时，保留候选截图；渐进书写另有保留规则。默认 2%。数值越低通常候选图越多，越不容易漏掉小变化；越高则候选图越少，但可能漏掉新画面。此值只影响第一轮粗选。</span>
@@ -615,6 +817,14 @@ onUnmounted(() => {
               <option value="0.5">0.5%</option><option value="1">1%</option>
               <option value="2">2%（默认）</option><option value="3">3%</option>
             </select>
+          </div>
+          <div class="advanced-row">
+            <label class="subtitle-checkbox"><input v-model="aiSubtitlesEnabled" type="checkbox" :disabled="isAnalysisPending" />自动生成 AI 字幕</label>
+          </div>
+          <label class="advanced-row" for="analysis-subtitle-language">字幕目标语言
+            <select id="analysis-subtitle-language" v-model="subtitleTargetLanguage" :disabled="!aiSubtitlesEnabled || isAnalysisPending"><option value="source">保持原语言（仅校正，默认）</option><option value="zh">中文</option><option value="en">English</option></select>
+          </label>
+          <p class="advanced-help">同语言仅依据课件校正少量发音相近的词；选择其他语言时生成翻译。字幕在后台独立生成，课程分析完成即可查看原文与导图。</p>
           </div>
         </div>
         <div class="restore"><label for="analysis-id">已有分析编号</label><div class="actions"><input id="analysis-id" v-model="existingJobId" placeholder="粘贴任务编号" /><button class="secondary" :disabled="!existingJobId.trim() || isAnalysisPending" @click="loadExistingAnalysis">读取结果</button></div><small>已分析过的视频可直接读取结果；播放原片段时仍需选择本地视频。</small></div>

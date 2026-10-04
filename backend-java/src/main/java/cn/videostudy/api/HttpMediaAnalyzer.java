@@ -7,16 +7,33 @@ import org.springframework.web.client.RestClient;
 
 import java.util.Map;
 import java.util.List;
+import java.util.LinkedHashMap;
+import org.springframework.core.ParameterizedTypeReference;
 
 @Component
 public class HttpMediaAnalyzer implements MediaAnalyzer {
     private final RestClient agent;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public HttpMediaAnalyzer(@Value("${agent.base-url}") String agentBaseUrl) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(3000);
         requestFactory.setReadTimeout(30 * 60 * 1000);
         agent = RestClient.builder().baseUrl(agentBaseUrl).requestFactory(requestFactory).build();
+    }
+
+    HttpMediaAnalyzer(RestClient agent) { this.agent = agent; }
+
+    @Override public Map<String,Object> generateChapters(List<TranscriptionController.TranscriptSegment> segments,
+        List<TranscriptionController.PageGroup> pages) {
+        return agent.post().uri("/chapters").body(Map.of("segments", segments, "pageGroups", pages))
+            .retrieve().body(new ParameterizedTypeReference<Map<String,Object>>() {});
+    }
+
+    @Override public Map<String,Object> generateOverview(List<TranscriptionController.TranscriptSegment> segments,
+        List<TranscriptionController.PageGroup> pages) {
+        return agent.post().uri("/overview").body(Map.of("segments",segments,"pageGroups",pages))
+            .retrieve().body(new ParameterizedTypeReference<Map<String,Object>>() {});
     }
 
     @Override
@@ -32,10 +49,26 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
     @Override
     public TranscriptionController.TranscriptResult analyze(String fileId, String mode,
                                                              String visualAnalysisMode, double coarseChangePercent) {
+        return analyze(fileId, mode, visualAnalysisMode, coarseChangePercent, null);
+    }
+
+    @Override public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode,
+                                                                     double coarseChangePercent, String subtitleCallbackToken) {
         var endpoint = "full".equals(mode) ? "/analyze" : "/transcribe";
-        return agent.post().uri(endpoint).body(Map.of("fileId", fileId, "visualAnalysisMode", visualAnalysisMode,
-                                                  "coarseChangePercent", coarseChangePercent))
+        var body = new LinkedHashMap<String,Object>();
+        body.put("fileId", fileId); body.put("visualAnalysisMode", visualAnalysisMode);
+        body.put("coarseChangePercent", coarseChangePercent);
+        if (subtitleCallbackToken != null) body.put("subtitleCallbackToken", subtitleCallbackToken);
+        return agent.post().uri(endpoint).body(body)
             .retrieve().body(TranscriptionController.TranscriptResult.class);
+    }
+
+    @Override public Map<String,Object> generateSubtitles(String language,
+        List<TranscriptionController.TranscriptSegment> segments,
+        List<TranscriptionController.PageGroup> pageGroups, String targetLanguage) {
+        return agent.post().uri("/subtitles").body(Map.of("language", language, "segments", segments,
+            "pageGroups", pageGroups, "targetLanguage", targetLanguage))
+            .retrieve().body(new ParameterizedTypeReference<Map<String,Object>>() {});
     }
 
     @Override

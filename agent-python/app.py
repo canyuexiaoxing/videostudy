@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi import HTTPException
+from typing import Literal
 
 from transcription import transcribe_file
 from analysis import analyze_file
@@ -19,6 +20,14 @@ class TranscribeRequest(BaseModel):
     fileId: str
     visualAnalysisMode: str = "both"
     coarseChangePercent: float = 2.0
+    subtitleCallbackToken: str | None = None
+
+
+class SubtitleRequest(BaseModel):
+    language: str
+    segments: list[dict]
+    pageGroups: list[dict] = []
+    targetLanguage: Literal['source', 'zh', 'en'] = 'source'
 
 
 class MindMapRequest(BaseModel):
@@ -55,6 +64,9 @@ def transcribe(request: TranscribeRequest) -> dict:
 @app.post("/analyze")
 def analyze(request: TranscribeRequest) -> dict:
     try:
+        if request.subtitleCallbackToken:
+            return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent,
+                                request.subtitleCallbackToken)
         return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent)
     except (FileNotFoundError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -63,3 +75,30 @@ def analyze(request: TranscribeRequest) -> dict:
 @app.post("/mind-map")
 def generate_mind_map(request: MindMapRequest) -> dict:
     return build_mind_map(request.segments, request.pageGroups)
+
+
+@app.post('/subtitles')
+def generate_subtitles(request: SubtitleRequest) -> dict:
+    from subtitle_calibration import calibrate_subtitles
+    try:
+        return calibrate_subtitles(request.language, request.segments, request.pageGroups,
+                                   request.targetLanguage)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post('/chapters')
+def generate_chapters(request: MindMapRequest) -> dict:
+    from chapters import build_chapters
+    return build_chapters(request.segments, request.pageGroups)
+
+@app.post('/overview')
+def generate_overview(request: MindMapRequest) -> dict:
+    from overview import build_overview
+    from urllib.error import HTTPError
+    try:
+        return build_overview(request.segments,request.pageGroups)
+    except HTTPError as error:
+        if error.code==402:
+            raise HTTPException(status_code=424,detail='overview_provider_payment_required') from error
+        raise

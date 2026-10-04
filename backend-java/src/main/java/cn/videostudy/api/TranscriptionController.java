@@ -34,6 +34,10 @@ public class TranscriptionController {
     private final MediaAnalyzer agent;
     private final String analysisMode;
     private final TranscriptionJobStore store;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private SubtitleService subtitles;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private ChapterController chapters;
     @Value("${analysis.stage-attempts:2}") private int stageAttempts = 2;
     @Value("${keyframe.dir:../.local/keyframes}") private String keyframeDirectory;
     private final ThreadPoolExecutor worker = new ThreadPoolExecutor(
@@ -55,8 +59,12 @@ public class TranscriptionController {
     @PostMapping
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file,
                                     @RequestParam(value = "visualAnalysisMode", defaultValue = "both") String visualAnalysisMode,
-                                    @RequestParam(value = "coarseChangePercent", defaultValue = "2") double coarseChangePercent)
+                                    @RequestParam(value = "coarseChangePercent", defaultValue = "2") double coarseChangePercent,
+                                    @RequestParam(value = "aiSubtitles", defaultValue = "true") boolean aiSubtitles,
+                                    @RequestParam(value = "subtitleTargetLanguage", defaultValue = "source") String subtitleTargetLanguage)
                                     throws IOException {
+        if (!List.of("source", "zh", "en").contains(subtitleTargetLanguage))
+            return ResponseEntity.badRequest().body(Map.of("error", "invalid_subtitle_target_language"));
         if (!List.of("ocr_only", "both").contains(visualAnalysisMode))
             return ResponseEntity.badRequest().body(Map.of("error", "invalid_visual_analysis_mode"));
         if (coarseChangePercent != 0.5 && coarseChangePercent != 1.0 &&
@@ -70,7 +78,9 @@ public class TranscriptionController {
         var job = new TranscriptionJob(id, "queued", null, null);
         try {
             store.createQueued(id, visualAnalysisMode, coarseChangePercent);
+            if (aiSubtitles && subtitles != null) subtitles.createUploadRequest(id, subtitleTargetLanguage);
         } catch (RuntimeException error) {
+            store.delete(id);
             Files.deleteIfExists(path);
             throw error;
         }
@@ -84,6 +94,9 @@ public class TranscriptionController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
 
+    public ResponseEntity<?> upload(MultipartFile file, String visualMode, double threshold) throws IOException {
+        return upload(file, visualMode, threshold, true, "source");
+    }
     public ResponseEntity<?> upload(MultipartFile file) throws IOException { return upload(file, "both", 2.0); }
 
     @GetMapping("/{id}")
@@ -150,6 +163,14 @@ public class TranscriptionController {
             }
             store.complete(id, result);
             saved = true;
+            if (chapters != null) {
+                try { chapters.request(id); }
+                catch (RuntimeException error) { log.warn("Chapter dispatch deferred for {}", id); }
+            }
+            if (subtitles != null) {
+                try { subtitles.captureFallback(id, result); }
+                catch (RuntimeException error) { log.warn("Subtitle source fallback deferred for {} ({})", id, error.getClass().getSimpleName()); }
+            }
             Files.deleteIfExists(path);
             deleteTaskDirectory(id, true);
         } catch (Exception error) {
@@ -157,14 +178,21 @@ public class TranscriptionController {
             if (!saved) {
                 try { store.markFailed(id, analysisMode.equals("full") ? "analysis_failed" : "transcription_failed"); }
                 catch (RuntimeException persistenceError) { log.error("Unable to persist failure for job {}", id, persistenceError); }
+                if (subtitles != null) subtitles.sourceUnavailable(id);
             }
         }
     }
 
     private TranscriptResult analyzeWithResume(String id, String visualMode, double threshold) throws Exception {
+        String callbackToken = null;
+        if (subtitles != null) {
+            try { callbackToken = subtitles.callbackToken(id); }
+            catch (RuntimeException error) { log.warn("Subtitle callback unavailable for {} ({})", id, error.getClass().getSimpleName()); }
+        }
         for (int attempt = 1; ; attempt++) {
             try {
-                var result = agent.analyze(id, analysisMode, visualMode, threshold);
+                var result = callbackToken == null ? agent.analyze(id, analysisMode, visualMode, threshold)
+                    : agent.analyze(id, analysisMode, visualMode, threshold, callbackToken);
                 if (result != null && analysisMode.equals("full")) {
                     if (result.mindMap() != null && "failed".equals(result.mindMap().status()))
                         throw new IllegalStateException("Mind-map chunks incomplete; resume successful checkpoints");
@@ -241,7 +269,15 @@ public class TranscriptionController {
                                    List<PageGroup> pageGroups, List<Long> transitionFrameTimesMs,
                                    String visualAnalysisMode, String groupingVersion, Double coarseChangePercent,
                                    MindMapResult mindMap, Map<String, Long> stageTimingsMs,
-                                   Map<String, Integer> reusedCheckpoints) {
+                                   Map<String, Integer> reusedCheckpoints, Map<String,Object> overview) {
+        public TranscriptResult(String language,List<TranscriptSegment> segments,List<VisualEvidence> visualEvidence,
+                                String ocrModelId,String imageModelId,ReviewResult review,List<PageGroup> pageGroups,
+                                List<Long> transitionFrameTimesMs,String visualAnalysisMode,String groupingVersion,
+                                Double coarseChangePercent,MindMapResult mindMap,Map<String,Long> stageTimingsMs,
+                                Map<String,Integer> reusedCheckpoints) {
+            this(language,segments,visualEvidence,ocrModelId,imageModelId,review,pageGroups,transitionFrameTimesMs,
+                 visualAnalysisMode,groupingVersion,coarseChangePercent,mindMap,stageTimingsMs,reusedCheckpoints,null);
+        }
         public TranscriptResult(String language, List<TranscriptSegment> segments,
                                 List<VisualEvidence> visualEvidence, String ocrModelId,
                                 String imageModelId, ReviewResult review,
@@ -255,7 +291,7 @@ public class TranscriptionController {
         public TranscriptResult withMindMap(MindMapResult updated) {
             return new TranscriptResult(language, segments, visualEvidence, ocrModelId, imageModelId, review,
                 pageGroups, transitionFrameTimesMs, visualAnalysisMode, groupingVersion, coarseChangePercent, updated,
-                stageTimingsMs, reusedCheckpoints);
+                stageTimingsMs, reusedCheckpoints, overview);
         }
         public TranscriptResult(String language, List<TranscriptSegment> segments,
                                 List<VisualEvidence> visualEvidence, String ocrModelId,

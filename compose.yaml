@@ -25,6 +25,7 @@ services:
       MODEL_DIR: /models
       MEDIA_TEMP_DIR: /data/uploads
       KEYFRAME_DIR: /data/keyframes
+      JAVA_INTERNAL_BASE_URL: http://java-api:18080
       HF_HOME: /models/huggingface
       XDG_CACHE_HOME: /models/cache
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}

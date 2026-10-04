@@ -9,6 +9,33 @@ from analysis import analyze_file
 
 
 class AnalysisTest(unittest.TestCase):
+    def test_overview_starts_after_page_understanding_and_parallel_with_map(self):
+        import threading
+        started=threading.Event()
+        with tempfile.TemporaryDirectory() as d:
+            fid=str(uuid4());(Path(d)/fid).write_bytes(b'media')
+            speech=[{'id':'s1','startMs':0,'endMs':1000,'text':'讲解'}]
+            page={'pageIndex':1,'imageAnalysis':{'status':'completed','content':'完整页面理解'}}
+            def overview(segments,pages):
+                self.assertEqual(pages[0]['imageAnalysis']['content'],'完整页面理解')
+                started.set();return {'status':'completed'}
+            def mind_map(*args,**kwargs):
+                self.assertTrue(started.wait(1),'Overview must start concurrently with mind map')
+                return {'status':'completed'}
+            with patch.dict(os.environ,{'MEDIA_TEMP_DIR':d,'KEYFRAME_DIR':str(Path(d)/'frames')}), \
+                 patch('analysis.transcribe_file',return_value={'language':'zh','segments':speech}), \
+                 patch('analysis.VisualOcrWorker') as worker, \
+                 patch('analysis.media_duration_ms',return_value=1000), \
+                 patch('analysis.review_visual_coverage',return_value=([],{'status':'completed'})), \
+                 patch('analysis.group_pages',return_value=([{'pageIndex':1}],[])), \
+                 patch('analysis.analyze_page',return_value=page), \
+                 patch('analysis.safe_overview',side_effect=overview), \
+                 patch('analysis.build_mind_map',side_effect=mind_map):
+                worker.return_value.__enter__.return_value.analyze.return_value=[]
+                result=analyze_file(fid)
+            self.assertEqual(result['overview']['status'],'completed')
+            self.assertIn('overview',result['stageTimingsMs'])
+
     def test_later_failure_reuses_completed_media_stages_on_retry(self):
         with tempfile.TemporaryDirectory() as d:
             fid = str(uuid4())
