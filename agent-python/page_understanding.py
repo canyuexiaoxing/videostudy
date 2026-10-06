@@ -15,11 +15,87 @@ from slide_grouping import _difference, _normalized, _preview
 from evidence_payload import compact_payload
 
 
-PAGE_PROMPT_VERSION = "page-evidence-v5"
+PAGE_PROMPT_VERSION = "page-evidence-v6-compatible-format"
 
 
 class PageFormatError(ValueError):
     """A model answer is unusable as grounded page evidence."""
+
+
+def _normalize_answer(raw: object, *, vision: bool) -> dict:
+    """Normalize auxiliary evidence without manufacturing missing claims."""
+    if not isinstance(raw, dict) or any(not isinstance(raw.get(key), str) or
+            not raw[key].strip() for key in ('title', 'content')):
+        raise PageFormatError('Page title/content missing or unusable')
+    answer = dict(raw)
+    supplied_warnings = raw.get('_formatWarnings')
+    warnings = [item for item in supplied_warnings if isinstance(item, str)] if isinstance(supplied_warnings, list) else []
+
+    def warn(field, issue):
+        warnings.append(f'解析格式提示：{field} {issue}；已保留主要解析内容')
+
+    def text_item(item):
+        if isinstance(item, str):
+            return item
+        if not isinstance(item, dict):
+            return None
+        if isinstance(item.get('original'), str) and isinstance(item.get('correction'), str):
+            text = f"{item['original']} → {item['correction']}"
+        elif isinstance(item.get('claim'), str):
+            text = item['claim']
+        else:
+            text = next((item[name] for name in ('text', 'content', 'description', 'point')
+                         if isinstance(item.get(name), str)), None)
+        if text is None:
+            return None
+        for name in ('basis', 'reason'):
+            if isinstance(item.get(name), str) and item[name].strip():
+                text += f"（{name}：{item[name]}）"
+        return text
+
+    for key in ('visualElements', 'uncertainties', 'inferences', 'unresolvedPoints', 'corrections', 'conflicts'):
+        value = raw.get(key)
+        if value is None:
+            answer[key] = []
+            warn(key, '缺失')
+            continue
+        if isinstance(value, (str, dict)):
+            value = [value]
+        if not isinstance(value, list):
+            answer[key] = []
+            warn(key, '结构无法使用')
+            continue
+        converted = [text_item(item) for item in value]
+        answer[key] = [item for item in converted if item is not None]
+        if any(item is None for item in converted):
+            warn(key, '部分条目结构无法使用')
+    confirmed = raw.get('confirmedContent')
+    if isinstance(confirmed, str) or isinstance(confirmed, list) and all(isinstance(item, str) for item in confirmed):
+        answer['confirmedContent'] = confirmed
+    else:
+        answer['confirmedContent'] = ''
+        warn('confirmedContent', '缺失或结构无法使用')
+    checks = raw.get('calculationChecks')
+    if not isinstance(checks, list):
+        answer['calculationChecks'] = []
+        warn('calculationChecks', '缺失或结构无法使用')
+    else:
+        answer['calculationChecks'] = [item for item in checks if isinstance(item, dict) and
+            isinstance(item.get('expression'), str) and type(item.get('result')) in (str, int, float)]
+        if len(answer['calculationChecks']) != len(checks):
+            warn('calculationChecks', '部分条目结构无法使用')
+    if vision:
+        gap = raw.get('occlusion')
+        answer['occlusion'] = {}
+        for key in ('hasOcclusion', 'criticalContentMissing', 'speechCoversMissing'):
+            if isinstance(gap, dict) and type(gap.get(key)) is bool:
+                answer['occlusion'][key] = gap[key]
+            else:
+                answer['occlusion'][key] = False
+                warn(f'occlusion.{key}', '未提供有效判断')
+    answer['_formatWarnings'] = list(dict.fromkeys(warnings))
+    answer['uncertainties'] = list(dict.fromkeys(answer['uncertainties'] + answer['_formatWarnings']))
+    return answer
 
 
 def build_page_context(page: dict, pages: list[dict], segments: list[dict], mode: str) -> dict:
@@ -191,10 +267,10 @@ def _deepseek_page_json(context: dict, frames: list[tuple[int, Path]]) -> dict:
         parsed = None
         if choice.get("finish_reason") == "stop":
             try:
-                parsed = json.loads(choice["message"]["content"])
+                parsed = _normalize_answer(json.loads(choice["message"]["content"]), vision=vision)
                 if _valid_answer(parsed, vision=vision):
                     return parsed
-            except (KeyError, TypeError, json.JSONDecodeError):
+            except (KeyError, TypeError, json.JSONDecodeError, PageFormatError):
                 pass
         if format_attempt == 2:
             raise PageFormatError("Page model returned malformed or incomplete JSON")
@@ -226,11 +302,11 @@ def _as_analysis(answer: dict) -> dict:
     if (visual_gap.get("criticalContentMissing") and not visual_gap.get("speechCoversMissing")
             and not gaps and not answer["inferences"]):
         gaps.append("关键内容")
-    status = "unverified" if gaps else "inferred" if answer["inferences"] else "completed"
+    status = "unverified" if gaps or answer.get('_formatWarnings') else "inferred" if answer["inferences"] else "completed"
     if status == "completed" and not answer["corrections"]:
         content = answer["content"]
     else:
-        parts = [_confirmed_text(answer)]
+        parts = [answer['content'] if answer.get('_formatWarnings') else _confirmed_text(answer)]
         parts += [f"推导（非视频原文）：{item}" for item in answer["inferences"]]
         parts += [f"{item}：？" for item in gaps]
         parts += [f"识别修正：{item}" for item in answer["corrections"]]
@@ -312,7 +388,7 @@ def _verified_analysis(context: dict, frames: list[tuple[int, Path]], first: dic
             "title", "content", "calculationChecks", "conflicts")},
     }}
     try:
-        checked = ask_json(check_context, frames)
+        checked = _normalize_answer(ask_json(check_context, frames), vision=context['route'] == 'both')
         if not _valid_answer(checked, vision=context["route"] == "both"):
             raise PageFormatError("Invalid verification result")
         remaining = _verification_reasons(checked)
@@ -367,7 +443,7 @@ def analyze_page(page: dict, pages: list[dict], visuals_by_time: dict[int, dict]
     context = build_page_context(page, pages, segments, mode)
     if mode == "ocr_only":
         try:
-            answer = ask_json(context, [])
+            answer = _normalize_answer(ask_json(context, []), vision=False)
             if not _valid_answer(answer, vision=False):
                 raise PageFormatError("Invalid text-route result")
             result["textAnalysis"] = _verified_analysis(context, [], answer, ask_json)
@@ -379,7 +455,7 @@ def analyze_page(page: dict, pages: list[dict], visuals_by_time: dict[int, dict]
     first_images = [(primary_time, keyframe_dir / f"{primary_time}.jpg")]
     result["representativeFrameTimesMs"] = [primary_time]
     try:
-        first = ask_json(context, first_images)
+        first = _normalize_answer(ask_json(context, first_images), vision=True)
         if not _valid_answer(first, vision=True):
             raise PageFormatError("Invalid image-route result")
     except (PageFormatError, HTTPError, URLError, TimeoutError, ConnectionError, RuntimeError, OSError):
@@ -398,7 +474,7 @@ def analyze_page(page: dict, pages: list[dict], visuals_by_time: dict[int, dict]
                                             for time_ms in alternatives]
             result["representativeFrameTimesMs"] = [primary_time, *alternatives]
             try:
-                second = ask_json(context, second_images)
+                second = _normalize_answer(ask_json(context, second_images), vision=True)
                 if not _valid_answer(second, vision=True):
                     raise PageFormatError("Invalid fallback image result")
                 final_answer = second

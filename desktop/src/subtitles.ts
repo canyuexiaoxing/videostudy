@@ -12,9 +12,15 @@ export type SubtitleJob = {
   status: 'awaiting_source' | 'queued' | 'processing' | 'completed' | 'partial' | 'failed' | 'unsupported' | 'not_requested'
   result?: {
     sourceLanguage: string; targetLanguage: string; mode: 'correction' | 'translation'
+    promptVersion?: string
     segments: SubtitleSegment[]; changes: SubtitleChange[]; rejectedCount: number; concerns: string[]
   } | null
   error?: string | null
+}
+
+export function needsSubtitleUpdate(job: SubtitleJob | null) {
+  return !!job?.result?.promptVersion && ['completed', 'partial'].includes(job.status)
+    && job.result.promptVersion !== 'subtitle-calibration-v8-page-understanding'
 }
 
 export function selectSubtitleSource(original: SubtitleSegment[], sourceLanguage: string,
@@ -85,10 +91,17 @@ function timestamp(milliseconds: number) {
 }
 
 export function toWebVtt(segments: Cue[]): string {
-  return 'WEBVTT\n\n' + segments.filter(s => Number.isFinite(s.startMs) && Number.isFinite(s.endMs)
-    && s.startMs >= 0 && s.endMs > s.startMs && s.text.trim()).map((s, i) => {
+  const cues = segments.filter(s => Number.isFinite(s.startMs) && Number.isFinite(s.endMs)
+    && s.startMs >= 0 && s.endMs > s.startMs && s.text.trim())
+    .map(s => ({ ...s, startMs: Math.round(s.startMs), endMs: Math.round(s.endMs) }))
+    .sort((a, b) => a.startMs - b.startMs)
+  return 'WEBVTT\n\n' + cues.map((s, i) => {
+    // Native cue endpoints can both be active on an exact seek. Separate them
+    // by 1 ms in the playback track only; never alter source transcript times.
+    const endMs = Math.min(s.endMs, cues[i + 1] ? cues[i + 1].startMs - 1 : s.endMs)
+    if (endMs <= s.startMs) return ''
     const text = s.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/\r\n?/g, '\n').replace(/\n\s*\n/g, '\n')
-    return `${i + 1}\n${timestamp(s.startMs)} --> ${timestamp(s.endMs)}\n${text}\n\n`
+    return `${i + 1}\n${timestamp(s.startMs)} --> ${timestamp(endMs)}\n${text}\n\n`
   }).join('')
 }

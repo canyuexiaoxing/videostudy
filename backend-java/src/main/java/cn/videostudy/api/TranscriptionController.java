@@ -60,7 +60,7 @@ public class TranscriptionController {
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file,
                                     @RequestParam(value = "visualAnalysisMode", defaultValue = "both") String visualAnalysisMode,
                                     @RequestParam(value = "coarseChangePercent", defaultValue = "2") double coarseChangePercent,
-                                    @RequestParam(value = "aiSubtitles", defaultValue = "true") boolean aiSubtitles,
+                                    @RequestParam(value = "aiSubtitles", defaultValue = "false") boolean aiSubtitles,
                                     @RequestParam(value = "subtitleTargetLanguage", defaultValue = "source") String subtitleTargetLanguage)
                                     throws IOException {
         if (!List.of("source", "zh", "en").contains(subtitleTargetLanguage))

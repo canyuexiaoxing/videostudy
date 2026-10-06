@@ -10,7 +10,7 @@ import java.util.*;
 public class SubtitleController {
     private final SubtitleService subtitles;
     private final TranscriptionJobStore transcriptions;
-    public record Request(String targetLanguage) {}
+    public record Request(String targetLanguage, boolean force) {}
     public SubtitleController(SubtitleService subtitles, TranscriptionJobStore transcriptions) { this.subtitles = subtitles; this.transcriptions = transcriptions; }
     @GetMapping public ResponseEntity<?> get(@PathVariable String id, @RequestParam(defaultValue = "source") String targetLanguage) {
         var invalid = invalid(id, targetLanguage); if (invalid != null) return invalid;
@@ -19,7 +19,7 @@ public class SubtitleController {
     @PostMapping public ResponseEntity<?> generate(@PathVariable String id, @RequestBody(required = false) Request body) {
         String target = body == null || body.targetLanguage() == null ? "source" : body.targetLanguage();
         var invalid = invalid(id, target); if (invalid != null) return invalid;
-        var job = subtitles.request(id, target);
+        var job = body != null && body.force() ? subtitles.request(id, target, true) : subtitles.request(id, target);
         return ResponseEntity.status(List.of("awaiting_source", "queued", "processing").contains(job.status()) ? 202 : 200).body(job);
     }
     private ResponseEntity<?> invalid(String id, String target) {

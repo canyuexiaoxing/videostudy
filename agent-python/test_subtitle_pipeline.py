@@ -28,7 +28,7 @@ class SubtitlePipelineTest(unittest.TestCase):
             analyze(TranscribeRequest(fileId=fid))
         self.assertEqual(run.call_args.args, (fid, 'both', 2.0))
 
-    def test_subtitle_source_is_scheduled_after_grouping_before_page_understanding(self):
+    def test_subtitle_source_is_scheduled_after_page_understanding(self):
         with tempfile.TemporaryDirectory() as directory:
             fid = str(uuid4())
             (Path(directory) / fid).write_bytes(b'media')
@@ -57,8 +57,9 @@ class SubtitlePipelineTest(unittest.TestCase):
                  patch('analysis.build_mind_map', side_effect=diagram):
                 worker.return_value.__enter__.return_value.analyze.return_value = []
                 result = analyze_file(fid, subtitle_callback_token='private-course-token')
-            self.assertEqual(events, ['grouped', 'subtitle', 'page', 'map'])
-            delivery.assert_called_once_with(fid, 'private-course-token', 'zh', speech, [page])
+            self.assertEqual(events, ['grouped', 'page', 'subtitle', 'map'])
+            delivery.assert_called_once_with(fid, 'private-course-token', 'zh', speech,
+                [{**page, 'imageAnalysis': {'status': 'completed'}}])
             self.assertEqual(result['segments'], speech)
 
     def test_subtitle_delivery_failure_does_not_fail_main_analysis(self):

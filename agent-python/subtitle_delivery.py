@@ -43,7 +43,7 @@ def publish_subtitle_source(file_id: str, callback_token: str | None, language: 
     if not callback_token or not _pending.acquire(blocking=False):
         return None
     try:
-        # Freeze the source before page-understanding workers add their results.
+        # Freeze the source after page understanding has completed.
         # This contains OCR text and timestamps, never image bytes or media paths.
         encoded = json.dumps({'language': language, 'segments': segments,
                               'pageGroups': page_groups}, ensure_ascii=False).encode('utf-8')

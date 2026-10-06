@@ -91,13 +91,6 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
         page_groups, transition_times = timed("pageGrouping", cached, 'pageGrouping',
             {'visuals': visuals, 'speech': transcript['segments']},
             lambda: group_pages(visuals, keyframe_dir, transcript['segments']))
-        if subtitle_callback_token:
-            try:
-                publish_subtitle_source(file_id, subtitle_callback_token, transcript['language'],
-                                        transcript['segments'], page_groups)
-            except Exception as error:
-                logging.getLogger(__name__).warning('Unable to schedule subtitle source: %s',
-                                                    type(error).__name__)
         before = perf_counter()
         if page_groups:
             by_time = {frame["frameTimeMs"]: frame for frame in visuals}
@@ -110,6 +103,13 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
                     accept=lambda result: (result.get('imageAnalysis') or result.get('textAnalysis') or {}).get('status') != 'failed'),
                     page_groups))
         timings["pageUnderstanding"] = round((perf_counter() - before) * 1000)
+        if subtitle_callback_token:
+            try:
+                publish_subtitle_source(file_id, subtitle_callback_token, transcript['language'],
+                                        transcript['segments'], page_groups)
+            except Exception as error:
+                logging.getLogger(__name__).warning('Unable to schedule subtitle source: %s',
+                                                    type(error).__name__)
         with ThreadPoolExecutor(max_workers=2) as pool:
             overview_job=pool.submit(timed,"overview",cached,'overview',
                 {'speech':transcript['segments'],'pages':page_groups},

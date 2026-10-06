@@ -9,6 +9,28 @@ from analysis import analyze_file
 
 
 class AnalysisTest(unittest.TestCase):
+    def test_optional_subtitle_source_is_published_after_page_understanding(self):
+        with tempfile.TemporaryDirectory() as d:
+            fid = str(uuid4())
+            (Path(d) / fid).write_bytes(b'media')
+            page = {'pageIndex': 1, 'imageAnalysis': {'status': 'completed', 'content': 'understood'}}
+            with patch.dict(os.environ, {'MEDIA_TEMP_DIR': d, 'KEYFRAME_DIR': str(Path(d)/'frames')}), \
+                 patch('analysis.transcribe_file', return_value={'language': 'zh', 'segments': []}), \
+                 patch('analysis.VisualOcrWorker') as worker, \
+                 patch('analysis.media_duration_ms', return_value=1000), \
+                 patch('analysis.review_visual_coverage', return_value=([], {'status': 'completed'})), \
+                 patch('analysis.group_pages', return_value=([{'pageIndex': 1}], [])), \
+                 patch('analysis.analyze_page', return_value=page), \
+                 patch('analysis.publish_subtitle_source') as publish, \
+                 patch('analysis.safe_overview', return_value={'status': 'empty'}), \
+                 patch('analysis.build_mind_map', return_value={'status': 'empty'}):
+                worker.return_value.__enter__.return_value.analyze.return_value = []
+                analyze_file(fid, subtitle_callback_token='private-token')
+                self.assertEqual(publish.call_args.args[4], [page])
+                publish.reset_mock()
+                analyze_file(fid)
+                publish.assert_not_called()
+
     def test_overview_starts_after_page_understanding_and_parallel_with_map(self):
         import threading
         started=threading.Event()

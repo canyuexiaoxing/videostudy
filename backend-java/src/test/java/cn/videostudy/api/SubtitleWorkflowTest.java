@@ -38,6 +38,114 @@ class SubtitleWorkflowTest {
         id = UUID.randomUUID().toString(); main.createQueued(id); main.markProcessing(id);
     }
     @AfterEach void cleanup() { if (service != null) service.close(); }
+
+    @Test void savedFinalPagesRefreshAnOlderSubtitleSourceSnapshot() {
+        store.createUploadRequest(id, "source");
+        store.captureSource(id, store.callbackToken(id), source());
+        var p = pages.getFirst();
+        var understood = new TranscriptionController.PageGroup(p.pageIndex(), p.firstFrameTimeMs(), p.lastFrameTimeMs(),
+            p.memberFrameTimesMs(), p.representativeFrameTimesMs(), p.decision(), p.decisionReason(), p.ocrLines(),
+            new TranscriptionController.ImageAnalysis("completed", "公式", "基期乘以增长率", List.of(), List.of()));
+        store.captureFallback(id, new SubtitleJobStore.Source("zh", segments, List.of(understood)));
+        assertEquals("基期乘以增长率", store.claim(id, "source", 3).orElseThrow().source()
+            .pageGroups().getFirst().imageAnalysis().content());
+    }
+
+    @Test void explicitRegenerationResetsCurrentCacheButDoesNotDuplicateRunningJob() {
+        store.createUploadRequest(id, "source");
+        store.captureSource(id, store.callbackToken(id), source());
+        var current = result("completed");
+        current.put("promptVersion", SubtitleResultValidator.PROMPT_VERSION);
+        store.finish(store.claim(id, "source", 3).orElseThrow(), current, "completed", null);
+        assertEquals("completed", store.request(id, "source", true).status());
+        assertEquals("queued", store.request(id, "source", true, true).status());
+        assertNull(store.find(id, "source").orElseThrow().result());
+        var run = store.claim(id, "source", 3).orElseThrow();
+        assertEquals("processing", store.request(id, "source", true, true).status());
+        assertTrue(store.finish(run, current, "completed", null));
+    }
+
+    @Test void sampledSlideAfterSpeechCanProvideRealContextEvidence() {
+        var later = new TranscriptionController.PageGroup(0, 28000, 108000, List.of(28000L), List.of(28000L),
+            "same", "sampled later", List.of(new TranscriptionController.OcrLine("增长量等于现期减基期", 28000, 0)), null);
+        var corrected = result("completed");
+        corrected.put("changes", List.of(Map.of("segmentId", "t_1", "originalText", segments.getFirst().text(),
+            "text", "增长量等于现期减基期", "reason", "附近公式支持短语校正", "evidence",
+            List.of(Map.of("sourceFrameTimeMs", 28000, "text", "增长量等于现期减基期")))));
+        assertDoesNotThrow(() -> SubtitleResultValidator.validate(new SubtitleJobStore.Source("zh", segments, List.of(later)), "source", corrected));
+        // The preceding page is closer, but this speech may introduce the next.
+        var prior = new TranscriptionController.PageGroup(0, 0, 500, List.of(0L), List.of(0L),
+            "same", "previous", List.of(new TranscriptionController.OcrLine("旧题", 0, 0)), null);
+        assertDoesNotThrow(() -> SubtitleResultValidator.validate(new SubtitleJobStore.Source("zh", segments, List.of(prior, later)), "source", corrected));
+    }
+
+    @Test void oldSubtitleCacheIsUpdatedOnlyOnExplicitRequest() {
+        store.createUploadRequest(id, "source"); store.captureSource(id, store.callbackToken(id), source());
+        var old = result("completed"); old.put("promptVersion", "subtitle-calibration-v3");
+        store.finish(store.claim(id, "source", 3).orElseThrow(), old, "completed", null);
+        assertEquals("completed", store.find(id, "source").orElseThrow().status());
+        assertEquals("queued", store.request(id, "source", true).status());
+        var current = result("completed"); current.put("promptVersion", SubtitleResultValidator.PROMPT_VERSION);
+        store.finish(store.claim(id, "source", 3).orElseThrow(), current, "completed", null);
+        assertEquals("completed", store.request(id, "source", true).status());
+    }
+
+    @Test void sameLanguageAndSourceShareOneCorrectionRequest() throws Exception {
+        store.createUploadRequest(id, "source");
+        store.captureSource(id, store.callbackToken(id), source());
+        var calls = new AtomicInteger();
+        service = new SubtitleService(store, main, analyzer(() -> { calls.incrementAndGet(); return result("completed"); }));
+        service.request(id, "zh");
+        awaitStatus("completed");
+        assertEquals(service.get(id, "source"), service.get(id, "zh"));
+        service.request(id, "zh");
+        assertEquals(1, calls.get());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM subtitle_jobs WHERE transcription_id = ?", Integer.class, id));
+    }
+
+    @Test void existingExplicitLanguageCorrectionIsReusedForSourceSelection() {
+        store.createUploadRequest(id, "zh");
+        store.captureSource(id, store.callbackToken(id), source());
+        var run = store.claim(id, "zh", 3).orElseThrow();
+        store.finish(run, result("completed"), "completed", null);
+        service = new SubtitleService(store, main, analyzer(() -> { fail("must reuse existing correction"); return null; }));
+        assertEquals(service.get(id, "zh"), service.get(id, "source"));
+        service.request(id, "source");
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM subtitle_jobs WHERE transcription_id = ?", Integer.class, id));
+    }
+
+    @Test void legacyDuplicateResultsAlwaysChooseSameSourceCorrection() {
+        store.createUploadRequest(id, "source"); store.createUploadRequest(id, "zh");
+        store.captureSource(id, store.callbackToken(id), source());
+        var original = result("completed");
+        store.finish(store.claim(id, "source", 3).orElseThrow(), original, "completed", null);
+        var other = result("completed"); other.put("concerns", List.of("different legacy result"));
+        store.finish(store.claim(id, "zh", 3).orElseThrow(), other, "completed", null);
+        service = new SubtitleService(store, main, analyzer(() -> { fail("must not regenerate"); return null; }));
+        assertEquals(service.get(id, "source"), service.get(id, "zh"));
+        assertEquals(List.of(), service.get(id, "zh").result().get("concerns"));
+        assertEquals("not_requested", service.get(id, "en").status());
+    }
+
+    @Test void duplicateQueuedCorrectionsBeforeLanguageDetectionRunOnlyOnce() throws Exception {
+        store.createUploadRequest(id, "source"); store.createUploadRequest(id, "zh");
+        store.captureSource(id, store.callbackToken(id), source());
+        var calls = new AtomicInteger();
+        service = new SubtitleService(store, main, analyzer(() -> { calls.incrementAndGet(); return result("completed"); }));
+        service.drainQueued(); awaitStatus("completed");
+        assertEquals(1, calls.get());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM subtitle_jobs WHERE transcription_id = ?", Integer.class, id));
+        assertEquals(service.get(id, "source"), service.get(id, "zh"));
+    }
+
+    @Test void englishSourceSharesEnglishCorrectionButNotChineseTranslation() {
+        store.createUploadRequest(id, "source");
+        store.captureSource(id, store.callbackToken(id), new SubtitleJobStore.Source("en-US", segments, pages));
+        service = new SubtitleService(store, main, analyzer(() -> result("completed")));
+        assertEquals(service.get(id, "source"), service.get(id, "en"));
+        assertEquals("queued", service.get(id, "en").status());
+        assertEquals("not_requested", service.get(id, "zh").status());
+    }
     SubtitleJobStore.Source source() { return new SubtitleJobStore.Source("zh", segments, pages); }
     Map<String,Object> result(String status) {
         return new LinkedHashMap<>(Map.of("status", status, "sourceLanguage", "zh", "targetLanguage", "zh",
@@ -103,7 +211,7 @@ class SubtitleWorkflowTest {
         var mvc = MockMvcBuilders.standaloneSetup(new SubtitleController(service, main)).build();
         mvc.perform(get("/api/transcriptions/{id}/subtitles", id)).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("not_requested"));
         mvc.perform(post("/api/transcriptions/{id}/subtitles", id).contentType("application/json").content("{\"targetLanguage\":\"source\"}"))
-            .andExpect(status().isAccepted());
+            .andExpect(status().is2xxSuccessful()); // A fast worker may finish before the HTTP response.
         awaitStatus("partial");
         mvc.perform(post("/api/transcriptions/{id}/subtitles", id).contentType("application/json").content("{\"targetLanguage\":\"source\"}"))
             .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("partial"));

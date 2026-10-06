@@ -6,6 +6,36 @@ import * as subtitles from './subtitles.ts'
 const source = [{ id: 's1', startMs: 1234, endMs: 2876, text: '原始转写' }]
 const corrected = [{ id: 's1', startMs: 1234, endMs: 2876, text: '纠正转写' }]
 
+test('seeking to the next subtitle start cannot activate the previous cue at the same endpoint', () => {
+  const segments = [
+    { startMs: 628480, endMs: 639370, text: '前一句' },
+    { startMs: 639370, endMs: 645370, text: '后一句' },
+  ]
+  const before = structuredClone(segments)
+  const vtt = toWebVtt(segments)
+  assert.match(vtt, /00:10:28\.480 --> 00:10:39\.369/)
+  assert.match(vtt, /00:10:39\.370 --> 00:10:45\.370/)
+  assert.deepEqual(segments, before)
+})
+
+test('playback cues clip true overlaps but retain gaps and final cue end', () => {
+  const vtt = toWebVtt([
+    { startMs: 1000, endMs: 4000, text: '重叠前句' },
+    { startMs: 3000, endMs: 3500, text: '下一句' },
+    { startMs: 5000, endMs: 6000, text: '末句' },
+  ])
+  assert.match(vtt, /00:00:01\.000 --> 00:00:02\.999/)
+  assert.match(vtt, /00:00:03\.000 --> 00:00:03\.500/)
+  assert.match(vtt, /00:00:05\.000 --> 00:00:06\.000/)
+})
+
+test('old completed subtitle versions can be updated without auto-requesting', () => {
+  assert.equal(subtitles.needsSubtitleUpdate({ status: 'completed', result: { promptVersion: 'subtitle-calibration-v3' } }), true)
+  assert.equal(subtitles.needsSubtitleUpdate({ status: 'completed', result: { promptVersion: 'subtitle-calibration-v8-page-understanding' } }), false)
+  assert.equal(subtitles.needsSubtitleUpdate({ status: 'processing', result: { promptVersion: 'subtitle-calibration-v3' } }), false)
+  assert.equal(subtitles.needsSubtitleUpdate(null), false)
+})
+
 test('AI selection falls back to original while queued, failed, or unavailable', () => {
   assert.equal(typeof subtitles.selectSubtitleSource, 'function')
   for (const status of ['not_requested', 'awaiting_source', 'queued', 'processing', 'failed', 'unsupported']) {

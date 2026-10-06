@@ -1,4 +1,4 @@
-"""Subtitle changes must be grounded, phonetic in correction mode, and recoverable."""
+"""Single-pass subtitle decisions preserve source metadata and validate citations."""
 
 import copy
 import importlib
@@ -40,43 +40,9 @@ def response(content, usage=None, model='deepseek-test'):
 
 
 class SubtitleCalibrationTest(unittest.TestCase):
-    def test_homophone_correction_cannot_disagree_with_its_own_ocr_citation(self):
-        originals = [segment(text='那第三部定住题')]
-        reference = {'sourceFrameTimeMs': 1000, 'text': '五险一金定主体'}
-        result = self.run_calibration(originals, [change(text='那第三步定主题', evidence=[reference])],
-                                      pages=[page(text='五险一金定主体')])
-        self.assertEqual(result['segments'], originals)
-        self.assertEqual(result['rejectedCount'], 1)
 
-    def test_semantic_review_can_discard_near_sound_but_nonsensical_change(self):
-        originals = [segment(text='请稀访')]
-        calls = []
-        def ask(payload):
-            calls.append(payload)
-            return {'changes': [] if payload.get('reviewCorrections') else [change(text='请习访')]}
-        result = calibration.calibrate_subtitles('zh', originals, [], ask_json=ask)
-        self.assertEqual(result['segments'], originals)
-        self.assertEqual(result['changes'], [])
-        self.assertEqual(result['rejectedCount'], 1)
-        self.assertEqual(len(calls), 2)
 
-    def test_semantic_review_cannot_substitute_a_different_rewrite(self):
-        originals = [segment()]
-        def ask(payload):
-            return {'changes': [change(text='我忘记吃饭了啊' if payload.get('reviewCorrections') else '我忘记吃饭了')]}
-        result = calibration.calibrate_subtitles('zh', originals, [], ask_json=ask)
-        self.assertEqual(result['segments'], originals)
 
-    def test_failed_semantic_review_falls_back_to_raw_with_partial_status(self):
-        originals = [segment()]
-        def ask(payload):
-            if payload.get('reviewCorrections'):
-                raise TimeoutError('temporary')
-            return {'changes': [change()]}
-        result = calibration.calibrate_subtitles('zh', originals, [], ask_json=ask)
-        self.assertEqual(result['segments'], originals)
-        self.assertEqual(result['status'], 'partial')
-        self.assertEqual(result['usage']['requestCount'], 4)
 
     def test_punctuation_does_not_consume_spoken_character_budget(self):
         originals = [segment(text='我王祺吃饭了。')]
@@ -104,27 +70,8 @@ class SubtitleCalibrationTest(unittest.TestCase):
         self.assertEqual(result['changes'][0]['evidence'], [reference])
         self.assertEqual(originals, snapshot)
 
-    def test_chinese_unnecessary_fillers_are_rejected_even_when_within_length_limit(self):
-        for filler in ['啊', '呀', '嘛', '呢', '吧', '哦', '呃']:
-            with self.subTest(filler=filler):
-                originals = [segment(text='我忘记吃饭了')]
-                result = self.run_calibration(originals, [change(text='我忘记吃饭了' + filler)])
-                self.assertEqual(result['segments'], originals)
-                self.assertEqual(result['changes'], [])
-                self.assertEqual(result['rejectedCount'], 1)
-                self.assertTrue(result['concerns'])
 
-    def test_same_length_chinese_paraphrase_is_rejected(self):
-        originals = [segment(text='很高兴认识你')]
-        result = self.run_calibration(originals, [change(text='十分开心见你')])
-        self.assertEqual(result['segments'], originals)
-        self.assertEqual(result['rejectedCount'], 1)
 
-    def test_multiple_insertions_are_counted_even_with_equal_net_length(self):
-        originals = [segment(text='甲乙丙丁')]
-        result = self.run_calibration(originals, [change(text='乙丙丁甲')])
-        self.assertEqual(result['segments'], originals)
-        self.assertEqual(result['rejectedCount'], 1)
 
     def test_one_local_missing_character_can_be_restored_from_source_ocr(self):
         originals = [segment(text='我们今讨论增长率')]
@@ -134,11 +81,6 @@ class SubtitleCalibrationTest(unittest.TestCase):
         self.assertEqual(result['segments'][0]['text'], '我们今天讨论增长率')
         self.assertEqual(result['rejectedCount'], 0)
 
-    def test_unsupported_inserted_knowledge_is_rejected_without_ocr(self):
-        originals = [segment(text='我们今讨论增长率')]
-        result = self.run_calibration(originals, [change(text='我们今天讨论增长率')])
-        self.assertEqual(result['segments'], originals)
-        self.assertEqual(result['rejectedCount'], 1)
 
     def test_english_homophones_and_spelling_variants_are_allowed(self):
         for before, after in [('There car is red.', 'Their car is red.'),
@@ -149,25 +91,8 @@ class SubtitleCalibrationTest(unittest.TestCase):
                 self.assertEqual(result['segments'][0]['text'], after)
                 self.assertEqual(result['rejectedCount'], 0)
 
-    def test_english_same_length_semantic_paraphrase_is_rejected(self):
-        originals = [segment(text='A fast car.')]
-        result = self.run_calibration(originals, [change(text='A quick car.')], language='en')
-        self.assertEqual(result['segments'], originals)
-        self.assertEqual(result['rejectedCount'], 1)
 
-    def test_english_filler_insertions_are_rejected(self):
-        for after in ['Um I forgot lunch.', 'I uh forgot lunch.']:
-            with self.subTest(after=after):
-                originals = [segment(text='I forgot lunch.')]
-                result = self.run_calibration(originals, [change(text=after)], language='en')
-                self.assertEqual(result['segments'], originals)
-                self.assertEqual(result['rejectedCount'], 1)
 
-    def test_english_removed_and_inserted_words_do_not_cancel(self):
-        originals = [segment(text='the first red car is fast')]
-        result = self.run_calibration(originals, [change(text='the red car is fast first')], language='en')
-        self.assertEqual(result['segments'], originals)
-        self.assertEqual(result['rejectedCount'], 1)
 
     def test_translation_allows_non_phonetic_changes_in_both_directions(self):
         for source, target, original, translated in [
@@ -257,6 +182,31 @@ class SubtitleCalibrationTest(unittest.TestCase):
         self.assertNotIn('imageAnalysis', json.dumps(sent))
         self.assertNotIn('imagePath', json.dumps(sent))
 
+    def test_page_understanding_is_sent_as_context_without_images_or_private_fields(self):
+        p = page()
+        p['ocrLines'] = []
+        p['imageAnalysis'] = {'status': 'completed', 'title': '例三',
+            'content': '讲解基期乘以增长率', 'visualElements': ['增长量=基期×增长率'],
+            'uncertainties': ['批注不清楚'], 'imagePath': '/private/image.jpg', 'secret': 'hidden'}
+        payloads = []
+        calibration.calibrate_subtitles('zh', [segment()], [p],
+            ask_json=lambda value: payloads.append(value) or {'changes': []})
+        context = payloads[0]['pageGroups'][0]['imageAnalysis']
+        self.assertEqual(context['content'], '讲解基期乘以增长率')
+        self.assertEqual(context['uncertainties'], ['批注不清楚'])
+        self.assertNotIn('imagePath', json.dumps(payloads))
+        self.assertNotIn('secret', json.dumps(payloads))
+
+    def test_text_route_context_is_kept_and_failed_image_interpretation_is_omitted(self):
+        p = page()
+        p['imageAnalysis'] = {'status': 'failed', 'content': 'bad guess'}
+        p['textAnalysis'] = {'status': 'completed', 'content': '同页文字理解'}
+        payloads = []
+        calibration.calibrate_subtitles('zh', [segment()], [p],
+            ask_json=lambda value: payloads.append(value) or {'changes': []})
+        self.assertNotIn('imageAnalysis', payloads[0]['pageGroups'][0])
+        self.assertEqual(payloads[0]['pageGroups'][0]['textAnalysis']['content'], '同页文字理解')
+
     def test_invalid_chunks_retry_three_times_then_continue_with_raw_fallback(self):
         calls = []
         def ask(payload):
@@ -266,7 +216,7 @@ class SubtitleCalibrationTest(unittest.TestCase):
                 return {'bad': 'schema'}
             return {'changes': []}
         originals = [segment(i) for i in range(101)]
-        result = calibration.calibrate_subtitles('zh', originals, [], ask_json=ask)
+        result = calibration.calibrate_subtitles('zh', originals, [], ask_json=ask, batch_size=50, concurrency=1)
         self.assertEqual(calls, ['t_0', 't_50', 't_50', 't_50', 't_100'])
         self.assertEqual(result['status'], 'partial')
         self.assertEqual(result['segments'], originals)
@@ -282,7 +232,7 @@ class SubtitleCalibrationTest(unittest.TestCase):
                 return {'changes': [change('t_49')]}
             return {'changes': []}
         originals = [segment(i) for i in range(51)]
-        result = calibration.calibrate_subtitles('zh', originals, [], ask_json=ask)
+        result = calibration.calibrate_subtitles('zh', originals, [], ask_json=ask, batch_size=50, concurrency=1)
         self.assertIn('t_49', [item['id'] for item in payloads[1]['contextSegments']])
         self.assertNotIn('t_49', payloads[1]['allowedSegmentIds'])
         self.assertEqual(result['segments'], originals)
@@ -308,7 +258,7 @@ class SubtitleCalibrationTest(unittest.TestCase):
         result = calibration.calibrate_subtitles('zh', [segment()], [], ask_json=ask)
         self.assertEqual(result['status'], 'completed')
         self.assertEqual(result['segments'][0]['text'], '我忘记吃饭了')
-        self.assertEqual(result['usage']['requestCount'], 3)
+        self.assertEqual(result['usage']['requestCount'], 2)
 
     def test_duplicate_original_ids_are_not_editable_and_original_order_is_kept(self):
         originals = [segment(5), segment(0), segment(0, '另一个字幕')]
@@ -338,10 +288,11 @@ class SubtitleProviderTest(unittest.TestCase):
             result = calibration.calibrate_subtitles('zh', [segment()], [])
         self.assertEqual(result['segments'][0]['text'], '我忘记吃饭了')
         self.assertEqual(result['modelId'], 'deepseek-test')
-        self.assertEqual(result['usage']['prompt_tokens'], 40)
-        self.assertEqual(result['usage']['completion_tokens'], 20)
-        self.assertEqual(result['usage']['total_tokens'], 60)
-        self.assertEqual(result['usage']['requestCount'], 2)
+        self.assertEqual(result['usage']['prompt_tokens'], 20)
+        self.assertEqual(result['usage']['completion_tokens'], 10)
+        self.assertEqual(result['usage']['total_tokens'], 30)
+        self.assertEqual(result['usage']['requestCount'], 1)
+        self.assertEqual(len(bodies), 1)
         self.assertEqual(bodies[0]['model'], 'configured-model')
         self.assertNotIn('max_tokens', bodies[0])
         self.assertIsInstance(result['durationMs'], int)
@@ -393,6 +344,21 @@ class SubtitleProviderTest(unittest.TestCase):
         self.assertIn('preserve meaning', instruction)
         self.assertIn('insertion', instruction)
         self.assertIn('uncertain', instruction)
+        self.assertIn('single pass', instruction)
+        self.assertIn('sufficient evidence', instruction)
+        self.assertIn('minimal local edits', instruction)
+        self.assertIn('do not add fillers', instruction)
+        self.assertIn('at most one character', instruction)
+        self.assertIn('not a veto', instruction)
+        self.assertIn('ocr is not required', instruction)
+        self.assertIn('ordinary language knowledge', instruction)
+        self.assertIn('several different readings remain plausible', instruction)
+        self.assertIn('never fabricate an ocr quotation', instruction)
+        self.assertIn('no one-error-per-segment limit', instruction)
+        self.assertIn('arithmetic operators', instruction)
+        self.assertIn('references to numbered examples', instruction)
+        self.assertIn('the same response', instruction)
+        self.assertNotIn('final semantic review', instruction)
 
 
 if __name__ == '__main__':

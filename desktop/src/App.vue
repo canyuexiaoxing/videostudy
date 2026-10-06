@@ -8,7 +8,7 @@ import AiOverview from './AiOverview.vue'
 import PageGallery from './PageGallery.vue'
 import { appearanceCss, normalizeAppearance, positionCue } from './subtitleAppearance'
 import type { VideoChapter } from './chapters'
-import { createSubtitlePoller, selectSubtitleSource, setSubtitleVisibility, SubtitleRequestError, toWebVtt } from './subtitles'
+import { createSubtitlePoller, needsSubtitleUpdate, selectSubtitleSource, setSubtitleVisibility, SubtitleRequestError, toWebVtt } from './subtitles'
 import type { SubtitleJob, SubtitleMode, SubtitleTarget } from './subtitles'
 import { jumpToMindMapNode, mediaFingerprint } from './mindMap'
 import type { MindMapNode as MindNode, MindMapResult } from './mindMap'
@@ -148,7 +148,6 @@ watch([existingJobId, () => transcript.value.length], async ([id, count]) => {
   } catch { if (!controller.signal.aborted) chapterStatus.value = 'failed' }
 })
 onUnmounted(() => chapterController?.abort())
-const aiSubtitlesEnabled = ref(true)
 const subtitleTargetLanguage = ref<SubtitleTarget>('source')
 const subtitleMode = ref<SubtitleMode>('original')
 const subtitleJob = ref<SubtitleJob | null>(null)
@@ -161,8 +160,9 @@ const aiSubtitlesAvailable = computed(() => selectSubtitleSource(transcript.valu
 const subtitleChanges = computed(() => subtitleJob.value?.result?.changes ?? [])
 const subtitleChangeById = computed(() => new Map(subtitleChanges.value.map(change => [change.segmentId, change])))
 const subtitleIsTranslation = computed(() => subtitleJob.value?.result?.mode === 'translation')
+const subtitleNeedsUpdate = computed(() => needsSubtitleUpdate(subtitleJob.value))
 const canGenerateSubtitles = computed(() => !!transcript.value.length && subtitleCourseId.value === existingJobId.value
-  && subtitleJob.value?.status === 'not_requested' && !isAnalysisPending.value && !requestingSubtitles.value)
+  && ['not_requested', 'completed', 'partial', 'failed'].includes(subtitleJob.value?.status ?? '') && !isAnalysisPending.value && !requestingSubtitles.value)
 const subtitleStatusMessage = computed(() => {
   if (!subtitleCourseId.value) return ''
   if (subtitleRequestError.value) return 'AI 字幕暂时不可用；原文仍可使用。'
@@ -177,7 +177,7 @@ const subtitleStatusMessage = computed(() => {
       : `AI 校正字幕已生成 · ${subtitleChanges.value.length} 处调整。`
     case 'failed': return 'AI 字幕生成失败；原文仍可使用。'
     case 'unsupported': return 'AI 字幕目前支持中文和英文；原文仍可使用。'
-    case 'not_requested': return '尚未生成该语言的 AI 字幕，可单独生成。'
+    case 'not_requested': return 'AI 字幕按需生成；点击“生成 AI 字幕”后才开始校正或翻译。'
     default: return '正在读取 AI 字幕状态…'
   }
 })
@@ -216,7 +216,8 @@ async function generateSubtitles() {
   subtitleRequestError.value = ''
   try {
     const response = await fetch(`${apiBase}/transcriptions/${id}/subtitles`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetLanguage: target })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetLanguage: target,
+        force: ['completed', 'partial'].includes(subtitleJob.value?.status ?? '') })
     })
     if (token !== subtitleRequestGeneration) return
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -423,7 +424,7 @@ async function runTranscription() {
     form.append('file', file)
     form.append('visualAnalysisMode', visualAnalysisMode.value)
     form.append('coarseChangePercent', coarseChangePercent.value)
-    form.append('aiSubtitles', String(aiSubtitlesEnabled.value))
+    form.append('aiSubtitles', 'false')
     form.append('subtitleTargetLanguage', subtitleTargetLanguage.value)
     const response = await fetch(`${apiBase}/transcriptions`, { method: 'POST', body: form })
     if (!response.ok) throw new Error(`上传失败：HTTP ${response.status}`)
@@ -784,10 +785,10 @@ onUnmounted(() => {
             <button type="button" :aria-pressed="selectedSubtitles.mode === 'original'" @click="subtitleMode = 'original'">原文字幕</button>
             <button type="button" :aria-pressed="selectedSubtitles.mode === 'ai'" :disabled="!aiSubtitlesAvailable" @click="subtitleMode = 'ai'">AI {{ subtitleIsTranslation ? '翻译' : '校正' }}字幕</button>
           </div>
-          <label v-if="subtitleCourseId && subtitleMode === 'ai'" class="subtitle-target" for="player-subtitle-language">AI 字幕语言
+          <label v-if="subtitleCourseId" class="subtitle-target" for="player-subtitle-language">AI 字幕语言
             <select id="player-subtitle-language" v-model="subtitleTargetLanguage" :disabled="requestingSubtitles || isAnalysisPending"><option value="source">保持原语言（仅校正）</option><option value="zh">中文</option><option value="en">English</option></select>
           </label>
-          <button v-if="subtitleJob?.status === 'not_requested'" type="button" class="subtitle-generate" :disabled="!canGenerateSubtitles" @click="generateSubtitles">生成 AI 字幕</button>
+          <button v-if="subtitleCourseId" type="button" class="subtitle-generate" :disabled="!canGenerateSubtitles" @click="generateSubtitles">{{ requestingSubtitles || ['awaiting_source', 'queued', 'processing'].includes(subtitleJob?.status ?? '') ? '生成中…' : subtitleNeedsUpdate ? '更新 AI 字幕' : ['completed', 'partial'].includes(subtitleJob?.status ?? '') ? '重新生成 AI 字幕' : subtitleJob?.status === 'failed' ? '重试生成 AI 字幕' : '生成 AI 字幕' }}</button>
         </div>
         <p v-if="subtitleStatusMessage" class="subtitle-status" :class="{ 'subtitle-status-warning': subtitleRequestError || ['failed', 'partial', 'unsupported'].includes(subtitleJob?.status ?? '') }" role="status" aria-atomic="true">{{ subtitleStatusMessage }}</p>
         <ChapterPlayer v-if="videoUrl" :src="videoUrl" :chapters="videoChapters" :chapter-status="chapterStatus" @ready="video = $event" @timeupdate="syncPlayback"><track v-if="subtitleUrl" :key="subtitleUrl" :src="subtitleUrl" kind="subtitles" :label="selectedSubtitles.mode === 'ai' ? 'AI 字幕' : '原文字幕'" :srclang="selectedSubtitles.language" default @load="syncSubtitleVisibility" /></ChapterPlayer>
@@ -818,13 +819,6 @@ onUnmounted(() => {
               <option value="2">2%（默认）</option><option value="3">3%</option>
             </select>
           </div>
-          <div class="advanced-row">
-            <label class="subtitle-checkbox"><input v-model="aiSubtitlesEnabled" type="checkbox" :disabled="isAnalysisPending" />自动生成 AI 字幕</label>
-          </div>
-          <label class="advanced-row" for="analysis-subtitle-language">字幕目标语言
-            <select id="analysis-subtitle-language" v-model="subtitleTargetLanguage" :disabled="!aiSubtitlesEnabled || isAnalysisPending"><option value="source">保持原语言（仅校正，默认）</option><option value="zh">中文</option><option value="en">English</option></select>
-          </label>
-          <p class="advanced-help">同语言仅依据课件校正少量发音相近的词；选择其他语言时生成翻译。字幕在后台独立生成，课程分析完成即可查看原文与导图。</p>
           </div>
         </div>
         <div class="restore"><label for="analysis-id">已有分析编号</label><div class="actions"><input id="analysis-id" v-model="existingJobId" placeholder="粘贴任务编号" /><button class="secondary" :disabled="!existingJobId.trim() || isAnalysisPending" @click="loadExistingAnalysis">读取结果</button></div><small>已分析过的视频可直接读取结果；播放原片段时仍需选择本地视频。</small></div>

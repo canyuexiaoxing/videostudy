@@ -4,4 +4,3 @@ faster-whisper>=1.1,<2
 paddlepaddle==3.2.1
 paddleocr>=3.7,<3.8
 opencv-contrib-python==4.10.0.84
-pypinyin==0.55.0

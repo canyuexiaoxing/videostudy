@@ -8,7 +8,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
-from page_understanding import analyze_page, build_page_context, _deepseek_page_json
+from page_understanding import analyze_page, build_page_context, _deepseek_page_json, _normalize_answer, _valid_answer, PageFormatError
 
 
 def page(index, times, representatives, ocr="题目里的数值是 42"):
@@ -30,7 +30,7 @@ class PageUnderstandingTest(unittest.TestCase):
     def test_third_format_attempt_keeps_only_latest_invalid_reply(self):
         calls = []
         incomplete = response()
-        del incomplete['corrections']
+        del incomplete['content']
         def fake_urlopen(request, timeout):
             body = json.loads(request.data)
             calls.append(body)
@@ -46,7 +46,7 @@ class PageUnderstandingTest(unittest.TestCase):
     def test_invalid_response_retry_tells_model_missing_required_fields(self):
         calls = []
         incomplete = response()
-        del incomplete['corrections']
+        del incomplete['content']
         incomplete['inferences'] = [{'claim': 'unsupported shape'}]
         def fake_urlopen(request, timeout):
             body = json.loads(request.data)
@@ -55,7 +55,7 @@ class PageUnderstandingTest(unittest.TestCase):
                 answer = incomplete
             else:
                 repair = json.loads(body['messages'][-1]['content'])['responseRepair']
-                self.assertIn('corrections', repair['missingFields'])
+                self.assertIn('content', repair['missingFields'])
                 answer = response()
             return io.BytesIO(json.dumps({'choices': [{'finish_reason': 'stop',
                 'message': {'content': json.dumps(answer)}}]}).encode())
@@ -68,6 +68,46 @@ class PageUnderstandingTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
+
+    def test_structured_corrections_and_inferences_are_normalized_without_changing_input(self):
+        raw = response()
+        raw['corrections'] = [{'original': '机器', 'correction': '基期', 'basis': '公式二'}]
+        raw['inferences'] = [{'claim': '增长量为32', 'basis': '160×20%'}]
+        normalized = _normalize_answer(raw, vision=True)
+        self.assertTrue(_valid_answer(normalized, vision=True))
+        self.assertEqual(normalized['corrections'], ['机器 → 基期（basis：公式二）'])
+        self.assertEqual(normalized['inferences'], ['增长量为32（basis：160×20%）'])
+        self.assertIsInstance(raw['corrections'][0], dict)
+
+    def test_missing_auxiliary_fields_keep_main_content_and_do_not_request_format_retry(self):
+        raw = {'title': '增长量', 'content': '增长量=基期×增长率'}
+        calls = []
+        def opened(request, timeout):
+            calls.append(request)
+            return io.BytesIO(json.dumps({'choices': [{'finish_reason': 'stop',
+                'message': {'content': json.dumps(raw)}}]}).encode())
+        with patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test-only'}), \
+             patch('page_understanding.urlopen', side_effect=opened):
+            answer = _deepseek_page_json({'route': 'ocr_only', 'transcript': [], 'ocrLines': []}, [])
+        selected = page(1, [1000], [1000])
+        result = analyze_page(selected, [selected], {}, self.root, [], 'ocr_only', ask_json=lambda *_: answer)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(result['textAnalysis']['content'], raw['content'])
+        self.assertEqual(result['textAnalysis']['status'], 'unverified')
+        self.assertTrue(any('corrections' in item for item in result['textAnalysis']['uncertainties']))
+        self.assertEqual(answer['confirmedContent'], '')
+
+    def test_unusable_core_content_is_rejected(self):
+        for content in (None, '', [], {'text': 'unexpected nesting'}):
+            with self.subTest(content=content), self.assertRaises(PageFormatError):
+                _normalize_answer({'title': '课程', 'content': content}, vision=False)
+
+    def test_invalid_auxiliary_item_is_reported_without_discarding_valid_items(self):
+        raw = response()
+        raw['corrections'] = ['有效说明', {'unknown': [123]}]
+        normalized = _normalize_answer(raw, vision=True)
+        self.assertEqual(normalized['corrections'], ['有效说明'])
+        self.assertTrue(any('corrections' in item for item in normalized['uncertainties']))
 
     def tearDown(self):
         self.temporary.cleanup()

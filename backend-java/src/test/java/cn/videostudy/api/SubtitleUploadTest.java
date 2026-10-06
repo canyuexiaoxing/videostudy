@@ -11,6 +11,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class SubtitleUploadTest {
     @TempDir Path directory;
+    @Test void uploadWithoutSubtitleOptionDoesNotStartCalibration() throws Exception {
+        var store = mock(TranscriptionJobStore.class);
+        var subtitles = mock(SubtitleService.class);
+        var controller = new TranscriptionController(directory.toString(), "transcription", store,
+            (id, mode) -> new TranscriptionController.TranscriptResult("zh", java.util.List.of(), java.util.List.of(), null, null, null));
+        org.springframework.test.util.ReflectionTestUtils.setField(controller, "subtitles", subtitles);
+        try {
+            MockMvcBuilders.standaloneSetup(controller).build()
+                .perform(multipart("/api/transcriptions").file(new MockMultipartFile("file", "lesson.wav", "audio/wav", new byte[]{1})))
+                .andExpect(status().isAccepted());
+            verify(subtitles, never()).createUploadRequest(anyString(), anyString());
+        } finally { controller.close(); }
+    }
     @Test void enabledUploadForwardsPrivateTokenAndCapturesSavedFallback() throws Exception {
         var store = mock(TranscriptionJobStore.class);
         var subtitles = mock(SubtitleService.class);

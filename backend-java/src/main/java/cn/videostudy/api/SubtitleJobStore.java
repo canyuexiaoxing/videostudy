@@ -35,6 +35,9 @@ public class SubtitleJobStore {
     public void createUploadRequest(String id, String target) { request(id, target, false); }
 
     public Job request(String id, String target, boolean retryFailed) {
+        return request(id, target, retryFailed, false);
+    }
+    public Job request(String id, String target, boolean retryFailed, boolean force) {
         return transaction.execute(status -> {
             if (!lockParent(id)) throw new IllegalStateException("Transcription job was not found");
             ensureSource(id);
@@ -42,13 +45,18 @@ public class SubtitleJobStore {
             if (existing.isEmpty()) {
                 var state = source(id).isPresent() ? "queued" : "awaiting_source";
                 jdbc.update("INSERT INTO subtitle_jobs (transcription_id, target_language, status) VALUES (?, ?, ?)", id, target, state);
-            } else if (retryFailed && "failed".equals(existing.get().status())) {
+            } else if (retryFailed && ("failed".equals(existing.get().status()) ||
+                    List.of("completed", "partial").contains(existing.get().status()) && (force || stale(existing.get().result())))) {
                 var state = source(id).isPresent() ? "queued" : "awaiting_source";
                 jdbc.update("UPDATE subtitle_jobs SET status = ?, attempt_count = 0, next_attempt_at = NULL, " +
-                    "run_token = NULL, result_json = NULL, error_code = NULL WHERE transcription_id = ? AND target_language = ? AND status = 'failed'", state, id, target);
+                    "run_token = NULL, result_json = NULL, error_code = NULL WHERE transcription_id = ? AND target_language = ? AND status IN ('failed', 'completed', 'partial')", state, id, target);
             }
             return find(id, target).orElseThrow();
         });
+    }
+    private static boolean stale(Map<String,Object> result) {
+        return result != null && result.get("promptVersion") instanceof String version &&
+            !SubtitleResultValidator.PROMPT_VERSION.equals(version);
     }
 
     private boolean lockParent(String id) {
@@ -78,7 +86,13 @@ public class SubtitleJobStore {
 
     public void captureFallback(String id, Source source) {
         transaction.executeWithoutResult(status -> {
-            if (lockParent(id) && callbackToken(id) != null) saveFirstSource(id, source);
+            if (lockParent(id) && callbackToken(id) != null) {
+                // Completed main analysis is authoritative for page understanding.
+                // Refresh older snapshots that were captured before that stage.
+                validateSource(source);
+                jdbc.update("UPDATE subtitle_sources SET source_json = ? WHERE transcription_id = ?", encode(source), id);
+                jdbc.update("UPDATE subtitle_jobs SET status = 'queued', error_code = NULL WHERE transcription_id = ? AND status = 'awaiting_source'", id);
+            }
         });
     }
     private void saveFirstSource(String id, Source source) {
@@ -103,6 +117,9 @@ public class SubtitleJobStore {
         return jdbc.query("SELECT status, result_json, error_code FROM subtitle_jobs WHERE transcription_id = ? AND target_language = ?",
             (row, n) -> new Job(id, row.getString("status"), decodeMap(row.getString("result_json")), row.getString("error_code")), id, target)
             .stream().findFirst();
+    }
+    public void discardDuplicatePending(String id, String target) {
+        jdbc.update("DELETE FROM subtitle_jobs WHERE transcription_id = ? AND target_language = ? AND status IN ('queued', 'awaiting_source')", id, target);
     }
     public List<Key> due(int limit, int maxAttempts) {
         return jdbc.query("SELECT transcription_id, target_language FROM subtitle_jobs WHERE status = 'queued' AND attempt_count < ? " +

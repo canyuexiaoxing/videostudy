@@ -27,20 +27,35 @@ public class SubtitleService {
     public SubtitleService(SubtitleJobStore store, TranscriptionJobStore transcriptions, MediaAnalyzer analyzer) {
         this.store = store; this.transcriptions = transcriptions; this.analyzer = analyzer;
     }
-    public void createUploadRequest(String id, String target) { store.createUploadRequest(id, target); }
+    public void createUploadRequest(String id, String target) { store.createUploadRequest(id, correctionTarget(id, target)); }
     public String callbackToken(String id) { return store.callbackToken(id); }
     public void sourceUnavailable(String id) {
         try { store.sourceUnavailable(id); }
         catch (RuntimeException error) { log.warn("Subtitle source status deferred for {} ({})", id, error.getClass().getSimpleName()); }
     }
     public SubtitleJobStore.Job get(String id, String target) {
-        return store.find(id, target).orElse(new SubtitleJobStore.Job(id, "not_requested", null, null));
+        return store.find(id, correctionTarget(id, target)).orElse(new SubtitleJobStore.Job(id, "not_requested", null, null));
     }
     public SubtitleJobStore.Job request(String id, String target) {
-        store.request(id, target, true);
+        return request(id, target, false);
+    }
+    public SubtitleJobStore.Job request(String id, String target, boolean force) {
+        store.request(id, correctionTarget(id, target), true, force);
         var main = transcriptions.find(id);
         if (main.isPresent() && main.get().result() != null) captureFallback(id, main.get().result());
         drainQueued(); return get(id, target);
+    }
+    /** Same-language selection is an alias of correction, never another model job. */
+    private String correctionTarget(String id, String target) {
+        String language = store.source(id).map(SubtitleJobStore.Source::language).orElseGet(() ->
+            transcriptions.find(id).filter(job -> job.result() != null)
+                .map(job -> job.result().language()).orElse(""));
+        language = language == null ? "" : language.toLowerCase(Locale.ROOT).split("[-_]", 2)[0];
+        if (!List.of("zh", "en").contains(language) || !(target.equals("source") || target.equals(language))) return target;
+        // Legacy courses may have only an explicit-language result. Reuse it;
+        // if both exist, always expose the source result for both selections.
+        if (store.find(id, "source").isPresent()) return "source";
+        return store.find(id, language).isPresent() ? language : "source";
     }
     public boolean acceptSource(String id, String token, SubtitleJobStore.Source source) {
         boolean captured = store.captureSource(id, token, source);
@@ -59,6 +74,10 @@ public class SubtitleService {
     public void drainQueued() {
         store.failUnavailableSources();
         for (var key : store.due(32, attempts())) {
+            if (!key.targetLanguage().equals(correctionTarget(key.id(), key.targetLanguage()))) {
+                store.discardDuplicatePending(key.id(), key.targetLanguage());
+                continue;
+            }
             if (!dispatched.add(key)) continue;
             try { worker.execute(() -> { try { process(key); } finally { dispatched.remove(key); } }); }
             catch (RejectedExecutionException full) { dispatched.remove(key); }
