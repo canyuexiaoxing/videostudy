@@ -10,6 +10,28 @@ from analysis import analyze_file
 from mind_map import build_mind_map
 
 app = FastAPI(title="VideoStudy Agent Demo")
+from compatible_playback import router as compatibility_router
+app.include_router(compatibility_router)
+
+
+class PracticeRequest(BaseModel):
+    nodes: list[dict]
+    pages: list[dict] = []
+    count: int = 5
+    difficulty: str = 'basic'
+
+
+@app.post('/practice')
+def practice(request: PracticeRequest):
+    from practice import generate_practice
+    from urllib.error import HTTPError
+    try:
+        return generate_practice(request.nodes, request.pages, request.count, request.difficulty)
+    except HTTPError as error:
+        raise HTTPException(424 if error.code == 402 else 502,
+                            'practice_provider_payment_required' if error.code == 402 else 'practice_provider_failed') from error
+    except (ValueError, RuntimeError) as error:
+        raise HTTPException(422, str(error)) from error
 
 
 class AnalyzeRequest(BaseModel):

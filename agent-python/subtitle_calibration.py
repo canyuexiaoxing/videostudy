@@ -6,6 +6,8 @@ Source ordering and timing remain unchanged. No semantic re-review is requested.
 
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from difflib import SequenceMatcher
+from pypinyin import lazy_pinyin
 import json
 import os
 import re
@@ -16,7 +18,7 @@ from urllib.request import Request, urlopen
 
 
 
-PROMPT_VERSION = 'subtitle-calibration-v8-page-understanding'
+PROMPT_VERSION = 'subtitle-calibration-v10-phonetic-fidelity'
 CONTEXT_MS = 30_000
 CONTEXT_SEGMENTS = 3
 PAGE_TOLERANCE_MS = 2_000
@@ -65,8 +67,43 @@ def _deepseek_json(payload: dict) -> dict:
     )
     if payload['mode'] == 'correction':
         instructions += (
+            'HIGHEST PRIORITY: faithful spoken wording, not a polished explanation. '
+            'Phonetic plausibility is required for every replacement, together with local context. '
+            'Similar meaning, a familiar textbook definition, or an OCR formula is NEVER enough '
+            'to replace phonetically distant words. You cannot hear this audio: compare plausible '
+            'pronunciations of the transcript and candidate; do not claim an accent was observed. '
+            'Prefer the candidate that changes the smallest supported SOUND span and preserves '
+            'already plausible words. If plausible readings compete, retain the uncertain span. '
+            'For example 清晰法 near the end of an explanation may be 清晰了 if context supports '
+            'the sentence-final 了. Preserve 清晰: replacing 晰 (xi) with 楚 (chu) to make 清楚了 '
+            'is a semantic paraphrase, not a sound-supported correction. Do not substitute synonymous words. '
+            '实验 (shi yan) must not become 基期 (ji qi) merely because the slide defines growth '
+            'relative to 基期. Those sounds are distant. If the original is unclear, keep 实验 '
+            'rather than reconstructing the textbook definition. Preserve legitimate conversational '
+            'pronouns such as 谁; neither 谁 nor 基期 may be inserted merely to improve a definition. '
+            'Accents justify only specific plausible nearby sound confusions, never arbitrary distant '
+            'replacement or multiple-word rewriting. This priority overrides instructions to correct '
+            'the whole phrase: only independently sound-and-context-supported parts may change. '
+            'Separate checks for technical terms, ordinary vocabulary, and spoken numbers '
+            'are required for EACH editable segment, internally within this single response. '
+            'Fixing a slide term does not finish checking the segment. Look for malformed number '
+            'readings, percentages, units and operator words even if they are not slide terminology. '
+            'In Chinese number expressions, 二事 may be an ASR homophone for 二十: '
+            '百分之二事 should become 百分之二十 when the sentence is stating a percentage and '
+            'the local context or supplied 20% supports that reading. 事 remains 事 in ordinary '
+            'phrases such as 这件事; 十 and 四 can both be real numbers, so resolve from context '
+            'rather than blindly substituting homophones. In arithmetic, 成一/乘一 can be '
+            'corrupted 乘以, but genuine multiplication by one must remain 乘一. '
+            'Do not replace an uncertain spoken number with a convenient slide number. '
+            'For example, an unclear 77 cannot automatically become 160 or 32 merely because '
+            'those occur in a formula. Preserve that unsupported part while correcting separately '
+            'supported nearby words. A typo-free reconstructed calculation is not proof of speech. '
+            'Before emitting text, check that every numeric suffix, unit and operation justified '
+            'in reason is actually written in text: do not explain 事→十 then leave 二事 or 二. '
+            'Do not output this internal checklist, request extra screenshots, or perform a second call. '
             'Make the correction decision in this single pass. Correct only when the supplied '
-            'nearby transcript context, relevant OCR and/or supported page-understanding context provide sufficient evidence; '
+            'nearby transcript context supports a phonetically plausible reading, with OCR or page '
+            'understanding as corroboration where relevant to provide sufficient evidence; '
             'otherwise omit the change and keep the original. '
             'OCR is NOT required for a correction. Ordinary language knowledge, the local '
             'sentence meaning, surrounding lecture context, and plausible similar sounds can '
@@ -105,8 +142,8 @@ def _deepseek_json(payload: dict) -> dict:
             'Before emitting each changed text, ensure it actually implements all corrections '
             'you justified, and that you have not left another clearly supported error in '
             'the same phrase. Do this in the SAME response; no follow-up review is requested. '
-            'Check meaning as well as likely ASR mistakes, including short phrase errors caused by accents: standard written '
-            'pronunciation alone is not a veto. For example, in a lesson whose supplied OCR '
+            'Check meaning alongside phonetic plausibility, including plausible nearby sound confusions. '
+            'For example, in a lesson whose supplied OCR '
             'says 增长量=现期-基期, 限期期 may mean 减基期 when the surrounding speech supports it. '
             'Do not mechanically copy a formula into unrelated speech. Keep the original '
             'sentence structure and spoken wording, with minimal local edits. '
@@ -284,6 +321,24 @@ def _needs_translation(text, language):
         word != word.upper() for word in WORDS.findall(text))
 
 
+def _distant_chinese_replacement(original: str, proposed: str) -> bool:
+    """Only veto clearly distant sound spans; never reconstruct actual speech."""
+    old = ''.join(HAN.findall(original))
+    new = ''.join(HAN.findall(proposed))
+    for kind, a, b, c, d in SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+        if kind != 'replace':
+            continue
+        before, after = old[a:b], new[c:d]
+        # A single final particle may be an ASR ending error. Preserve earlier words.
+        if len(before) == len(after) == 1 and d == len(new) and after in '了吗呢吧':
+            continue
+        left = ''.join(lazy_pinyin(before))
+        right = ''.join(lazy_pinyin(after))
+        if SequenceMatcher(None, left, right, autojunk=False).ratio() < 0.4:
+            return True
+    return False
+
+
 def calibrate_subtitles(language: str, segments: list[dict], page_groups: list[dict],
                         target_language: str = 'source', ask_json: Callable | None = None, *,
                         batch_size: int | None = None, concurrency: int | None = None,
@@ -437,6 +492,8 @@ def calibrate_subtitles(language: str, segments: list[dict], page_groups: list[d
             evidence = _validated_evidence(proposal.get('evidence'), pages, original) if not error else None
             if not error and evidence is None:
                 error = 'OCR citation does not match relevant source evidence'
+            if not error and mode == 'correction' and source == 'zh' and _distant_chinese_replacement(original['text'], text):
+                error = 'replacement is phonetically distant; contextual meaning alone is insufficient'
             if not error and text != original['text'] and mode == 'translation':
                 error = _translation_error(text, target)
             if error:

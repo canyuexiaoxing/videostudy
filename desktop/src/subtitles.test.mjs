@@ -31,7 +31,7 @@ test('playback cues clip true overlaps but retain gaps and final cue end', () =>
 
 test('old completed subtitle versions can be updated without auto-requesting', () => {
   assert.equal(subtitles.needsSubtitleUpdate({ status: 'completed', result: { promptVersion: 'subtitle-calibration-v3' } }), true)
-  assert.equal(subtitles.needsSubtitleUpdate({ status: 'completed', result: { promptVersion: 'subtitle-calibration-v8-page-understanding' } }), false)
+  assert.equal(subtitles.needsSubtitleUpdate({ status: 'completed', result: { promptVersion: 'subtitle-calibration-v10-phonetic-fidelity' } }), false)
   assert.equal(subtitles.needsSubtitleUpdate({ status: 'processing', result: { promptVersion: 'subtitle-calibration-v3' } }), false)
   assert.equal(subtitles.needsSubtitleUpdate(null), false)
 })

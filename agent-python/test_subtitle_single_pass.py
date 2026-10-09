@@ -5,6 +5,54 @@ from subtitle_calibration import calibrate_subtitles
 
 
 class SubtitleSinglePassTest(unittest.TestCase):
+    def test_distant_synonyms_and_definition_rewrite_are_rejected(self):
+        originals = [{'id': 'a', 'startMs': 0, 'endMs': 1000, 'text': '清晰法'},
+                     {'id': 'b', 'startMs': 1000, 'endMs': 2000, 'text': '在实验的情况上'}]
+        result = calibrate_subtitles('zh', originals, [], ask_json=lambda _: {'changes': [
+            {'segmentId': 'a', 'text': '清楚了', 'reason': '更通顺', 'evidence': []},
+            {'segmentId': 'b', 'text': '在基期的基础上', 'reason': '符合定义', 'evidence': []}]})
+        self.assertEqual(result['segments'], originals)
+        self.assertEqual(result['rejectedCount'], 2)
+
+    def test_minimal_final_particle_and_same_sound_number_are_allowed(self):
+        originals = [{'id': 'a', 'startMs': 0, 'endMs': 1000, 'text': '清晰法'},
+                     {'id': 'b', 'startMs': 1000, 'endMs': 2000, 'text': '百分之二事'}]
+        result = calibrate_subtitles('zh', originals, [], ask_json=lambda _: {'changes': [
+            {'segmentId': 'a', 'text': '清晰了', 'reason': '句尾读音和上下文', 'evidence': []},
+            {'segmentId': 'b', 'text': '百分之二十', 'reason': '百分数读法', 'evidence': []}]})
+        self.assertEqual([s['text'] for s in result['segments']], ['清晰了', '百分之二十'])
+    def test_supported_number_reading_is_corrected_without_global_homophone_replacement(self):
+        originals = [{'id': 'a', 'startMs': 0, 'endMs': 1000, 'text': '乘以百分之二事'},
+                     {'id': 'b', 'startMs': 1000, 'endMs': 2000, 'text': '这件事要分两次处理'}]
+        reference = {'sourceFrameTimeMs': 0, 'text': '160×20%=32'}
+        result = calibrate_subtitles('zh', originals, [{'pageIndex': 1,
+            'firstFrameTimeMs': 0, 'lastFrameTimeMs': 2000, 'ocrLines': [reference]}],
+            ask_json=lambda _: {'changes': [{'segmentId': 'a', 'text': '乘以百分之二十',
+                'reason': '百分数读法和20%支持二十', 'evidence': [reference]}]})
+        self.assertEqual(result['segments'][0]['text'], '乘以百分之二十')
+        self.assertEqual(result['segments'][1]['text'], originals[1]['text'])
+
+    def test_prompt_requires_separate_number_reading_and_ordinary_word_checks(self):
+        import io
+        import json
+        from unittest.mock import patch
+        import subtitle_calibration as s
+        calls = []
+        def opened(request, timeout):
+            calls.append(json.loads(request.data))
+            return io.BytesIO(json.dumps({'choices': [{'finish_reason': 'stop',
+                'message': {'content': '{"changes":[]}'}}]}).encode())
+        with patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test'}), patch.object(s, 'urlopen', side_effect=opened):
+            s._deepseek_json({'mode': 'correction', 'segments': [], 'pageGroups': []})
+        instructions = calls[0]['messages'][0]['content']
+        self.assertIn('Separate checks for technical terms, ordinary vocabulary, and spoken numbers', instructions)
+        self.assertIn('百分之二事', instructions)
+        self.assertIn('Do not replace an uncertain spoken number with a convenient slide number', instructions)
+        self.assertIn('Phonetic plausibility is required', instructions)
+        self.assertIn('清晰法', instructions)
+        self.assertIn('实验', instructions)
+        self.assertNotIn('pronunciation alone is not a veto', instructions)
+        self.assertEqual(len(calls), 1)
     def test_next_slide_can_support_introduction_even_if_previous_sample_is_closer(self):
         original = {'id': 't_117', 'startMs': 668290, 'endMs': 671290,
                     'text': '第三个一道题 上海的一道心题'}

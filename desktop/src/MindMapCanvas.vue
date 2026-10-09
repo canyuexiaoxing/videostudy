@@ -41,8 +41,9 @@ function setExpandedDepth(depth: number) {
   canvas?.setData(toCanvasNode(props.root, depth))
 }
 
-onMounted(() => {
-  if (!container.value) return
+function initialize() {
+  // A hidden workbench tab has no drawable size. Initialize when it becomes visible.
+  if (canvas || !container.value?.clientWidth || !container.value.clientHeight) return
   indexNodes(props.root)
   expandedDepth = nodes.size > 80 && container.value.clientWidth < 760 ? 1 : nodes.size > 80 ? 2 : Infinity
   SimpleMindMap.usePlugin(RainbowLines)
@@ -89,10 +90,16 @@ onMounted(() => {
     }
   })
   window.setTimeout(applyReadingZoom, 200)
+}
+onMounted(() => {
+  if (!container.value) return
   resizeObserver = new ResizeObserver(() => {
-    if (container.value?.clientWidth && container.value.clientHeight) canvas?.resize()
+    if (!container.value?.clientWidth || !container.value.clientHeight) return
+    if (canvas) canvas.resize()
+    else initialize()
   })
   resizeObserver.observe(container.value)
+  initialize()
 })
 
 watch(() => props.root, root => {

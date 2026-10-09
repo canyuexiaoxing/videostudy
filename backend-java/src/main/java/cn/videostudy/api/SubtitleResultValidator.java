@@ -4,7 +4,7 @@ import java.util.*;
 
 /** Defense in depth: the Python policy remains responsible for linguistic corrections. */
 public final class SubtitleResultValidator {
-    public static final String PROMPT_VERSION = "subtitle-calibration-v8-page-understanding";
+    public static final String PROMPT_VERSION = "subtitle-calibration-v10-phonetic-fidelity";
     private SubtitleResultValidator() {}
     public static void validate(SubtitleJobStore.Source source, String requestedTarget, Map<String,Object> result) {
         if (result == null) throw new IllegalArgumentException("No subtitle result");

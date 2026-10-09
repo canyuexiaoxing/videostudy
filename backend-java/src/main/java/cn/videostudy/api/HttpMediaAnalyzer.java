@@ -24,6 +24,11 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
 
     HttpMediaAnalyzer(RestClient agent) { this.agent = agent; }
 
+    @Override public Map<String,Object> generatePractice(Map<String,Object> source) {
+        return agent.post().uri("/practice").body(source).retrieve()
+            .body(new ParameterizedTypeReference<Map<String,Object>>() {});
+    }
+
     @Override public Map<String,Object> generateChapters(List<TranscriptionController.TranscriptSegment> segments,
         List<TranscriptionController.PageGroup> pages) {
         return agent.post().uri("/chapters").body(Map.of("segments", segments, "pageGroups", pages))

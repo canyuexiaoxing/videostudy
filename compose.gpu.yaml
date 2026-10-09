@@ -6,4 +6,5 @@ services:
       dockerfile: Dockerfile.gpu
     environment:
       OCR_DEVICE: gpu:0
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
     gpus: all

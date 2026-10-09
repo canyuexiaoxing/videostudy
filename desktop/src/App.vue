@@ -5,12 +5,15 @@ import StudyIcon from './StudyIcon.vue'
 import ChapterPlayer from './ChapterPlayer.vue'
 import SubtitleSettings from './SubtitleSettings.vue'
 import AiOverview from './AiOverview.vue'
+import AiPractice from './AiPractice.vue'
 import PageGallery from './PageGallery.vue'
 import { appearanceCss, normalizeAppearance, positionCue } from './subtitleAppearance'
 import type { VideoChapter } from './chapters'
 import { createSubtitlePoller, needsSubtitleUpdate, selectSubtitleSource, setSubtitleVisibility, SubtitleRequestError, toWebVtt } from './subtitles'
 import type { SubtitleJob, SubtitleMode, SubtitleTarget } from './subtitles'
 import { jumpToMindMapNode, mediaFingerprint } from './mindMap'
+import { mediaBindingState, latestRequests } from './mediaBinding'
+import type { RequestTicket } from './mediaBinding'
 import type { MindMapNode as MindNode, MindMapResult } from './mindMap'
 
 type Segment = { id: string; startMs: number; endMs: number; text: string }
@@ -23,7 +26,7 @@ type PageGroup = { pageIndex: number; firstFrameTimeMs: number; lastFrameTimeMs:
   decision: string; decisionReason: string; ocrLines: OcrLine[]; imageAnalysis?: ImageAnalysis; textAnalysis?: ImageAnalysis }
 type Review = { status: string; resampledTimesMs: number[]; concerns: string[] }
 type TranscriptionJob = { id: string; status: string; result?: { language: string; segments: Segment[]; visualEvidence?: VisualEvidence[]; pageGroups?: PageGroup[]; mindMap?: MindMapResult; visualAnalysisMode?: 'ocr_only' | 'both'; ocrModelId?: string; imageModelId?: string; review?: Review }; error?: string }
-type RightTab = 'map' | 'overview' | 'transcript' | 'slides' | 'notes' | 'history'
+type RightTab = 'map' | 'practice' | 'transcript' | 'slides' | 'notes' | 'history'
 type StudyNote = { id: string; scope: string; timeMs: number; text: string; createdAt: string }
 type HistoryStatus = 'unknown' | 'queued' | 'processing' | 'completed' | 'failed'
 type HistoryEntry = { id: string; name: string; addedAt: string; status: HistoryStatus }
@@ -70,7 +73,7 @@ const video = ref<HTMLVideoElement | null>(null)
 const transcriptList = ref<HTMLElement | null>(null)
 const sidebarTranscriptList = ref<HTMLElement | null>(null)
 const rightTab = ref<RightTab>('map')
-const rightTabOrder: RightTab[] = ['map', 'overview', 'transcript', 'slides', 'notes', 'history']
+const rightTabOrder: RightTab[] = ['map', 'practice', 'transcript', 'slides', 'notes', 'history']
 const transcriptQuery = ref('')
 const noteDraft = ref('')
 const studyNotes = ref<StudyNote[]>(readStudyNotes())
@@ -79,7 +82,116 @@ const deletingHistoryId = ref('')
 const historyError = ref('')
 const selectedFile = ref<File | null>(null)
 const selectedFingerprint = ref('')
+const selectionRequests = latestRequests()
+const analysisRequests = latestRequests()
+const mindMapRequests = latestRequests()
+const checkingMedia = ref(false)
+let changingAnalysisId = false
 const videoUrl = ref('')
+const compatibilityBusy = ref(false)
+const compatibilityMessage = ref('')
+const compatibilityId = ref('')
+const compatibilityActive = ref(false)
+let originalVideoUrl = ''
+let compatibilityGeneration = 0
+let compatibilityUpload: XMLHttpRequest | null = null
+
+function clearCompatibility() {
+  compatibilityGeneration++
+  compatibilityUpload?.abort()
+  compatibilityUpload = null
+  const id = compatibilityId.value
+  compatibilityId.value = ''
+  compatibilityBusy.value = false
+  compatibilityActive.value = false
+  compatibilityMessage.value = ''
+  if (originalVideoUrl && originalVideoUrl !== videoUrl.value) URL.revokeObjectURL(originalVideoUrl)
+  originalVideoUrl = ''
+  if (id) void fetch(`${apiBase}/compatibility/${id}`, { method: 'DELETE', keepalive: true }).catch(() => {})
+}
+watch(selectedFile, clearCompatibility, { flush: 'sync' })
+
+async function switchPlayback(src: string) {
+  const player = video.value
+  const state = player ? { time: player.currentTime, paused: player.paused, volume: player.volume,
+    muted: player.muted, rate: player.playbackRate } : null
+  player?.pause()
+  videoUrl.value = src
+  await nextTick()
+  const target = video.value
+  if (!target || !state) return
+  const restore = () => {
+    if (videoUrl.value !== src) return
+    target.currentTime = Math.min(state.time, target.duration || state.time)
+    target.volume = state.volume; target.muted = state.muted; target.playbackRate = state.rate
+    if (!state.paused) void target.play().catch(() => { compatibilityMessage.value = '兼容视频已就绪，请点击播放' })
+  }
+  if (target.readyState >= 1) restore()
+  else target.addEventListener('loadedmetadata', restore, { once: true })
+}
+
+async function generateCompatibility() {
+  if (!selectedFile.value || compatibilityBusy.value) return
+  if (compatibilityId.value && originalVideoUrl) {
+    compatibilityActive.value = !compatibilityActive.value
+    await switchPlayback(compatibilityActive.value ? `${apiBase}/compatibility/${compatibilityId.value}/video` : originalVideoUrl)
+    compatibilityMessage.value = compatibilityActive.value ? '正在使用 H.264 兼容副本' : '正在使用原视频'
+    return
+  }
+  const file = selectedFile.value
+  const generation = ++compatibilityGeneration
+  compatibilityBusy.value = true
+  compatibilityMessage.value = '正在检查后台显卡编码能力…'
+  try {
+    const capabilityResponse = await fetch(`${apiBase}/compatibility/capabilities`)
+    if (!capabilityResponse.ok) throw new Error('无法连接后台显卡转码服务')
+    const capability = await capabilityResponse.json()
+    if (generation !== compatibilityGeneration) return
+    if (!capability.available) throw new Error(capability.error || '后台显卡编码不可用')
+    const job: { id: string } = await new Promise((resolve, reject) => {
+      const request = new XMLHttpRequest()
+      compatibilityUpload = request
+      request.open('POST', `${apiBase}/compatibility`)
+      request.responseType = 'json'
+      request.upload.onprogress = event => {
+        if (generation === compatibilityGeneration) compatibilityMessage.value = event.lengthComputable
+          ? `上传用于转码：${Math.round(event.loaded / event.total * 100)}%` : '正在上传用于转码…'
+      }
+      request.onerror = () => reject(new Error('上传失败，请检查后台连接'))
+      request.onabort = () => reject(new Error('已取消'))
+      request.onload = () => request.status === 202 ? resolve(request.response) : reject(new Error('无法创建转码任务，显卡可能正在处理其他任务'))
+      const form = new FormData(); form.append('file', file); request.send(form)
+    })
+    compatibilityUpload = null
+    if (generation !== compatibilityGeneration) {
+      void fetch(`${apiBase}/compatibility/${job.id}`, { method: 'DELETE' }); return
+    }
+    compatibilityId.value = job.id
+    for (;;) {
+      if (generation !== compatibilityGeneration) return
+      const response = await fetch(`${apiBase}/compatibility/${job.id}`)
+      if (!response.ok) throw new Error('查询转码状态失败')
+      const result = await response.json()
+      if (generation !== compatibilityGeneration) return
+      if (result.status === 'failed') throw new Error(result.error || '显卡转码失败')
+      if (result.status === 'completed') break
+      compatibilityMessage.value = `显卡转码：${result.progress || 0}%（无需重新分析）`
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+    originalVideoUrl = videoUrl.value
+    compatibilityActive.value = true
+    await switchPlayback(`${apiBase}/compatibility/${job.id}/video`)
+    compatibilityMessage.value = '正在使用 H.264 兼容副本（24 小时后自动清理）'
+  } catch (cause) {
+    if (generation === compatibilityGeneration) {
+      compatibilityMessage.value = cause instanceof Error ? cause.message : '显卡转码失败'
+      const id = compatibilityId.value; compatibilityId.value = ''
+      if (id) void fetch(`${apiBase}/compatibility/${id}`, { method: 'DELETE' }).catch(() => {})
+    }
+  } finally {
+    if (generation === compatibilityGeneration) compatibilityBusy.value = false
+  }
+}
 const filename = ref('')
 const status = ref('请选择本地视频')
 const transcript = ref<Segment[]>([])
@@ -96,6 +208,13 @@ const advancedOpen = ref(false)
 const review = ref<Review | null>(null)
 const failedJobId = ref('')
 const existingJobId = ref(localStorage.getItem('lastAnalysisId') ?? '')
+const confirmedMedia = computed(() => !!selectedFile.value && !checkingMedia.value && !!existingJobId.value &&
+  mediaBindingState(localStorage.getItem(`analysisMedia:${existingJobId.value}`), selectedFile.value.size, selectedFingerprint.value) === 'matched')
+function setAnalysisId(id: string) {
+  changingAnalysisId = true
+  existingJobId.value = id
+  changingAnalysisId = false
+}
 const error = ref('')
 const unavailableFrames = ref<Set<number>>(new Set())
 const currentPlaybackMs = ref(0)
@@ -240,9 +359,15 @@ watch(subtitleTargetLanguage, () => {
     subtitleMode.value=mode
   }
 })
-watch(existingJobId, id => {
+watch(existingJobId, (id, previous) => {
+  if (!changingAnalysisId && id !== previous) {
+    selectionRequests.invalidate()
+    checkingMedia.value = false
+    invalidateAnalysisRequests()
+    clearLoadedAnalysis()
+  }
   if (subtitleCourseId.value && id !== subtitleCourseId.value) clearSubtitleJob()
-})
+}, { flush: 'sync' })
 function syncSubtitleVisibility() {
   setSubtitleVisibility(video.value, subtitleEnabled.value)
   const track = video.value?.textTracks[0]
@@ -300,58 +425,97 @@ function historyStatusLabel(status: HistoryStatus) {
   return { unknown: '未查询', queued: '排队中', processing: '分析中', completed: '已完成', failed: '失败' }[status]
 }
 
-async function chooseVideo(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (!file) return
+function clearLoadedAnalysis() {
   clearSubtitleJob()
-  status.value = '正在核对本地媒体文件…'
-  let fingerprint: string
-  try {
-    fingerprint = await mediaFingerprint(file)
-  } catch {
-    error.value = '无法读取本地文件，请重新选择'
-    return
-  }
-  const expected = localStorage.getItem(`analysisMedia:${existingJobId.value}`)
-  const matchesPrevious = expected ? (() => {
-    try {
-      const details: { name: string; size: number; fingerprint?: string } = JSON.parse(expected)
-      return details.name === file.name && details.size === file.size &&
-        (!details.fingerprint || details.fingerprint === fingerprint)
-    } catch { return false }
-  })() : true
-  const relinking = transcript.value.length > 0 && matchesPrevious
-  const hadResult = transcript.value.length > 0
-  selectedFile.value = file
-  selectedFingerprint.value = fingerprint
-  if (videoUrl.value) URL.revokeObjectURL(videoUrl.value)
-  videoUrl.value = URL.createObjectURL(file)
-  filename.value = file.name
-  if (!relinking) {
-    sourceLanguage.value = 'und'
-    transcript.value = []
-    visualEvidence.value = []
-    pageGroups.value = []
-    mindMap.value = null
-    selectedMindNode.value = null
-    activeSegmentId.value = ''
-    review.value = null
-    if (hadResult) existingJobId.value = ''
-  } else if (existingJobId.value) {
-    readSubtitleJob(existingJobId.value)
-  }
+  sourceLanguage.value = 'und'
+  transcript.value = []
+  visualEvidence.value = []
+  pageGroups.value = []
+  mindMap.value = null
+  selectedMindNode.value = null
+  activeSegmentId.value = ''
+  review.value = null
   failedJobId.value = ''
+  videoChapters.value = []
+  chapterStatus.value = 'not_requested'
+  chapterController?.abort()
+}
+function invalidateAnalysisRequests() {
+  analysisRequests.invalidate()
+  mindMapRequests.invalidate()
+  isAnalysisPending.value = false
+  generatingMindMap.value = false
+}
+function detachPlayback() {
+  video.value?.pause()
+  selectedFile.value = null
+  selectedFingerprint.value = ''
+  if (videoUrl.value) URL.revokeObjectURL(videoUrl.value)
+  videoUrl.value = ''
+  video.value = null
+  filename.value = ''
+  currentPlaybackMs.value = 0
+}
+async function chooseVideo(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  input.value = ''
+  const request = selectionRequests.begin()
+  const previousId = existingJobId.value
+  const expected = localStorage.getItem(`analysisMedia:${previousId}`)
+  const previous = { segments: transcript.value, language: sourceLanguage.value, frames: visualEvidence.value,
+    pages: pageGroups.value, map: mindMap.value, review: review.value }
+  invalidateAnalysisRequests()
+  setAnalysisId('')
+  clearLoadedAnalysis()
+  detachPlayback()
+  checkingMedia.value = true
   error.value = ''
-  status.value = relinking ? (expected ? '本地文件与任务记录匹配；导图节点可回放' : '已选择本地文件；请确认它是该任务的原视频')
-    : '本地视频已就绪；可上传进行分析'
+  status.value = '正在核对本地媒体文件…'
+  try {
+    const fingerprint = await mediaFingerprint(file)
+    if (!request.current()) return
+    const binding = mediaBindingState(expected, file.size, fingerprint)
+    selectedFile.value = file
+    selectedFingerprint.value = fingerprint
+    videoUrl.value = URL.createObjectURL(file)
+    filename.value = file.name
+    checkingMedia.value = false
+    if (previousId && binding === 'matched') {
+      setAnalysisId(previousId)
+      localStorage.setItem('lastAnalysisId', previousId)
+      transcript.value = previous.segments
+      sourceLanguage.value = previous.language
+      visualEvidence.value = previous.frames
+      pageGroups.value = previous.pages
+      mindMap.value = previous.map
+      review.value = previous.review
+      readSubtitleJob(previousId)
+      status.value = '视频指纹匹配；已关联该任务，可回放课程依据'
+    } else {
+      localStorage.removeItem('lastAnalysisId')
+      status.value = previousId ? binding === 'unverified'
+        ? '旧记录缺少有效指纹，无法确认关联；当前视频可重新分析，历史资料仍可查看'
+        : '视频指纹不匹配，已解除旧关联；当前视频可开始分析'
+        : '本地视频已就绪；可上传进行分析'
+    }
+  } catch {
+    if (request.current()) error.value = '无法读取本地文件，请重新选择'
+  } finally {
+    if (request.current()) checkingMedia.value = false
+  }
 }
 
-async function waitForAnalysis(id: string) {
+async function waitForAnalysis(id: string, request: RequestTicket) {
     for (let attempt = 0; attempt < 1800; attempt++) {
+      if (!request.current() || existingJobId.value !== id) return
       await new Promise(resolve => setTimeout(resolve, 1000))
-      const query = await fetch(`${apiBase}/transcriptions/${id}`)
+      if (!request.current() || existingJobId.value !== id) return
+      const query = await fetch(`${apiBase}/transcriptions/${id}`, { signal: request.signal })
       if (!query.ok) throw new Error(`查询转写状态失败：HTTP ${query.status}`)
       const job: TranscriptionJob = await query.json()
+      if (!request.current() || existingJobId.value !== id) return
       if (['queued', 'processing', 'completed', 'failed'].includes(job.status) &&
           analysisHistory.value.find(entry => entry.id === id)?.status !== job.status) {
         rememberAnalysis(id, job.status as HistoryStatus)
@@ -379,19 +543,12 @@ async function waitForAnalysis(id: string) {
         const unverifiedCount = pageStatuses.filter(value => value === 'unverified').length
         const routeName = job.result?.visualAnalysisMode === 'ocr_only' ? '语音＋OCR 文字理解' : '语音＋图片理解'
         status.value = `分析完成：转写 ${transcript.value.length} 段；候选画面 ${visualEvidence.value.length} 张、归为 ${pageGroups.value.length} 页；OCR ${job.result?.ocrModelId || '未记录'}；${routeName}确认 ${completedCount} 页、含推导 ${inferredCount} 页、待核实 ${unverifiedCount} 页；导图${mindMap.value?.status === 'completed' ? '已生成' : mindMap.value?.status === 'failed' ? '部分失败' : '暂无'}`
-        const expected = localStorage.getItem(`analysisMedia:${id}`)
-        if (selectedFile.value && expected) {
-          try {
-            const details: { fingerprint?: string } = JSON.parse(expected)
-            if (details.fingerprint && details.fingerprint !== selectedFingerprint.value) {
-              if (videoUrl.value) URL.revokeObjectURL(videoUrl.value)
-              videoUrl.value = ''
-              selectedFile.value = null
-              selectedFingerprint.value = ''
-              filename.value = ''
-              status.value += '；当前文件与任务记录不匹配，请重新选择'
-            }
-          } catch { /* old tasks may not have local file metadata */ }
+        if (selectedFile.value && !confirmedMedia.value) {
+          const binding = mediaBindingState(localStorage.getItem(`analysisMedia:${id}`), selectedFile.value.size, selectedFingerprint.value)
+          detachPlayback()
+          status.value += binding === 'unverified'
+            ? '；记录缺少有效指纹，历史资料可查看，但无法关联当前视频回放'
+            : '；当前视频指纹不匹配，请重新选择原视频'
         }
         return
       }
@@ -400,7 +557,8 @@ async function waitForAnalysis(id: string) {
 }
 
 async function runTranscription() {
-  if (!selectedFile.value || isAnalysisPending.value) return
+  if (!selectedFile.value || isAnalysisPending.value || checkingMedia.value) return
+  const request = analysisRequests.begin()
   const file = selectedFile.value
   const fingerprint = selectedFingerprint.value
   if (file.size > 2 * 1024 * 1024 * 1024) {
@@ -418,6 +576,7 @@ async function runTranscription() {
   activeSegmentId.value = ''
   review.value = null
   failedJobId.value = ''
+  setAnalysisId('')
   status.value = '正在临时上传视频…'
   try {
     const form = new FormData()
@@ -426,20 +585,22 @@ async function runTranscription() {
     form.append('coarseChangePercent', coarseChangePercent.value)
     form.append('aiSubtitles', 'false')
     form.append('subtitleTargetLanguage', subtitleTargetLanguage.value)
-    const response = await fetch(`${apiBase}/transcriptions`, { method: 'POST', body: form })
+    const response = await fetch(`${apiBase}/transcriptions`, { method: 'POST', body: form, signal: request.signal })
     if (!response.ok) throw new Error(`上传失败：HTTP ${response.status}`)
     const created: TranscriptionJob = await response.json()
-    existingJobId.value = created.id
-    localStorage.setItem('lastAnalysisId', created.id)
+    if (!request.current()) return
     localStorage.setItem(`analysisMedia:${created.id}`, JSON.stringify({ name: file.name, size: file.size, fingerprint }))
+    setAnalysisId(created.id)
+    localStorage.setItem('lastAnalysisId', created.id)
     rememberAnalysis(created.id, 'queued', file.name)
     readSubtitleJob(created.id)
-    await waitForAnalysis(created.id)
+    await waitForAnalysis(created.id, request)
   } catch (cause) {
+    if (!request.current()) return
     error.value = cause instanceof Error ? cause.message : String(cause)
     status.value = '分析未完成'
   } finally {
-    isAnalysisPending.value = false
+    if (request.current()) isAnalysisPending.value = false
   }
 }
 
@@ -450,19 +611,32 @@ async function loadExistingAnalysis() {
     error.value = '请输入有效的分析编号'
     return
   }
+  const request = analysisRequests.begin()
   isAnalysisPending.value = true
   if (!analysisHistory.value.some(entry => entry.id === id)) rememberAnalysis(id, 'unknown')
   error.value = ''
   status.value = '正在读取已保存的分析结果…'
+  clearLoadedAnalysis()
+  let playbackWarning = ''
+  if (selectedFile.value && !confirmedMedia.value) {
+    playbackWarning = mediaBindingState(localStorage.getItem(`analysisMedia:${id}`), selectedFile.value.size, selectedFingerprint.value) === 'unverified'
+      ? '；记录缺少有效指纹，无法确认当前视频，历史资料仍可查看'
+      : '；视频指纹不匹配，已解除当前视频关联'
+    detachPlayback()
+  }
   readSubtitleJob(id)
   try {
-    await waitForAnalysis(id)
-    localStorage.setItem('lastAnalysisId', id)
+    await waitForAnalysis(id, request)
+    if (request.current() && existingJobId.value === id) {
+      localStorage.setItem('lastAnalysisId', id)
+      status.value += playbackWarning
+    }
   } catch (cause) {
+    if (!request.current()) return
     error.value = cause instanceof Error ? cause.message : String(cause)
     status.value = '未能读取分析结果'
   } finally {
-    isAnalysisPending.value = false
+    if (request.current()) isAnalysisPending.value = false
   }
 }
 
@@ -476,28 +650,16 @@ async function openHistory(entry: HistoryEntry) {
     mindMap.value = null
     selectedMindNode.value = null
     activeSegmentId.value = ''
-    const media = localStorage.getItem(`analysisMedia:${entry.id}`)
-    let matchesLocalFile = false
-    try {
-      const details = media ? JSON.parse(media) : null
-      matchesLocalFile = !!selectedFile.value && details?.fingerprint === selectedFingerprint.value
-    } catch { /* No matching local media metadata. */ }
-    if (!matchesLocalFile) {
-      if (videoUrl.value) URL.revokeObjectURL(videoUrl.value)
-      videoUrl.value = ''
-      selectedFile.value = null
-      selectedFingerprint.value = ''
-      filename.value = ''
-    }
+    if (selectedFile.value && mediaBindingState(localStorage.getItem(`analysisMedia:${entry.id}`), selectedFile.value.size, selectedFingerprint.value) !== 'matched') detachPlayback()
   }
-  existingJobId.value = entry.id
+  setAnalysisId(entry.id)
   rightTab.value = 'map'
   await loadExistingAnalysis()
 }
 
 async function deleteHistory(entry: HistoryEntry) {
   if (isAnalysisPending.value || deletingHistoryId.value) return
-  if (!window.confirm(`永久删除“${entry.name}”的分析结果、服务器截图和本机笔记？此操作无法撤销。电脑上的原视频不会删除。`)) return
+  if (!window.confirm(`永久删除“${entry.name}”的分析结果、服务器截图、练习及答题记录和本机笔记？此操作无法撤销。电脑上的原视频不会删除。`)) return
   const deletingCurrentSubtitles = subtitleCourseId.value === entry.id
   if (deletingCurrentSubtitles) clearSubtitleJob()
   deletingHistoryId.value = entry.id
@@ -514,7 +676,8 @@ async function deleteHistory(entry: HistoryEntry) {
     localStorage.setItem('studyNotes:v1', JSON.stringify(studyNotes.value))
     if (existingJobId.value === entry.id) {
       clearSubtitleJob()
-      existingJobId.value = ''
+      invalidateAnalysisRequests()
+      setAnalysisId('')
       transcript.value = []
       visualEvidence.value = []
       pageGroups.value = []
@@ -536,49 +699,57 @@ async function deleteHistory(entry: HistoryEntry) {
 
 async function retryAnalysis() {
   if (!failedJobId.value || isAnalysisPending.value) return
+  const request = analysisRequests.begin()
   isAnalysisPending.value = true
   error.value = ''
   status.value = '正在重新分析保留的上传文件…'
   try {
     const id = failedJobId.value
-    const response = await fetch(`${apiBase}/transcriptions/${id}/retry`, { method: 'POST' })
+    const response = await fetch(`${apiBase}/transcriptions/${id}/retry`, { method: 'POST', signal: request.signal })
     if (!response.ok) throw new Error(`重试失败：HTTP ${response.status}`)
+    if (!request.current()) return
     readSubtitleJob(id)
-    await waitForAnalysis(id)
+    await waitForAnalysis(id, request)
   } catch (cause) {
+    if (!request.current()) return
     error.value = cause instanceof Error ? cause.message : String(cause)
     status.value = '分析未完成'
   } finally {
-    isAnalysisPending.value = false
+    if (request.current()) isAnalysisPending.value = false
   }
 }
 
 async function generateExistingMindMap(refresh = false) {
   if (!existingJobId.value || generatingMindMap.value) return
+  const id = existingJobId.value
+  const request = mindMapRequests.begin()
   generatingMindMap.value = true
   error.value = ''
   status.value = '正在从已保存的转写生成可回溯导图…'
   try {
-    const response = await fetch(`${apiBase}/transcriptions/${existingJobId.value}/mind-map${refresh ? '?refresh=true' : ''}`, { method: 'POST' })
+    const response = await fetch(`${apiBase}/transcriptions/${id}/mind-map${refresh ? '?refresh=true' : ''}`, { method: 'POST', signal: request.signal })
     if (!response.ok) throw new Error(`导图生成失败：HTTP ${response.status}`)
-    mindMap.value = await response.json() as MindMapResult
+    const result = await response.json() as MindMapResult
+    if (!request.current() || existingJobId.value !== id) return
+    mindMap.value = result
     selectedMindNode.value = null
     activeSegmentId.value = ''
     status.value = mindMap.value.status === 'completed' ? '导图已生成并保存；点击节点可回放原片段'
       : '导图未完全生成；有依据的节点仍可回放，也可以重试'
   } catch (cause) {
+    if (!request.current() || existingJobId.value !== id) return
     error.value = cause instanceof Error ? cause.message : String(cause)
     status.value = '导图生成未完成；原转写和页面分析仍可查看'
   } finally {
-    generatingMindMap.value = false
+    if (request.current()) generatingMindMap.value = false
   }
 }
 
 function seekTo(startMs: number, sourceId?: string) {
   if (sourceId) activeSegmentId.value = sourceId
   currentPlaybackMs.value = startMs
-  if (!video.value) {
-    status.value = '请先重新选择本地原视频或录音，再回放这一段'
+  if (!video.value || checkingMedia.value || ((existingJobId.value || sourceId) && !confirmedMedia.value)) {
+    status.value = '课程依据可查看；请先选择指纹匹配的原视频或录音，再回放这一段'
     return
   }
   video.value.currentTime = startMs / 1000
@@ -586,13 +757,17 @@ function seekTo(startMs: number, sourceId?: string) {
 }
 
 async function selectMindMapNode(node: MindNode) {
+  const id = existingJobId.value
+  const fingerprint = selectedFingerprint.value
   selectedMindNode.value = node
   activeSegmentId.value = node.evidenceRefs[0]?.sourceId ?? ''
   currentPlaybackMs.value = node.evidenceRefs[0]?.startMs ?? currentPlaybackMs.value
   await nextTick()
+  if (id !== existingJobId.value || fingerprint !== selectedFingerprint.value) return
   scrollTranscriptTo(activeSegmentId.value)
-  const result = await jumpToMindMapNode(node, video.value)
-  if (result === 'missing_media') status.value = '导图依据已显示；请重新选择本地原视频或录音以回放'
+  const result = await jumpToMindMapNode(node, confirmedMedia.value ? video.value : null)
+  if (id !== existingJobId.value || fingerprint !== selectedFingerprint.value) return
+  if (result === 'missing_media') status.value = '导图依据已显示；请重新选择指纹匹配的本地原视频或录音以回放'
   else if (result === 'paused') status.value = '已跳到对应位置，请点击播放器继续播放'
   else if (result === 'no_evidence') status.value = '这个节点没有可回放的课程依据'
   else video.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -664,6 +839,10 @@ function syncPlayback(event: Event) {
 }
 
 onUnmounted(() => {
+  selectionRequests.invalidate()
+  analysisRequests.invalidate()
+  mindMapRequests.invalidate()
+  clearCompatibility()
   cueStyleElement.remove()
   clearSubtitleJob()
   video.value?.textTracks.removeEventListener('change', refreshSubtitleToggle)
@@ -687,7 +866,7 @@ onUnmounted(() => {
       <div class="sidebar-heading"><div><span class="eyebrow">YOUR STUDY SPACE</span><h2>学习工作台</h2></div><span class="workspace-mark"><StudyIcon name="spark" />跟着课程，找到依据</span></div>
       <div class="sidebar-tabs" :style="{ '--tab-index': rightTabOrder.indexOf(rightTab) }" role="tablist" aria-label="学习工具视图" @keydown="handleSidebarTabKeydown">
         <button type="button" role="tab" aria-controls="tab-map" :aria-selected="rightTab === 'map'" :class="{ active: rightTab === 'map' }" @click="rightTab = 'map'"><StudyIcon name="map" />思维导图</button>
-        <button type="button" role="tab" aria-controls="tab-overview" :aria-selected="rightTab === 'overview'" :class="{ active: rightTab === 'overview' }" @click="rightTab = 'overview'"><StudyIcon name="spark" />AI 解读</button>
+        <button type="button" role="tab" aria-controls="tab-practice" :aria-selected="rightTab === 'practice'" :class="{ active: rightTab === 'practice' }" @click="rightTab = 'practice'"><StudyIcon name="practice" />AI 练习</button>
         <button type="button" role="tab" aria-controls="tab-transcript" :aria-selected="rightTab === 'transcript'" :class="{ active: rightTab === 'transcript' }" @click="rightTab = 'transcript'"><StudyIcon name="transcript" />字幕原文</button>
         <button type="button" role="tab" aria-controls="tab-slides" :aria-selected="rightTab === 'slides'" :class="{ active: rightTab === 'slides' }" @click="rightTab = 'slides'"><StudyIcon name="slides" />课件画面</button>
         <button type="button" role="tab" aria-controls="tab-notes" :aria-selected="rightTab === 'notes'" :class="{ active: rightTab === 'notes' }" @click="rightTab = 'notes'"><StudyIcon name="notes" />随手笔记</button>
@@ -715,7 +894,7 @@ onUnmounted(() => {
           <p class="empty-hint" :class="{ 'is-processing': isAnalysisPending }"><span v-if="isAnalysisPending" class="activity-spinner" aria-hidden="true"></span>{{ isAnalysisPending ? '正在分析课程，完成后导图将在这里显示。你可以继续观看本地视频。' : selectedFile ? '视频已选好，点击顶部“开始分析”；已有任务可在下方按编号读取结果。' : '先点击右上角“选择本地视频”；已有任务可在下方按编号读取结果。' }}</p>
         </div>
       </section>
-      <section v-show="rightTab === 'overview'" id="tab-overview" class="sidebar-pane" role="tabpanel" aria-label="AI 解读"><AiOverview :course-id="existingJobId" :ready="!!transcript.length" @seek="seekTo" /></section>
+      <section v-show="rightTab === 'practice'" id="tab-practice" class="sidebar-pane" role="tabpanel" aria-label="AI 练习"><AiPractice :course-id="existingJobId || undefined" :has-media="!!selectedFile || checkingMedia" :playback-ready="confirmedMedia" :mind-map="mindMap" :selected-node-id="selectedMindNode?.id" :ready="!!transcript.length" @seek="seekTo" /></section>
       <section v-show="rightTab === 'transcript'" id="tab-transcript" class="sidebar-pane" role="tabpanel" aria-label="字幕原文">
         <div class="sidebar-pane-heading"><div><span class="eyebrow">TRANSCRIPT</span><h3>字幕原文</h3></div><span>{{ transcript.length }} 段</span></div>
         <template v-if="transcript.length">
@@ -778,7 +957,8 @@ onUnmounted(() => {
     </aside>
     <section class="workspace">
       <div class="panel player-panel">
-        <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button v-if="transcript.length && videoUrl" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>本地播放 · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
+        <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button v-if="selectedFile" type="button" class="subtitle-toggle" :disabled="compatibilityBusy" title="使用后台显卡生成 H.264 播放副本，需要上传原视频，不重新分析课程" @click="generateCompatibility">{{ compatibilityBusy ? '转换中…' : compatibilityActive ? '返回原视频' : compatibilityId ? '使用兼容副本' : '显卡兼容播放' }}</button><button v-if="compatibilityBusy" type="button" class="subtitle-toggle" @click="clearCompatibility">取消转码</button><button v-if="transcript.length && videoUrl" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>{{ compatibilityActive ? '兼容播放' : '本地播放' }} · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
+        <p v-if="compatibilityMessage" class="empty-hint" role="status" aria-live="polite">{{ compatibilityMessage }}</p>
         <div v-if="transcript.length" class="subtitle-controls">
           <SubtitleSettings v-model="subtitleAppearance" />
           <div class="subtitle-mode" role="group" aria-label="字幕版本">
@@ -791,7 +971,7 @@ onUnmounted(() => {
           <button v-if="subtitleCourseId" type="button" class="subtitle-generate" :disabled="!canGenerateSubtitles" @click="generateSubtitles">{{ requestingSubtitles || ['awaiting_source', 'queued', 'processing'].includes(subtitleJob?.status ?? '') ? '生成中…' : subtitleNeedsUpdate ? '更新 AI 字幕' : ['completed', 'partial'].includes(subtitleJob?.status ?? '') ? '重新生成 AI 字幕' : subtitleJob?.status === 'failed' ? '重试生成 AI 字幕' : '生成 AI 字幕' }}</button>
         </div>
         <p v-if="subtitleStatusMessage" class="subtitle-status" :class="{ 'subtitle-status-warning': subtitleRequestError || ['failed', 'partial', 'unsupported'].includes(subtitleJob?.status ?? '') }" role="status" aria-atomic="true">{{ subtitleStatusMessage }}</p>
-        <ChapterPlayer v-if="videoUrl" :src="videoUrl" :chapters="videoChapters" :chapter-status="chapterStatus" @ready="video = $event" @timeupdate="syncPlayback"><track v-if="subtitleUrl" :key="subtitleUrl" :src="subtitleUrl" kind="subtitles" :label="selectedSubtitles.mode === 'ai' ? 'AI 字幕' : '原文字幕'" :srclang="selectedSubtitles.language" default @load="syncSubtitleVisibility" /></ChapterPlayer>
+        <ChapterPlayer v-if="videoUrl" :src="videoUrl" :chapters="confirmedMedia ? videoChapters : []" :chapter-status="confirmedMedia ? chapterStatus : 'not_requested'" @ready="video = $event" @timeupdate="syncPlayback"><track v-if="subtitleUrl && confirmedMedia" :key="subtitleUrl" :src="subtitleUrl" kind="subtitles" :label="selectedSubtitles.mode === 'ai' ? 'AI 字幕' : '原文字幕'" :srclang="selectedSubtitles.language" default @load="syncSubtitleVisibility" /></ChapterPlayer>
         <div v-else class="empty-player">
           <div class="player-orbit orbit-one" aria-hidden="true"></div><div class="player-orbit orbit-two" aria-hidden="true"></div>
           <div class="player-welcome"><span class="player-play-mark"><StudyIcon name="play" /></span><span class="player-kicker">WATCH. UNDERSTAND. CONNECT.</span><h3>从一节课，连接每个知识点</h3><p>选择本地视频或录音，开启你的学习工作台</p><label class="player-file-picker"><StudyIcon name="upload" />选择课程文件<input type="file" accept="video/*,audio/*" @change="chooseVideo" /></label></div>
@@ -799,6 +979,10 @@ onUnmounted(() => {
         </div>
         <p class="player-caption"><StudyIcon name="lock" />{{ filename || '本地回放 · 分析后点击知识节点，回到老师的讲解现场' }}</p>
       </div>
+      <details class="panel video-overview">
+        <summary><span class="video-overview-title"><StudyIcon name="spark" />AI 解读</span><span class="video-overview-hint">课程概括与重点回看</span><span class="video-overview-chevron" aria-hidden="true">⌄</span></summary>
+        <AiOverview :course-id="existingJobId" :ready="!!transcript.length" @seek="seekTo" />
+      </details>
       <div class="panel results-panel">
         <div class="section-title"><h2>课程依据</h2><span>{{ transcript.length }} 段字幕 · {{ pageGroups.length ? `${pageGroups.length} 页课件` : `${visualEvidence.length} 张候选画面` }}</span></div>
         <p class="status" :class="{ 'is-processing': isAnalysisPending }" role="status"><span v-if="isAnalysisPending" class="activity-spinner" aria-hidden="true"></span>{{ status }}</p><p v-if="error" class="error">{{ error }}</p>

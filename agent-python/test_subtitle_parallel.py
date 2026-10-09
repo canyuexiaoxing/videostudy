@@ -21,7 +21,7 @@ class ParallelSubtitleTest(unittest.TestCase):
                       'text': '原句'} for i in range(60)]
         def ask(payload):
             barrier.wait(timeout=2)
-            return {'changes': [{'segmentId': s['id'], 'text': '改后', 'reason': '上下文', 'evidence': []}
+            return {'changes': [{'segmentId': s['id'], 'text': '元句', 'reason': '同音上下文', 'evidence': []}
                                 for s in payload['segments']], '_provider': {'usage': {'total_tokens': 10}}}
         result = calibrate_subtitles('zh', originals, [], ask_json=ask, batch_size=20, concurrency=3)
         self.assertEqual([s['id'] for s in result['segments']], [s['id'] for s in originals])

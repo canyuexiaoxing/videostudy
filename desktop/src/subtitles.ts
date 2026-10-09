@@ -20,7 +20,7 @@ export type SubtitleJob = {
 
 export function needsSubtitleUpdate(job: SubtitleJob | null) {
   return !!job?.result?.promptVersion && ['completed', 'partial'].includes(job.status)
-    && job.result.promptVersion !== 'subtitle-calibration-v8-page-understanding'
+    && job.result.promptVersion !== 'subtitle-calibration-v10-phonetic-fidelity'
 }
 
 export function selectSubtitleSource(original: SubtitleSegment[], sourceLanguage: string,

@@ -349,7 +349,7 @@ class SubtitleProviderTest(unittest.TestCase):
         self.assertIn('minimal local edits', instruction)
         self.assertIn('do not add fillers', instruction)
         self.assertIn('at most one character', instruction)
-        self.assertIn('not a veto', instruction)
+        self.assertIn('phonetic plausibility is required', instruction)
         self.assertIn('ocr is not required', instruction)
         self.assertIn('ordinary language knowledge', instruction)
         self.assertIn('several different readings remain plausible', instruction)
