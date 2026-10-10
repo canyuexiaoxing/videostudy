@@ -398,3 +398,32 @@ body { background: radial-gradient(ellipse at 10% 0%, #eaf0ff, transparent 55%),
   .sidebar-tabs button { min-height: 44px; font-size: 11px; }
   .study-app .study-sidebar { height: 620px; }
 }
+
+.sampling-options { display:flex; flex-wrap:wrap; gap:6px; }
+.sampling-options button { border:1px solid #d8e1f4; border-radius:7px; padding:7px 12px; color:#536387; background:#fff; cursor:pointer; }
+.sampling-options button[aria-pressed="true"] { color:#244fe0; border-color:#9eb6ff; background:#edf2ff; }
+.sampling-options button:focus-visible { outline:2px solid #315df5; outline-offset:2px; }
+.sampling-options button:disabled { opacity:.5; cursor:default; }
+
+/* Separate the three task settings sections without changing their controls. */
+.study-app .analysis-settings-content { gap:20px; padding:12px 18px 22px; }
+.study-app .analysis-settings-content > .mode-picker,
+.study-app .analysis-settings-content > .advanced-options,
+.study-app .analysis-settings-content > .restore {
+  padding:16px; border:1px solid #e2e8f4; border-radius:10px; background:#f9fbff;
+}
+.study-app .analysis-settings-content > .mode-picker { flex-wrap:wrap; gap:12px 18px; }
+.study-app .analysis-settings-content > .mode-picker select { max-width:100%; }
+.study-app .analysis-settings-content > .restore { gap:10px; }
+.study-app .analysis-settings-content > .restore > label { font-weight:600; }
+.study-app .analysis-settings-content > .advanced-options .advanced-fields { margin-top:12px; padding-top:12px; border-top:1px solid #e2e8f4; }
+@media (max-width:600px) {
+ .study-app .analysis-settings-content { gap:16px; padding:10px 12px 18px; }
+ .study-app .analysis-settings-content > .mode-picker,
+ .study-app .analysis-settings-content > .advanced-options,
+ .study-app .analysis-settings-content > .restore { padding:12px; }
+}
+
+.player-tools .workspace-entry { display:inline-flex; align-items:center; gap:6px; border-color:#ccd9ff; color:#315dec; background:#f0f4ff; }
+.player-tools .workspace-entry svg { width:15px; height:15px; }
+.player-tools .workspace-entry .workspace-entry-dot { width:6px; height:6px; border-radius:50%; background:#4166ed; }

@@ -1,7 +1,8 @@
 """Day-one contract service. No media or AI analysis is performed here."""
 
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+from ignored_region import normalize_region
 from fastapi import HTTPException
 from typing import Literal
 
@@ -62,7 +63,14 @@ class TranscribeRequest(BaseModel):
     fileId: str
     visualAnalysisMode: str = "both"
     coarseChangePercent: float = 2.0
+    coarseSampleSeconds: Literal[2, 3, 4] = 2
     subtitleCallbackToken: str | None = None
+    ignoredRegion: dict | None = None
+
+    @field_validator('ignoredRegion', mode='before')
+    @classmethod
+    def validate_region(cls, value):
+        return normalize_region(value)
 
 
 class SubtitleRequest(BaseModel):
@@ -108,8 +116,9 @@ def analyze(request: TranscribeRequest) -> dict:
     try:
         if request.subtitleCallbackToken:
             return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent,
-                                request.subtitleCallbackToken)
-        return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent)
+                                request.subtitleCallbackToken, coarse_sample_seconds=request.coarseSampleSeconds, **({"ignore_region": request.ignoredRegion} if request.ignoredRegion else {}))
+        return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent,
+                            coarse_sample_seconds=request.coarseSampleSeconds, **({"ignore_region": request.ignoredRegion} if request.ignoredRegion else {}))
     except (FileNotFoundError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 

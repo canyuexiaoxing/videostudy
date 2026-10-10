@@ -14,6 +14,7 @@ from slide_grouping import GROUPING_VERSION, group_pages
 from transcription import transcribe_file
 from visual_evidence import OCR_MODEL_ID, VisualOcrWorker
 from checkpoints import Checkpoints
+from ignored_region import normalize_region
 from mind_map import PROMPT_VERSION as MAP_VERSION
 from page_understanding import PAGE_PROMPT_VERSION
 from agent_review import PROMPT_VERSION as REVIEW_VERSION
@@ -33,7 +34,11 @@ def media_duration_ms(path: Path) -> int:
 
 def analyze_file(file_id: str, visual_analysis_mode: str = "both",
                  coarse_change_percent: float = 2.0,
-                 subtitle_callback_token: str | None = None) -> dict:
+                 subtitle_callback_token: str | None = None, coarse_sample_seconds: int = 2,
+                 ignore_region: dict | None = None) -> dict:
+    ignore_region = normalize_region(ignore_region)
+    if coarse_sample_seconds not in (2, 3, 4):
+        raise ValueError("coarseSampleSeconds must be 2, 3 or 4")
     UUID(file_id)
     if visual_analysis_mode not in ("ocr_only", "both"):
         raise ValueError("visualAnalysisMode must be ocr_only or both")
@@ -50,8 +55,8 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
     metadata = media_path.stat()
     checkpoint = Checkpoints(keyframe_dir / '.analysis', {
         'size': metadata.st_size, 'mtime': metadata.st_mtime_ns,
-        'mode': visual_analysis_mode, 'threshold': coarse_change_percent,
-        'ocr': OCR_MODEL_ID, 'ocrDevice': os.environ.get('OCR_DEVICE', 'cpu'),
+        'mode': visual_analysis_mode, 'threshold': coarse_change_percent, 'sampleSeconds': coarse_sample_seconds,
+        **({'ignoredRegion': ignore_region} if ignore_region else {}), 'ocr': OCR_MODEL_ID, 'ocrDevice': os.environ.get('OCR_DEVICE', 'cpu'),
         'speech': 'faster-whisper-base:beam5:vad:int8',
         'model': os.environ.get('DEEPSEEK_MODEL', 'deepseek-flash'),
         'endpoint': os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
@@ -66,7 +71,8 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
         return value
     try:
         with VisualOcrWorker(media_path, keyframe_dir,
-                             page_change_fraction=coarse_change_percent / 100) as visual_worker:
+                             page_change_fraction=coarse_change_percent / 100,
+                             sample_seconds=coarse_sample_seconds, **({"ignore_region": ignore_region} if ignore_region else {})) as visual_worker:
             if os.environ.get("MEDIA_PARALLEL", "1") == "1":
                 with ThreadPoolExecutor(max_workers=2) as pool:
                     speech_job = pool.submit(timed, "transcription", cached, 'transcription', {},
@@ -90,7 +96,7 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
             timings["coverageReview"] = round((perf_counter() - before) * 1000)
         page_groups, transition_times = timed("pageGrouping", cached, 'pageGrouping',
             {'visuals': visuals, 'speech': transcript['segments']},
-            lambda: group_pages(visuals, keyframe_dir, transcript['segments']))
+            lambda: group_pages(visuals, keyframe_dir, transcript['segments'], **({'ignore_region': ignore_region} if ignore_region else {})))
         before = perf_counter()
         if page_groups:
             by_time = {frame["frameTimeMs"]: frame for frame in visuals}
@@ -129,6 +135,7 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
             "transitionFrameTimesMs": transition_times,
             "visualAnalysisMode": visual_analysis_mode,
             "coarseChangePercent": coarse_change_percent,
+            "coarseSampleSeconds": coarse_sample_seconds,
             "groupingVersion": GROUPING_VERSION,
             "ocrModelId": OCR_MODEL_ID if visuals else None,
             "imageModelId": os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")

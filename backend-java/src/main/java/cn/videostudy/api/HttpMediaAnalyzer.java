@@ -63,10 +63,22 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
 
     @Override public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode,
                                                                      double coarseChangePercent, String subtitleCallbackToken) {
+        return analyze(fileId, mode, visualAnalysisMode, coarseChangePercent, 2, subtitleCallbackToken);
+    }
+
+    @Override public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode,
+            double coarseChangePercent, int coarseSampleSeconds, String subtitleCallbackToken) {
+        return analyze(fileId, mode, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, subtitleCallbackToken, null);
+    }
+
+    @Override public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode,
+            double coarseChangePercent, int coarseSampleSeconds, String subtitleCallbackToken, IgnoreRegion region) {
         var endpoint = "full".equals(mode) ? "/analyze" : "/transcribe";
         var body = new LinkedHashMap<String,Object>();
         body.put("fileId", fileId); body.put("visualAnalysisMode", visualAnalysisMode);
         body.put("coarseChangePercent", coarseChangePercent);
+        body.put("coarseSampleSeconds", coarseSampleSeconds);
+        if (region != null) body.put("ignoredRegion", region);
         if (subtitleCallbackToken != null) body.put("subtitleCallbackToken", subtitleCallbackToken);
         return agent.post().uri(endpoint).body(body)
             .retrieve().body(TranscriptionController.TranscriptResult.class);

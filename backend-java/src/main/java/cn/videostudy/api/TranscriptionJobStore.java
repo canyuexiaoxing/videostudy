@@ -33,6 +33,30 @@ public class TranscriptionJobStore {
             id, visualAnalysisMode, coarseChangePercent);
     }
 
+    public void createQueued(String id, String visualAnalysisMode, double coarseChangePercent, int sampleSeconds) {
+        jdbc.update("INSERT INTO transcription_jobs (id, status, visual_analysis_mode, coarse_change_percent, coarse_sample_seconds) VALUES (?, 'queued', ?, ?, ?)",
+            id, visualAnalysisMode, coarseChangePercent, sampleSeconds);
+    }
+
+    public void createQueued(String id, String visualMode, double threshold, int sampleSeconds, IgnoreRegion region) {
+        if (region == null) { createQueued(id, visualMode, threshold, sampleSeconds); return; }
+        try {
+            jdbc.update("INSERT INTO transcription_jobs (id, status, visual_analysis_mode, coarse_change_percent, coarse_sample_seconds, ignored_region_json) VALUES (?, 'queued', ?, ?, ?, ?)",
+                id, visualMode, threshold, sampleSeconds, json.writeValueAsString(region));
+        } catch (JsonProcessingException error) { throw new IllegalStateException("Unable to save ignored region", error); }
+    }
+
+    public IgnoreRegion findIgnoredRegion(String id) {
+        var values = jdbc.query("SELECT ignored_region_json FROM transcription_jobs WHERE id = ?",
+            (row, number) -> row.getString(1), id);
+        return values.isEmpty() ? null : IgnoreRegion.parse(values.get(0));
+    }
+
+    public int findCoarseSampleSeconds(String id) {
+        return jdbc.query("SELECT coarse_sample_seconds FROM transcription_jobs WHERE id = ?",
+            (row, number) -> row.getInt(1), id).stream().findFirst().orElse(2);
+    }
+
     public String findVisualAnalysisMode(String id) {
         return jdbc.query("SELECT visual_analysis_mode FROM transcription_jobs WHERE id = ?",
             (row, number) -> row.getString(1), id).stream().findFirst().orElse("both");

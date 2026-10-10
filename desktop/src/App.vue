@@ -3,6 +3,9 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import MindMapCanvas from './MindMapCanvas.vue'
 import StudyIcon from './StudyIcon.vue'
 import ChapterPlayer from './ChapterPlayer.vue'
+import VideoWorkspace from './VideoWorkspace.vue'
+import { normalizeRegion } from './videoRegion'
+import type { VideoRegion } from './videoRegion'
 import SubtitleSettings from './SubtitleSettings.vue'
 import AiOverview from './AiOverview.vue'
 import AiPractice from './AiPractice.vue'
@@ -82,6 +85,23 @@ const deletingHistoryId = ref('')
 const historyError = ref('')
 const selectedFile = ref<File | null>(null)
 const selectedFingerprint = ref('')
+const workspaceOpen = ref(false)
+const ignoredRegion = ref<VideoRegion|null>(null)
+watch(selectedFingerprint, fingerprint => {
+  try { ignoredRegion.value = fingerprint ? normalizeRegion(JSON.parse(localStorage.getItem(`videoIgnoreRegion:v1:${fingerprint}`) ?? 'null')) : null }
+  catch { ignoredRegion.value = null }
+})
+function saveIgnoredRegion(region: VideoRegion|null) {
+  ignoredRegion.value = normalizeRegion(region)
+  if (!selectedFingerprint.value) return
+  try {
+    const key = `videoIgnoreRegion:v1:${selectedFingerprint.value}`
+    if (ignoredRegion.value) localStorage.setItem(key, JSON.stringify(ignoredRegion.value))
+    else localStorage.removeItem(key)
+  } catch { /* Keep the current setting even when browser storage is unavailable. */ }
+}
+function openVideoWorkspace() { video.value?.pause(); workspaceOpen.value = true }
+
 const selectionRequests = latestRequests()
 const analysisRequests = latestRequests()
 const mindMapRequests = latestRequests()
@@ -204,10 +224,11 @@ const generatingMindMap = ref(false)
 const isAnalysisPending = ref(false)
 const visualAnalysisMode = ref<'ocr_only' | 'both'>('both')
 const coarseChangePercent = ref('2')
+const coarseSampleSeconds = ref(2)
 const advancedOpen = ref(false)
 const review = ref<Review | null>(null)
 const failedJobId = ref('')
-const existingJobId = ref(localStorage.getItem('lastAnalysisId') ?? '')
+const existingJobId = ref('')
 const confirmedMedia = computed(() => !!selectedFile.value && !checkingMedia.value && !!existingJobId.value &&
   mediaBindingState(localStorage.getItem(`analysisMedia:${existingJobId.value}`), selectedFile.value.size, selectedFingerprint.value) === 'matched')
 function setAnalysisId(id: string) {
@@ -583,6 +604,8 @@ async function runTranscription() {
     form.append('file', file)
     form.append('visualAnalysisMode', visualAnalysisMode.value)
     form.append('coarseChangePercent', coarseChangePercent.value)
+    form.append('coarseSampleSeconds', String(coarseSampleSeconds.value))
+    if (ignoredRegion.value) form.append('ignoredRegion', JSON.stringify(ignoredRegion.value))
     form.append('aiSubtitles', 'false')
     form.append('subtitleTargetLanguage', subtitleTargetLanguage.value)
     const response = await fetch(`${apiBase}/transcriptions`, { method: 'POST', body: form, signal: request.signal })
@@ -894,7 +917,7 @@ onUnmounted(() => {
           <p class="empty-hint" :class="{ 'is-processing': isAnalysisPending }"><span v-if="isAnalysisPending" class="activity-spinner" aria-hidden="true"></span>{{ isAnalysisPending ? '正在分析课程，完成后导图将在这里显示。你可以继续观看本地视频。' : selectedFile ? '视频已选好，点击顶部“开始分析”；已有任务可在下方按编号读取结果。' : '先点击右上角“选择本地视频”；已有任务可在下方按编号读取结果。' }}</p>
         </div>
       </section>
-      <section v-show="rightTab === 'practice'" id="tab-practice" class="sidebar-pane" role="tabpanel" aria-label="AI 练习"><AiPractice :course-id="existingJobId || undefined" :has-media="!!selectedFile || checkingMedia" :playback-ready="confirmedMedia" :mind-map="mindMap" :selected-node-id="selectedMindNode?.id" :ready="!!transcript.length" @seek="seekTo" /></section>
+      <section v-show="rightTab === 'practice'" id="tab-practice" class="sidebar-pane" role="tabpanel" aria-label="AI 练习"><AiPractice :course-id="(transcript.length || pageGroups.length || mindMap) && existingJobId ? existingJobId : undefined" :has-media="!!selectedFile || checkingMedia" :playback-ready="confirmedMedia" :mind-map="mindMap" :selected-node-id="selectedMindNode?.id" :ready="!!transcript.length" @seek="seekTo" /></section>
       <section v-show="rightTab === 'transcript'" id="tab-transcript" class="sidebar-pane" role="tabpanel" aria-label="字幕原文">
         <div class="sidebar-pane-heading"><div><span class="eyebrow">TRANSCRIPT</span><h3>字幕原文</h3></div><span>{{ transcript.length }} 段</span></div>
         <template v-if="transcript.length">
@@ -957,7 +980,7 @@ onUnmounted(() => {
     </aside>
     <section class="workspace">
       <div class="panel player-panel">
-        <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button v-if="selectedFile" type="button" class="subtitle-toggle" :disabled="compatibilityBusy" title="使用后台显卡生成 H.264 播放副本，需要上传原视频，不重新分析课程" @click="generateCompatibility">{{ compatibilityBusy ? '转换中…' : compatibilityActive ? '返回原视频' : compatibilityId ? '使用兼容副本' : '显卡兼容播放' }}</button><button v-if="compatibilityBusy" type="button" class="subtitle-toggle" @click="clearCompatibility">取消转码</button><button v-if="transcript.length && videoUrl" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>{{ compatibilityActive ? '兼容播放' : '本地播放' }} · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
+        <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button type="button" class="subtitle-toggle workspace-entry" @click="openVideoWorkspace"><StudyIcon name="slides" />视频工作台<span v-if="ignoredRegion" class="workspace-entry-dot" aria-label="已保存忽略区域"></span></button><button v-if="selectedFile" type="button" class="subtitle-toggle" :disabled="compatibilityBusy" title="使用后台显卡生成 H.264 播放副本，需要上传原视频，不重新分析课程" @click="generateCompatibility">{{ compatibilityBusy ? '转换中…' : compatibilityActive ? '返回原视频' : compatibilityId ? '使用兼容副本' : '显卡兼容播放' }}</button><button v-if="compatibilityBusy" type="button" class="subtitle-toggle" @click="clearCompatibility">取消转码</button><button v-if="transcript.length && videoUrl" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>{{ compatibilityActive ? '兼容播放' : '本地播放' }} · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
         <p v-if="compatibilityMessage" class="empty-hint" role="status" aria-live="polite">{{ compatibilityMessage }}</p>
         <div v-if="transcript.length" class="subtitle-controls">
           <SubtitleSettings v-model="subtitleAppearance" />
@@ -994,9 +1017,16 @@ onUnmounted(() => {
           <button type="button" class="advanced-toggle" :aria-expanded="advancedOpen" aria-controls="advanced-settings" @click="advancedOpen = !advancedOpen">{{ advancedOpen ? '收起高级选项' : '高级选项' }}</button>
           <div v-if="advancedOpen" id="advanced-settings" class="advanced-fields">
           <div class="advanced-row">
+            <span id="coarse-sample-label">粗选采样间隔</span>
+            <div class="sampling-options" role="group" aria-labelledby="coarse-sample-label">
+              <button v-for="seconds in [2, 3, 4]" :key="seconds" type="button" :aria-pressed="coarseSampleSeconds === seconds" :disabled="isAnalysisPending" @click="coarseSampleSeconds = seconds">{{ seconds }} 秒{{ seconds === 2 ? '（默认）' : '' }}</button>
+            </div>
+          </div>
+          <p class="advanced-help">间隔越长，扫描预览帧越少，但可能漏掉短暂出现的公式、表格或板书。仅影响新分析；重试沿用原任务设置。</p>
+          <div class="advanced-row">
             <label for="coarse-change-percent">粗选画面变化阈值</label>
             <span class="help-tooltip" tabindex="0" aria-label="粗选画面变化阈值说明">?
-              <span role="tooltip">每隔 2 秒比较一次画面。相邻画面变化区域超过所选比例时，保留候选截图；渐进书写另有保留规则。默认 2%。数值越低通常候选图越多，越不容易漏掉小变化；越高则候选图越少，但可能漏掉新画面。此值只影响第一轮粗选。</span>
+              <span role="tooltip">按所选采样间隔比较画面。相邻画面变化区域超过所选比例时，保留候选截图；渐进书写另有保留规则。默认 2%。数值越低通常候选图越多，越不容易漏掉小变化；越高则候选图越少，但可能漏掉新画面。此值只影响第一轮粗选。</span>
             </span>
             <select id="coarse-change-percent" v-model="coarseChangePercent">
               <option value="0.5">0.5%</option><option value="1">1%</option>
@@ -1060,5 +1090,6 @@ onUnmounted(() => {
         </details>
       </div>
     </section>
+    <VideoWorkspace v-if="workspaceOpen" :src="videoUrl" :filename="filename" :model-value="ignoredRegion" :time-ms="currentPlaybackMs" :checking="checkingMedia" @close="workspaceOpen=false" @select-file="chooseVideo" @update:model-value="saveIgnoredRegion" />
   </main>
 </template>

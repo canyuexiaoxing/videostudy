@@ -60,6 +60,8 @@ public class TranscriptionController {
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file,
                                     @RequestParam(value = "visualAnalysisMode", defaultValue = "both") String visualAnalysisMode,
                                     @RequestParam(value = "coarseChangePercent", defaultValue = "2") double coarseChangePercent,
+                                    @RequestParam(value = "coarseSampleSeconds", defaultValue = "2") int coarseSampleSeconds,
+                                    @RequestParam(value = "ignoredRegion", required = false) String ignoredRegionJson,
                                     @RequestParam(value = "aiSubtitles", defaultValue = "false") boolean aiSubtitles,
                                     @RequestParam(value = "subtitleTargetLanguage", defaultValue = "source") String subtitleTargetLanguage)
                                     throws IOException {
@@ -70,6 +72,13 @@ public class TranscriptionController {
         if (coarseChangePercent != 0.5 && coarseChangePercent != 1.0 &&
             coarseChangePercent != 2.0 && coarseChangePercent != 3.0)
             return ResponseEntity.badRequest().body(Map.of("error", "invalid_coarse_change_percent"));
+        if (!List.of(2, 3, 4).contains(coarseSampleSeconds))
+            return ResponseEntity.badRequest().body(Map.of("error", "invalid_coarse_sample_seconds"));
+        final IgnoreRegion ignoredRegion;
+        try { ignoredRegion = IgnoreRegion.parse(ignoredRegionJson); }
+        catch (IllegalArgumentException error) {
+            return ResponseEntity.badRequest().body(Map.of("error", "invalid_ignored_region"));
+        }
         if (file.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "empty_file"));
         Files.createDirectories(uploadRoot);
         var id = UUID.randomUUID().toString();
@@ -77,7 +86,8 @@ public class TranscriptionController {
         file.transferTo(path);
         var job = new TranscriptionJob(id, "queued", null, null);
         try {
-            store.createQueued(id, visualAnalysisMode, coarseChangePercent);
+            if (ignoredRegion == null) store.createQueued(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds);
+            else store.createQueued(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion);
             if (aiSubtitles && subtitles != null) subtitles.createUploadRequest(id, subtitleTargetLanguage);
         } catch (RuntimeException error) {
             store.delete(id);
@@ -85,7 +95,7 @@ public class TranscriptionController {
             throw error;
         }
         try {
-            worker.execute(() -> process(id, path, visualAnalysisMode, coarseChangePercent));
+            worker.execute(() -> process(id, path, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion));
         } catch (RejectedExecutionException error) {
             store.delete(id);
             Files.deleteIfExists(path);
@@ -94,6 +104,12 @@ public class TranscriptionController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
 
+    public ResponseEntity<?> upload(MultipartFile file, String visualMode, double threshold, int seconds, boolean aiSubtitles, String targetLanguage) throws IOException {
+        return upload(file, visualMode, threshold, seconds, null, aiSubtitles, targetLanguage);
+    }
+    public ResponseEntity<?> upload(MultipartFile file, String visualMode, double threshold, boolean aiSubtitles, String targetLanguage) throws IOException {
+        return upload(file, visualMode, threshold, 2, aiSubtitles, targetLanguage);
+    }
     public ResponseEntity<?> upload(MultipartFile file, String visualMode, double threshold) throws IOException {
         return upload(file, visualMode, threshold, true, "source");
     }
@@ -116,8 +132,10 @@ public class TranscriptionController {
         try {
             var visualAnalysisMode = store.findVisualAnalysisMode(id);
             var coarseChangePercent = store.findCoarseChangePercent(id);
+            var coarseSampleSeconds = store.findCoarseSampleSeconds(id);
+            var ignoredRegion = store.findIgnoredRegion(id);
             worker.execute(() -> process(id, path, visualAnalysisMode == null ? "both" : visualAnalysisMode,
-                                          coarseChangePercent));
+                                          coarseChangePercent, coarseSampleSeconds, ignoredRegion));
         } catch (RejectedExecutionException error) {
             store.markFailed(id, "analysis_queue_full");
             return ResponseEntity.status(429).body(Map.of("error", "analysis_queue_full"));
@@ -149,11 +167,11 @@ public class TranscriptionController {
         if (count > 0) log.info("Marked {} interrupted analysis jobs as retryable", count);
     }
 
-    private void process(String id, Path path, String visualAnalysisMode, double coarseChangePercent) {
+    private void process(String id, Path path, String visualAnalysisMode, double coarseChangePercent, int coarseSampleSeconds, IgnoreRegion ignoredRegion) {
         boolean saved = false;
         try {
             store.markProcessing(id);
-            var result = analyzeWithResume(id, visualAnalysisMode, coarseChangePercent);
+            var result = analyzeWithResume(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion);
             if (result == null) throw new IllegalStateException("Agent returned no transcription result");
             if (result.mindMap() != null && !MindMapValidator.isGrounded(result.mindMap(), result.segments()))
                 throw new IllegalStateException("Agent returned an ungrounded mind map");
@@ -183,7 +201,7 @@ public class TranscriptionController {
         }
     }
 
-    private TranscriptResult analyzeWithResume(String id, String visualMode, double threshold) throws Exception {
+    private TranscriptResult analyzeWithResume(String id, String visualMode, double threshold, int sampleSeconds, IgnoreRegion ignoredRegion) throws Exception {
         String callbackToken = null;
         if (subtitles != null) {
             try { callbackToken = subtitles.callbackToken(id); }
@@ -191,8 +209,8 @@ public class TranscriptionController {
         }
         for (int attempt = 1; ; attempt++) {
             try {
-                var result = callbackToken == null ? agent.analyze(id, analysisMode, visualMode, threshold)
-                    : agent.analyze(id, analysisMode, visualMode, threshold, callbackToken);
+                var result = ignoredRegion == null ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken)
+                    : agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken, ignoredRegion);
                 if (result != null && analysisMode.equals("full")) {
                     if (result.mindMap() != null && "failed".equals(result.mindMap().status()))
                         throw new IllegalStateException("Mind-map chunks incomplete; resume successful checkpoints");

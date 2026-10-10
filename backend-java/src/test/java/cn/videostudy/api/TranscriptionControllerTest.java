@@ -73,7 +73,7 @@ class TranscriptionControllerTest {
                 .andExpect(status().isAccepted());
             org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000))
                 .createQueued(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("ocr_only"),
-                    org.mockito.ArgumentMatchers.eq(2.0));
+                    org.mockito.ArgumentMatchers.eq(2.0), org.mockito.ArgumentMatchers.eq(2));
         } finally {
             controller.close();
         }
@@ -115,7 +115,7 @@ class TranscriptionControllerTest {
                 .andExpect(status().isAccepted());
             org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000))
                 .createQueued(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("both"),
-                    org.mockito.ArgumentMatchers.eq(3.0));
+                    org.mockito.ArgumentMatchers.eq(3.0), org.mockito.ArgumentMatchers.eq(2));
             org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000))
                 .complete(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
             org.junit.jupiter.api.Assertions.assertEquals(3.0, actual.get());

@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 
 import cv2
 import numpy as np
+from ignored_region import normalize_region, valid_mask, grouping_frame
 
 
 GROUPING_VERSION = "page-group-v1"
@@ -44,33 +45,42 @@ def _preview(path: Path) -> np.ndarray:
     return cv2.resize(image, (320, 180), interpolation=cv2.INTER_AREA)
 
 
-def _difference(left: np.ndarray, right: np.ndarray) -> float:
-    direct = float(np.mean(cv2.absdiff(left, right) > 25))
-    if direct < 0.015 or left.std() < 8 or right.std() < 8:
+def _difference(left: np.ndarray, right: np.ndarray, mask=None) -> float:
+    difference = cv2.absdiff(left, right) > 25
+    direct = float(np.mean(difference[mask] if mask is not None else difference))
+    if direct < 0.015 or (left[mask] if mask is not None else left).std() < 8 or (right[mask] if mask is not None else right).std() < 8:
         return direct
-    shift, response = cv2.phaseCorrelate(left.astype(np.float32), right.astype(np.float32))
+    shift, response = cv2.phaseCorrelate(np.where(mask, left, 0).astype(np.float32) if mask is not None else left.astype(np.float32), np.where(mask, right, 0).astype(np.float32) if mask is not None else right.astype(np.float32))
     dx, dy = shift
     if response < 0.15 or abs(dx) > 5 or abs(dy) > 5:
         return direct
     aligned = cv2.warpAffine(right, np.float32([[1, 0, -dx], [0, 1, -dy]]),
                              (right.shape[1], right.shape[0]), borderMode=cv2.BORDER_REPLICATE)
+    if mask is not None:
+        shifted_mask = cv2.warpAffine(mask.astype(np.uint8), np.float32([[1, 0, -dx], [0, 1, -dy]]),
+                                     (right.shape[1], right.shape[0]), flags=cv2.INTER_NEAREST).astype(bool)
+        valid = (mask & shifted_mask)[6:-6, 6:-6]
+        if not valid.any():
+            return direct
+        return min(direct, float(np.mean((cv2.absdiff(left[6:-6,6:-6], aligned[6:-6,6:-6]) > 25)[valid])))
     # Ignore the narrow border introduced by alignment.
     return min(direct, float(np.mean(cv2.absdiff(left[6:-6, 6:-6], aligned[6:-6, 6:-6]) > 25)))
 
 
-def _blank(frame: dict, image: np.ndarray) -> bool:
+def _blank(frame: dict, image: np.ndarray, mask=None) -> bool:
+    image = image[mask] if mask is not None else image
     return not _texts(frame) and float(image.mean()) > 240 and float(image.std()) < 12
 
 
 def _boundary(anchor: dict, previous: dict, current: dict,
               anchor_image: np.ndarray, previous_image: np.ndarray,
-              current_image: np.ndarray) -> str:
+              current_image: np.ndarray, mask=None) -> str:
     before, now = _texts(previous), _texts(current)
     anchor_text = _texts(anchor)
     previous_retained = _retention(before, now)
     anchor_retained = _retention(anchor_text, now)
-    difference = _difference(previous_image, current_image)
-    anchor_difference = _difference(anchor_image, current_image)
+    difference = _difference(previous_image, current_image, mask)
+    anchor_difference = _difference(anchor_image, current_image, mask)
 
     if before and now:
         if previous_retained >= 0.72 and (anchor_retained >= 0.65 or not anchor_text):
@@ -125,13 +135,13 @@ def _deepseek_boundary_json(payload: dict) -> dict:
 
 
 def _page(members: list[dict], images: dict[int, np.ndarray], decision: str,
-          reason: str, page_index: int) -> dict:
+          reason: str, page_index: int, mask=None) -> dict:
     times = [item["frameTimeMs"] for item in members]
     # OCR richness finds a completed slide; sharpness breaks ties on diagram pages.
     def quality(item: dict) -> tuple[int, float, int]:
         image = images[item["frameTimeMs"]]
         return (sum(len(text) for text in _texts(item)),
-                float(cv2.Laplacian(image, cv2.CV_64F).var()), item["frameTimeMs"])
+                float((cv2.Laplacian(image, cv2.CV_64F)[cv2.erode(mask.astype(np.uint8), np.ones((3,3), np.uint8)).astype(bool)] if mask is not None else cv2.Laplacian(image, cv2.CV_64F)).var()), item["frameTimeMs"])
     best = max(members, key=quality)
     representatives = [best["frameTimeMs"]]
     # If the page was cleared during the explanation, keep an earlier complementary view.
@@ -146,7 +156,7 @@ def _page(members: list[dict], images: dict[int, np.ndarray], decision: str,
             if normalized and normalized not in seen:
                 seen.add(normalized)
                 lines.append({"text": block["text"], "sourceFrameTimeMs": item["frameTimeMs"],
-                              "sourceBlockIndex": index})
+                              "sourceBlockIndex": block.get("_sourceBlockIndex", index)})
     return {
         "pageIndex": page_index,
         "firstFrameTimeMs": times[0], "lastFrameTimeMs": times[-1],
@@ -157,7 +167,7 @@ def _page(members: list[dict], images: dict[int, np.ndarray], decision: str,
 
 
 def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *,
-                ask_json: Callable[[dict], dict] | None = None) -> tuple[list[dict], list[int]]:
+                ask_json: Callable[[dict], dict] | None = None, ignore_region: dict | None = None) -> tuple[list[dict], list[int]]:
     """Use local image/OCR evidence; review only uncertain text boundaries."""
     if not visuals:
         return [], []
@@ -166,7 +176,16 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
     times = [item["frameTimeMs"] for item in frames]
     if len(times) != len(set(times)):
         raise ValueError("Candidate screenshot timestamps must be unique")
+    ignore_region = normalize_region(ignore_region)
+    mask = valid_mask(320,180,ignore_region) if ignore_region else None
     images = {time: _preview(keyframe_dir / f"{time}.jpg") for time in times}
+    if ignore_region:
+        filtered=[]
+        for frame in frames:
+            original=cv2.imread(str(keyframe_dir / f"{frame['frameTimeMs']}.jpg"),cv2.IMREAD_GRAYSCALE)
+            height,width=original.shape
+            filtered.append(grouping_frame(frame,ignore_region,width,height))
+        frames=filtered
     pages: list[dict] = []
     transitions: list[int] = []
     members: list[dict] = []
@@ -176,19 +195,19 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
     for current in frames:
         time_ms = current["frameTimeMs"]
         current_image = images[time_ms]
-        if _blank(current, current_image):
+        if _blank(current, current_image, mask):
             transitions.append(time_ms)
             pending_transition = True
             continue
         if members and pending_transition:
-            pages.append(_page(members, images, decision, reason, len(pages) + 1))
+            pages.append(_page(members, images, decision, reason, len(pages) + 1, mask))
             members = []
             decision, reason = "auto_new_page", "blank transition"
         pending_transition = False
         if members:
             previous, anchor = members[-1], members[0]
             boundary = _boundary(anchor, previous, current, images[anchor["frameTimeMs"]],
-                                 images[previous["frameTimeMs"]], current_image)
+                                 images[previous["frameTimeMs"]], current_image, mask)
             boundary_reason = "local OCR and frame comparison"
             if boundary == "uncertain":
                 boundary = "new"
@@ -212,11 +231,11 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
                     except (ValueError, KeyError, OSError, TimeoutError):
                         pass
             if boundary == "new":
-                pages.append(_page(members, images, decision, reason, len(pages) + 1))
+                pages.append(_page(members, images, decision, reason, len(pages) + 1, mask))
                 members = []
                 decision = "agent_new_page" if boundary_reason.startswith("text Agent") else "auto_new_page"
                 reason = boundary_reason
         members.append(current)
     if members:
-        pages.append(_page(members, images, decision, reason, len(pages) + 1))
+        pages.append(_page(members, images, decision, reason, len(pages) + 1, mask))
     return pages, transitions

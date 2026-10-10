@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import os
 from checkpoints import Checkpoints
+from ignored_region import normalize_region
 
 
 SAMPLE_SECONDS = 2
@@ -33,13 +34,28 @@ def _has_video(path: Path) -> bool:
     return bool(result.stdout.strip())
 
 
-def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACTION) -> list[int]:
+def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACTION,
+                     sample_seconds: int = SAMPLE_SECONDS, ignore_region: dict | None = None) -> list[int]:
+    if sample_seconds not in (2, 3, 4):
+        raise ValueError("sample_seconds must be 2, 3 or 4")
     command = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(path),
-        "-vf", f"fps=1/{SAMPLE_SECONDS},scale={PREVIEW_WIDTH}:{PREVIEW_HEIGHT}:force_original_aspect_ratio=decrease,"
+        "-vf", f"fps=1/{sample_seconds},scale={PREVIEW_WIDTH}:{PREVIEW_HEIGHT}:force_original_aspect_ratio=decrease,"
                f"pad={PREVIEW_WIDTH}:{PREVIEW_HEIGHT}:(ow-iw)/2:(oh-ih)/2,format=gray",
         "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1",
     ]
+    ignore_region = normalize_region(ignore_region)
+    read_bytes = FRAME_BYTES
+    mask = None
+    if ignore_region:
+        r = ignore_region
+        geometry = f"scale={PREVIEW_WIDTH}:{PREVIEW_HEIGHT}:force_original_aspect_ratio=decrease,pad={PREVIEW_WIDTH}:{PREVIEW_HEIGHT}:(ow-iw)/2:(oh-ih)/2,format=gray"
+        filters = (f"[0:v]fps=1/{sample_seconds},split=2[v][m];[v]{geometry}[p];"
+                   f"[m]format=gray,lut=y=255,drawbox=x=iw*{r['x']}:y=ih*{r['y']}:w=iw*{r['width']}:h=ih*{r['height']}:color=black:t=fill,{geometry}[mask];"
+                   "[p][mask]vstack,format=gray[out]")
+        command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(path),
+                   "-filter_complex", filters, "-map", "[out]", "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1"]
+        read_bytes = FRAME_BYTES * 2
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     assert process.stdout is not None and process.stderr is not None
     previous = None
@@ -50,15 +66,19 @@ def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACT
     first_frame = None
     index = 0
     try:
-        while frame_bytes := process.stdout.read(FRAME_BYTES):
-            if len(frame_bytes) != FRAME_BYTES:
+        while frame_bytes := process.stdout.read(read_bytes):
+            if len(frame_bytes) != read_bytes:
                 raise RuntimeError("FFmpeg returned an incomplete preview frame")
-            frame = np.frombuffer(frame_bytes, dtype=np.uint8).reshape(PREVIEW_HEIGHT, PREVIEW_WIDTH)
-            time_ms = index * SAMPLE_SECONDS * 1000
+            frame = np.frombuffer(frame_bytes[:FRAME_BYTES], dtype=np.uint8).reshape(PREVIEW_HEIGHT, PREVIEW_WIDTH)
+            if ignore_region:
+                mask = np.frombuffer(frame_bytes[FRAME_BYTES:], dtype=np.uint8).reshape(PREVIEW_HEIGHT, PREVIEW_WIDTH) >= 254
+                if not mask.any():
+                    raise ValueError("ignored_region_leaves_no_visible_pixels")
+            time_ms = index * sample_seconds * 1000
             if first_frame is None:
                 first_frame = frame.copy()
             if previous is not None:
-                changed_fraction = float(np.mean(cv2.absdiff(previous, frame) > 25))
+                changed_fraction = float(np.mean((cv2.absdiff(previous, frame) > 25)[mask] if mask is not None else cv2.absdiff(previous, frame) > 25))
                 if changed_fraction > page_change_fraction:
                     if not chosen or chosen[-1] != previous_ms:
                         chosen.append(previous_ms)
@@ -66,7 +86,7 @@ def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACT
                     last_chosen_ms = previous_ms
                 elif time_ms - last_chosen_ms >= MAX_PROGRESS_INTERVAL_MS:
                     baseline = last_chosen_frame if last_chosen_frame is not None else first_frame
-                    progress = float(np.mean(cv2.absdiff(baseline, previous) > 25))
+                    progress = float(np.mean((cv2.absdiff(baseline, previous) > 25)[mask] if mask is not None else cv2.absdiff(baseline, previous) > 25))
                     if progress > PROGRESS_FRACTION:
                         chosen.append(previous_ms)
                         last_chosen_frame = previous.copy()
@@ -181,14 +201,15 @@ def _save_keyframe(frame: np.ndarray, keyframe_dir: Path, time_ms: int) -> None:
 
 def analyze_visuals(path: Path, recognize: Callable[[np.ndarray], list[dict]] | None = None,
                     keyframe_dir: Path | None = None,
-                    page_change_fraction: float = PAGE_CHANGE_FRACTION) -> list[dict]:
+                    page_change_fraction: float = PAGE_CHANGE_FRACTION,
+                    sample_seconds: int = SAMPLE_SECONDS, ignore_region: dict | None = None) -> list[dict]:
     """Return OCR from representative frames; audio-only input returns no visual evidence."""
     if not _has_video(path):
         return []
     recognize = recognize or _recognize
     evidence = []
     checkpoint = _frame_checkpoint(path, keyframe_dir)
-    for time_ms, frame in _frames_at(path, _candidate_times(path, page_change_fraction)):
+    for time_ms, frame in _frames_at(path, _candidate_times(path, page_change_fraction, sample_seconds, ignore_region)):
         if keyframe_dir is not None:
             _save_keyframe(frame, keyframe_dir, time_ms)
         blocks = checkpoint.run(f'ocrFrame:{time_ms}', {}, lambda: recognize(frame)) if checkpoint else recognize(frame)
@@ -200,6 +221,8 @@ def _serve_visual_requests(connection) -> None:
     path = None
     keyframe_dir = None
     page_change_fraction = PAGE_CHANGE_FRACTION
+    sample_seconds = SAMPLE_SECONDS
+    ignore_region = None
     checkpoint = None
     try:
         while request := connection.recv():
@@ -208,11 +231,13 @@ def _serve_visual_requests(connection) -> None:
                     path = Path(request["mediaPath"])
                     keyframe_dir = Path(request["keyframePath"]) if request["keyframePath"] else None
                     page_change_fraction = request["pageChangeFraction"]
+                    sample_seconds = request["sampleSeconds"]
+                    ignore_region = normalize_region(request.get("ignoredRegion"))
                     checkpoint = _frame_checkpoint(path, keyframe_dir)
                     response = None
                 elif request["op"] == "analyze":
                     response = analyze_visuals(path, keyframe_dir=keyframe_dir,
-                                               page_change_fraction=page_change_fraction)
+                                               page_change_fraction=page_change_fraction, sample_seconds=sample_seconds, ignore_region=ignore_region)
                 elif request["op"] == "capture":
                     frame = _frame_at(path, request["timeMs"])
                     if keyframe_dir is not None:
@@ -266,7 +291,11 @@ class VisualOcrWorker:
     """Lease one persistent OCR process; serialize media sessions and pipe requests."""
 
     def __init__(self, path: Path, keyframe_dir: Path | None = None,
-                 page_change_fraction: float = PAGE_CHANGE_FRACTION):
+                 page_change_fraction: float = PAGE_CHANGE_FRACTION, sample_seconds: int = SAMPLE_SECONDS,
+                 ignore_region: dict | None = None):
+        if sample_seconds not in (2, 3, 4):
+            raise ValueError("sample_seconds must be 2, 3 or 4")
+        ignore_region = normalize_region(ignore_region)
         global _shared_connection, _shared_process
         self._closed = False
         self._request_lock = threading.Lock()
@@ -282,7 +311,7 @@ class VisualOcrWorker:
             self.connection, self.process = _shared_connection, _shared_process
             self._request("bind", mediaPath=str(path),
                           keyframePath=str(keyframe_dir) if keyframe_dir else None,
-                          pageChangeFraction=page_change_fraction)
+                          pageChangeFraction=page_change_fraction, sampleSeconds=sample_seconds, ignoredRegion=ignore_region)
         except BaseException:
             _stop_shared_worker()
             self._closed = True

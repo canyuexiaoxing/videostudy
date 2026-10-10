@@ -21,7 +21,9 @@ const sets=ref<SetData[]>([]), active=ref<SetData|null>(null), session=ref(''), 
 const feedback=ref<Record<string,Feedback>>({}), busy=ref(false), pending=ref(false), error=ref('')
 const chartDialog=ref<HTMLDialogElement|null>(null)
 let epoch=0, timer:ReturnType<typeof setTimeout>|undefined
-const demo=computed(()=>!props.courseId&&!props.hasMedia)
+const showDemo=ref(false)
+const demo=computed(()=>showDemo.value&&!props.courseId&&!props.hasMedia)
+watch(()=>props.hasMedia,()=>{showDemo.value=false})
 const sample:Question[]=[
  {id:'demo-1',nodeTitle:'增长量与增长率',kind:'single',title:'增长量',prompt:'体重从 160 斤增加到 192 斤，增长量是多少？',options:['20%','32 斤','160 斤','192 斤'],scenario:'adapted'},
  {id:'demo-2',nodeTitle:'增长量与增长率',kind:'single',title:'图表应用',prompt:'根据图表，2025 年销量比 2024 年增长了百分之多少？',options:['16.7%','20%','25%','30%'],scenario:'adapted',diagram:{kind:'bar',title:'某商店销量（示例数据）',unit:'万件',values:[{label:'2023 年',value:120},{label:'2024 年',value:150},{label:'2025 年',value:180}]}},
@@ -67,7 +69,7 @@ async function refresh(version:number){
  try{const data=await api('');if(version!==epoch)return;sets.value=data;if(data[0])await restore(data[0],version)}
  catch{if(version===epoch){busy.value=false;error.value='暂时无法读取已保存的练习。'}}
 }
-watch(()=>props.courseId,()=>{epoch++;if(timer)clearTimeout(timer);busy.value=false;pending.value=false;active.value=null;sets.value=[];feedback.value={};index.value=0;error.value='';scope.value='';session.value='';if(props.courseId)void refresh(epoch)}, {immediate:true})
+watch(()=>props.courseId,()=>{epoch++;if(timer)clearTimeout(timer);busy.value=false;pending.value=false;active.value=null;sets.value=[];feedback.value={};index.value=0;error.value='';scope.value='';session.value='';showDemo.value=false;if(props.courseId)void refresh(epoch)}, {immediate:true})
 onBeforeUnmount(()=>{epoch++;if(timer)clearTimeout(timer)})
 function poll(id:string,version:number,course:string,started:number){
  timer=setTimeout(async()=>{
@@ -107,9 +109,10 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
 </script>
 <template>
  <div class="practice">
-  <div class="practice-heading"><div><span class="eyebrow">LEARN BY DOING</span><h3>AI 练习</h3></div><span class="practice-demo">{{ demo?'静态演示':'知识点练习' }}</span></div>
+  <div class="practice-heading"><div><span class="eyebrow">LEARN BY DOING</span><h3>AI 练习</h3></div><span class="practice-demo">{{ demo?'静态演示':courseId?'知识点练习':'未选择课程' }}</span></div>
   <p class="practice-intro">点击选项，立即查看对错与解析。</p>
-  <div v-if="!demo" class="practice-settings">
+  <button v-if="!courseId&&!hasMedia" type="button" class="practice-secondary" @click="showDemo=!showDemo;feedback={};index=0">{{ demo?'关闭示例题':'查看示例题' }}</button>
+  <div v-if="courseId&&!demo" class="practice-settings">
    <label>练习范围<select v-model="scope" :disabled="busy"><option value="">整课知识点</option><option v-for="node in nodes" :key="node.id" :value="node.id">{{ node.title }}</option></select></label>
    <label>题量<select v-model.number="count" :disabled="busy"><option :value="0">智能推荐</option><option v-for="n in [3,5,10]" :key="n" :value="n">{{ n }} 道</option></select></label>
    <label>难度<select v-model="difficulty" :disabled="busy"><option value="basic">基础巩固</option><option value="application">应用练习</option><option value="advanced">进阶挑战</option></select></label>
@@ -118,7 +121,7 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
   <label v-if="sets.length" class="saved-set">已保存的练习<select :value="active?.id" :disabled="busy||pending" @change="switchSet(($event.target as HTMLSelectElement).value)"><option v-for="set in sets" :key="set.id" :value="set.id">{{ set.title }} · {{ set.status==='completed'?'已生成':set.status==='failed'?'失败':'生成中' }} · {{ set.id.slice(0,6) }}</option></select></label>
   <p v-if="error" class="practice-error" role="alert">{{ error }}</p>
   <p v-if="busy" class="practice-intro" role="status">正在根据知识点出题并检查答案，完成后自动显示。</p>
-  <div v-else-if="!questions.length" class="practice-empty">{{ active?.status==='completed'?'本次没有通过检查的题目，可调整范围或难度后再试。':!mindMap?'分析完成并生成思维导图后，就可以练习。':'选择范围、题量和难度，生成本课练习。' }}</div>
+  <div v-else-if="!questions.length" class="practice-empty">{{ !courseId&&!hasMedia?'请先选择并分析视频，或从历史记录打开课程，随后显示对应练习。':active?.status==='completed'?'本次没有通过检查的题目，可调整范围或难度后再试。':!mindMap?'分析完成并生成思维导图后，就可以练习。':'选择范围、题量和难度，生成本课练习。' }}</div>
   <template v-if="questions.length&&question&&!busy">
    <div class="practice-course"><span class="practice-course-icon"><StudyIcon name="practice"/></span><div><strong>{{ demo?'增长量与增长率':active?.title }}</strong><span>{{ questions.length }} 道题 · 按知识点生成 · 选择后自动判分</span></div></div>
    <p v-if="active?.rejectedCount" class="practice-intro">{{ active.rejectedCount }} 道题未通过检查，已剔除。</p>

@@ -27,6 +27,18 @@ public interface MediaAnalyzer {
         return analyze(fileId, mode, visualAnalysisMode, coarseChangePercent);
     }
 
+    default TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode,
+            double coarseChangePercent, int coarseSampleSeconds, String subtitleCallbackToken) {
+        return subtitleCallbackToken == null ? analyze(fileId, mode, visualAnalysisMode, coarseChangePercent)
+            : analyze(fileId, mode, visualAnalysisMode, coarseChangePercent, subtitleCallbackToken);
+    }
+
+    default TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualMode,
+            double threshold, int sampleSeconds, String callbackToken, IgnoreRegion region) {
+        if (region != null) throw new UnsupportedOperationException("Ignored regions are unavailable");
+        return analyze(fileId, mode, visualMode, threshold, sampleSeconds, callbackToken);
+    }
+
     default java.util.Map<String,Object> generateSubtitles(String language,
         List<TranscriptionController.TranscriptSegment> segments, List<TranscriptionController.PageGroup> pageGroups,
         String targetLanguage) {
