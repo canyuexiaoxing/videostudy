@@ -14,6 +14,26 @@ from compatible_playback import router as compatibility_router
 app.include_router(compatibility_router)
 
 
+class QuestionChatRequest(BaseModel):
+    context: dict
+    history: list[dict] = []
+    message: str
+
+
+@app.post('/question-chat')
+def question_chat(request: QuestionChatRequest):
+    from question_chat import reply_to_question
+    from urllib.error import HTTPError, URLError
+    try:
+        return reply_to_question(request.context, request.history, request.message)
+    except HTTPError as error:
+        raise HTTPException(502, 'chat_provider_failed') from error
+    except (URLError, TimeoutError, RuntimeError) as error:
+        raise HTTPException(503, 'chat_provider_unavailable') from error
+    except ValueError as error:
+        raise HTTPException(422, 'invalid_chat_reply') from error
+
+
 class PracticeRequest(BaseModel):
     nodes: list[dict]
     pages: list[dict] = []

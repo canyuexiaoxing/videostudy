@@ -88,8 +88,8 @@ public class PracticeController {
         if(result.pageGroups()!=null)for(var page:result.pageGroups()){
             if(page.lastFrameTimeMs()<first||page.firstFrameTimeMs()>last)continue;
             var analysis=page.imageAnalysis();if(analysis==null||!"completed".equals(analysis.status()))analysis=page.textAnalysis();
-            if(analysis!=null&&"completed".equals(analysis.status()))pages.add(Map.of("pageIndex",page.pageIndex(),"title",Objects.toString(analysis.title(),""),"content",Objects.toString(analysis.content(),"")));
-            else if(page.ocrLines()!=null)pages.add(Map.of("pageIndex",page.pageIndex(),"ocr",page.ocrLines().stream().map(OcrLine::text).toList()));
+            if(analysis!=null&&"completed".equals(analysis.status()))pages.add(Map.of("firstFrameTimeMs",page.firstFrameTimeMs(),"lastFrameTimeMs",page.lastFrameTimeMs(),"pageIndex",page.pageIndex(),"title",Objects.toString(analysis.title(),""),"content",Objects.toString(analysis.content(),"")));
+            else if(page.ocrLines()!=null)pages.add(Map.of("firstFrameTimeMs",page.firstFrameTimeMs(),"lastFrameTimeMs",page.lastFrameTimeMs(),"pageIndex",page.pageIndex(),"ocr",page.ocrLines().stream().map(OcrLine::text).toList()));
         }
         return Map.of("nodes",nodes,"pages",pages,"count",request.count()==0?Math.min(10,nodes.size()*2):request.count(),"difficulty",request.difficulty());
     }

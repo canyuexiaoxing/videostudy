@@ -111,6 +111,38 @@ public class PracticeStore {
             return feedback(q,recorded);
         });
     }
+    public void requireChatSession(String analysis,String set,String session,String client,String questionId) {
+        requireSession(analysis,set,session,client);
+        if(questions(owned(analysis,set)).stream().noneMatch(q->questionId.equals(q.get("id"))))
+            throw new IllegalArgumentException("question_not_found");
+    }
+    @SuppressWarnings("unchecked") public Map<String,Object> chatContext(String analysis,String set,String session,String client,String questionId) {
+        requireChatSession(analysis,set,session,client,questionId);
+        var job=owned(analysis,set);
+        var q=questions(job).stream().filter(item->questionId.equals(item.get("id"))).findFirst().orElseThrow();
+        var answers=jdbc.query("SELECT selected_index FROM practice_answers WHERE session_id=? AND question_id=?",(r,n)->r.getInt(1),session,questionId);
+        if(answers.isEmpty())throw new IllegalArgumentException("answer_required");
+        var evidence=new LinkedHashMap<String,Object>();
+        for(var node:(List<Map<String,Object>>)job.source().getOrDefault("nodes",List.of())) {
+            if(!Objects.equals(q.get("nodeId"),node.get("id")))continue;
+            for(var ref:(List<Map<String,Object>>)node.getOrDefault("evidenceRefs",List.of()))evidence.put((String)ref.get("sourceId"),ref);
+        }
+        var context=new LinkedHashMap<String,Object>();
+        context.put("question",q);context.put("feedback",feedback(q,answers.getFirst()));
+        context.put("evidence",new ArrayList<>(evidence.values()));
+        var refs=new ArrayList<Map<String,Object>>();evidence.values().forEach(ref->refs.add((Map<String,Object>)ref));
+        String text=Objects.toString(q.get("prompt"),"")+Objects.toString(q.get("nodeTitle"),"")+refs.stream().map(ref->Objects.toString(ref.get("quote"),"")).reduce("",String::concat);
+        var terms=new HashSet<String>();String normalized=text.toLowerCase().replaceAll("[^\\p{L}\\p{N}]","");
+        for(int i=0;i<normalized.length()-1;i++)terms.add(normalized.substring(i,i+2));
+        var pages=(List<Map<String,Object>>)job.source().getOrDefault("pages",List.of());
+        context.put("pages",pages.stream().filter(page->{
+            if(page.get("firstFrameTimeMs") instanceof Number first && page.get("lastFrameTimeMs") instanceof Number last)
+                return refs.stream().anyMatch(ref->((Number)ref.get("startMs")).longValue()<=last.longValue()&&((Number)ref.get("endMs")).longValue()>=first.longValue());
+            String content=(Objects.toString(page.get("title"),"")+Objects.toString(page.get("content"),"")+Objects.toString(page.get("ocr"),"")).toLowerCase().replaceAll("[^\\p{L}\\p{N}]","");
+            return terms.stream().anyMatch(content::contains);
+        }).limit(6).toList());
+        return context;
+    }
     public Map<String,Object> session(String analysis,String setId,String session,String client) {
         requireSession(analysis,setId,session,client);
         var set=owned(analysis,setId);var byId=new HashMap<String,Map<String,Object>>();questions(set).forEach(q->byId.put((String)q.get("id"),q));

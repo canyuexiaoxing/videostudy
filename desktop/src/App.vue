@@ -980,8 +980,8 @@ onUnmounted(() => {
         <p class="player-caption"><StudyIcon name="lock" />{{ filename || '本地回放 · 分析后点击知识节点，回到老师的讲解现场' }}</p>
       </div>
       <details class="panel video-overview">
-        <summary><span class="video-overview-title"><StudyIcon name="spark" />AI 解读</span><span class="video-overview-hint">课程概括与重点回看</span><span class="video-overview-chevron" aria-hidden="true">⌄</span></summary>
-        <AiOverview :course-id="existingJobId" :ready="!!transcript.length" @seek="seekTo" />
+        <summary><span class="video-overview-title"><StudyIcon name="spark" />AI 解读</span><span class="video-overview-hint">课程整体分析</span><span class="video-overview-chevron" aria-hidden="true">⌄</span></summary>
+        <AiOverview :course-id="existingJobId" :ready="!!transcript.length" />
       </details>
       <div class="panel results-panel">
         <div class="section-title"><h2>课程依据</h2><span>{{ transcript.length }} 段字幕 · {{ pageGroups.length ? `${pageGroups.length} 页课件` : `${visualEvidence.length} 张候选画面` }}</span></div>

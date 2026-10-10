@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import StudyIcon from './StudyIcon.vue'
+import QuestionChat from './QuestionChat.vue'
 import PracticeFigure, { type Diagram } from './PracticeFigure.vue'
 import { reviewTargets } from './practiceReview'
 import type { ReviewCitation } from './practiceReview'
@@ -29,6 +30,7 @@ const questions=computed(()=>demo.value?sample:active.value?.questions??[])
 const question=computed(()=>questions.value[index.value])
 const current=computed(()=>question.value?feedback.value[question.value.id]:undefined)
 const reviewCard=ref<HTMLElement|null>(null)
+const chatOpen=ref(false)
 const targets=computed(()=>current.value&&!current.value.correct&&question.value
   ?reviewTargets(current.value.citations,question.value.nodeTitle,current.value.takeaway,current.value.selectedReason):[])
 const preferredTarget=computed(()=>targets.value[0])
@@ -38,7 +40,7 @@ const answered=computed(()=>questions.value.filter(q=>feedback.value[q.id]).leng
 const correct=computed(()=>questions.value.filter(q=>feedback.value[q.id]?.correct).length)
 const nodes=computed(()=>{const list:Node[]=[];function walk(n:Node){list.push(n);n.children?.forEach(walk)};props.mindMap?.root.children?.forEach(walk);return list})
 const letters=['A','B','C','D']
-watch(index,()=>chartDialog.value?.close())
+watch([index,session,active],()=>{chatOpen.value=false;chartDialog.value?.close()})
 watch(()=>props.selectedNodeId,id=>{if(id)scope.value=id})
 async function api(path:string,method='GET',body?:unknown,course=props.courseId){
  const response=await fetch(`${base}/${course}/practice${path}`,{method,headers:{'Content-Type':'application/json','X-Practice-Client':client!},body:body===undefined?undefined:JSON.stringify(body)})
@@ -142,6 +144,10 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
       </template>
       <p v-else class="review-hint">{{ demo?'示例题没有对应视频片段。':'这道题暂时没有可用的课程时间依据，无法精准定位；可以先复习上面的解法。' }}</p>
      </section><div v-if="current.correct" class="practice-citations"><button v-for="ref in current.citations" :key="ref.sourceId" type="button" @click="emit('seek',ref.startMs,ref.sourceId)">回看 {{ time(ref.startMs) }} · {{ ref.quote }}</button></div></div>
+    <section v-if="current&&!demo&&courseId&&active&&session" class="practice-chat-entry">
+     <button class="practice-secondary" type="button" :aria-expanded="chatOpen" @click="chatOpen=!chatOpen">{{ chatOpen?'收起本题答疑':'本题答疑 · 解释我的思路' }}</button>
+     <QuestionChat v-if="chatOpen" :key="`${courseId}:${active.id}:${question.id}:${session}`" :course-id="courseId" :set-id="active.id" :question-id="question.id" :session-id="session" :client="client!" :playback-ready="playbackReady" @seek="(ms,id)=>emit('seek',ms,id)"/>
+    </section>
     <div class="practice-actions"><button class="practice-secondary" type="button" :disabled="index===0||pending" @click="index--">上一题</button><button v-if="index<questions.length-1" class="practice-primary" type="button" :disabled="pending" @click="index++">下一题 →</button><button v-else class="practice-secondary" type="button" :disabled="pending" @click="reset">重新练习</button></div>
    </article>
    <div v-if="answered===questions.length" class="practice-summary" role="status"><StudyIcon name="practice"/><div><strong>本轮完成 · {{ correct }} / {{ questions.length }} 题正确</strong><p>{{ wrongQuestions.length ? `本轮有 ${wrongQuestions.length} 道错题，可以按知识点回看讲解。` : '本轮全部答对，可以尝试更有挑战的练习。' }}</p><div v-if="wrongQuestions.length" class="review-wrong-list"><button v-for="item in wrongQuestions" :key="item.question.id" type="button" @click="openWrongQuestion(item.index)">第 {{ item.index+1 }} 题 · {{ item.question.nodeTitle }} <span>查看错题 →</span></button></div></div></div>

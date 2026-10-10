@@ -5,6 +5,7 @@ import java.util.Map;
 
 @FunctionalInterface
 public interface MediaAnalyzer {
+    default Map<String,Object> chatQuestion(Map<String,Object> source) { throw new UnsupportedOperationException("Chat unavailable"); }
     default Map<String,Object> generatePractice(Map<String,Object> source) { throw new UnsupportedOperationException("Practice unavailable"); }
     default Map<String,Object> generateOverview(List<TranscriptionController.TranscriptSegment> segments,
         List<TranscriptionController.PageGroup> pages) { throw new UnsupportedOperationException("Overview unavailable"); }
