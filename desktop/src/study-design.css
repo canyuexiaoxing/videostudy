@@ -1,7 +1,7 @@
 :root { color: #172344; background: #f3f6ff; }
 body { background: radial-gradient(ellipse at 10% 0%, #eaf0ff, transparent 55%), #f5f7ff; }
 .study-app { display: grid; grid-template-columns: minmax(0, 1.52fr) minmax(440px, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 16px; width: 100%; max-width: 2560px; min-height: 100vh; margin: auto; padding: 0 22px 28px; }
-.app-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 22px; min-height: 64px; margin: 0; border-bottom: 1px solid #e6ebf5; }
+.app-header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 22px; row-gap: 10px; min-height: 64px; margin: 0; border-bottom: 1px solid #e6ebf5; }
 .brand { display: flex; flex: none; align-items: baseline; color: #162140; font-size: 23px; font-weight: 850; letter-spacing: -.055em; }
 .brand-video { color: #315df5; }
 .header-context { display: flex; min-width: 0; align-items: center; gap: 18px; color: #647296; font-size: 13px; }
@@ -427,3 +427,12 @@ body { background: radial-gradient(ellipse at 10% 0%, #eaf0ff, transparent 55%),
 .player-tools .workspace-entry { display:inline-flex; align-items:center; gap:6px; border-color:#ccd9ff; color:#315dec; background:#f0f4ff; }
 .player-tools .workspace-entry svg { width:15px; height:15px; }
 .player-tools .workspace-entry .workspace-entry-dot { width:6px; height:6px; border-radius:50%; background:#4166ed; }
+
+.example-timeline{padding:16px 19px;border-top:1px solid #e7edf8;background:#fafcff}.example-timeline-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.example-timeline h3{margin:0;font-size:14px;color:#2e446f}.example-timeline-heading>span,.example-timeline>p{font-size:11px;color:#798baa}.example-timeline>p{margin:7px 0 10px}.example-timeline>button{display:flex;align-items:center;gap:12px;width:100%;padding:11px 4px;border:0;border-top:1px solid #e9eef7;background:transparent;color:#435a83;text-align:left;font-size:12px;cursor:pointer}.example-timeline>button:hover{color:#315dec;background:#f1f5ff}.example-timeline>button>.time{flex:none}.example-timeline>button>span:nth-child(2){flex:1;min-width:0;overflow-wrap:anywhere}.example-timeline svg{width:15px;height:15px;flex:none}.example-timeline>button:focus-visible{outline:2px solid #7194f4;outline-offset:2px}
+
+/* Keep the knowledge canvas drawable when a long example timeline is present. */
+.study-app .study-sidebar .mind-map-panel:has(.example-timeline) { overflow: auto; }
+.study-app .study-sidebar .mind-map-panel:has(.example-timeline) .mind-map-heading,
+.study-app .study-sidebar .mind-map-panel:has(.example-timeline) .example-timeline { flex: none; }
+.study-app .study-sidebar .mind-map-panel:has(.example-timeline) .map-canvas-shell { flex: 0 0 clamp(380px, 55vh, 620px); min-height: 380px; }
+.study-app .study-sidebar .mind-map-panel:has(.example-timeline) .mind-map-canvas { min-height: 300px; }

@@ -15,6 +15,13 @@ final class MindMapValidator {
         var known = new HashMap<String, TranscriptionController.TranscriptSegment>();
         for (var item : segments) known.put(item.id(), item);
         if (!validTree(map.root(), known)) return false;
+        if (map.examples() != null) {
+            if (map.examples().size() > 4096) return false;
+            for (var example : map.examples()) {
+                if (example == null || !validTree(example, known) || example.evidenceRefs().isEmpty() || !example.children().isEmpty()) return false;
+                if (example.endMs() != example.evidenceRefs().stream().mapToLong(TranscriptionController.MindMapEvidence::endMs).max().orElse(0)) return false;
+            }
+        }
         if ("completed".equals(map.status()) && map.root().children().isEmpty()) return false;
         return !"empty".equals(map.status()) || map.root().children().isEmpty();
     }

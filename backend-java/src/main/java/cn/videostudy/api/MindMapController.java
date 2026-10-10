@@ -40,7 +40,8 @@ public class MindMapController {
             if (!MindMapValidator.isGrounded(generated, result.segments()))
                 throw new IllegalStateException("Agent returned an ungrounded mind map");
             if (refresh && previous != null && "completed".equals(previous.status()) &&
-                !"completed".equals(generated.status()))
+                !"completed".equals(generated.status()) &&
+                !("empty".equals(generated.status()) && generated.examples() != null && !generated.examples().isEmpty()))
                 throw new IllegalStateException("Refreshed mind map is incomplete; preserving previous result");
             store.saveMindMap(id, generated);
             return ResponseEntity.ok(generated);

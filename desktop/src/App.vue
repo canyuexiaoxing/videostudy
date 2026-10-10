@@ -3,6 +3,8 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import MindMapCanvas from './MindMapCanvas.vue'
 import StudyIcon from './StudyIcon.vue'
 import ChapterPlayer from './ChapterPlayer.vue'
+import AnalysisProgressBar from './AnalysisProgress.vue'
+import type { AnalysisProgress } from './analysisProgress'
 import VideoWorkspace from './VideoWorkspace.vue'
 import { normalizeRegion } from './videoRegion'
 import type { VideoRegion } from './videoRegion'
@@ -28,7 +30,7 @@ type PageGroup = { pageIndex: number; firstFrameTimeMs: number; lastFrameTimeMs:
   memberFrameTimesMs: number[]; representativeFrameTimesMs: number[];
   decision: string; decisionReason: string; ocrLines: OcrLine[]; imageAnalysis?: ImageAnalysis; textAnalysis?: ImageAnalysis }
 type Review = { status: string; resampledTimesMs: number[]; concerns: string[] }
-type TranscriptionJob = { id: string; status: string; result?: { language: string; segments: Segment[]; visualEvidence?: VisualEvidence[]; pageGroups?: PageGroup[]; mindMap?: MindMapResult; visualAnalysisMode?: 'ocr_only' | 'both'; ocrModelId?: string; imageModelId?: string; review?: Review }; error?: string }
+type TranscriptionJob = { id: string; status: string; progress?: AnalysisProgress | null; result?: { language: string; segments: Segment[]; visualEvidence?: VisualEvidence[]; pageGroups?: PageGroup[]; mindMap?: MindMapResult; visualAnalysisMode?: 'ocr_only' | 'both'; ocrModelId?: string; imageModelId?: string; review?: Review }; error?: string }
 type RightTab = 'map' | 'practice' | 'transcript' | 'slides' | 'notes' | 'history'
 type StudyNote = { id: string; scope: string; timeMs: number; text: string; createdAt: string }
 type HistoryStatus = 'unknown' | 'queued' | 'processing' | 'completed' | 'failed'
@@ -213,6 +215,8 @@ async function generateCompatibility() {
   }
 }
 const filename = ref('')
+const analysisState = ref('')
+const analysisProgress = ref<AnalysisProgress|null>(null)
 const status = ref('请选择本地视频')
 const transcript = ref<Segment[]>([])
 const visualEvidence = ref<VisualEvidence[]>([])
@@ -447,6 +451,8 @@ function historyStatusLabel(status: HistoryStatus) {
 }
 
 function clearLoadedAnalysis() {
+  analysisState.value = ''
+  analysisProgress.value = null
   clearSubtitleJob()
   sourceLanguage.value = 'und'
   transcript.value = []
@@ -541,6 +547,8 @@ async function waitForAnalysis(id: string, request: RequestTicket) {
           analysisHistory.value.find(entry => entry.id === id)?.status !== job.status) {
         rememberAnalysis(id, job.status as HistoryStatus)
       }
+      analysisState.value = job.status
+      analysisProgress.value = job.progress ?? null
       status.value = job.status === 'queued' ? '等待分析任务…' : '正在分析…'
       if (job.status === 'failed') {
         failedJobId.value = id
@@ -598,6 +606,8 @@ async function runTranscription() {
   review.value = null
   failedJobId.value = ''
   setAnalysisId('')
+  analysisState.value = 'uploading'
+  analysisProgress.value = null
   status.value = '正在临时上传视频…'
   try {
     const form = new FormData()
@@ -617,10 +627,12 @@ async function runTranscription() {
     localStorage.setItem('lastAnalysisId', created.id)
     rememberAnalysis(created.id, 'queued', file.name)
     readSubtitleJob(created.id)
+    analysisState.value = created.status
     await waitForAnalysis(created.id, request)
   } catch (cause) {
     if (!request.current()) return
     error.value = cause instanceof Error ? cause.message : String(cause)
+    if (analysisState.value !== 'failed') analysisState.value = 'interrupted'
     status.value = '分析未完成'
   } finally {
     if (request.current()) isAnalysisPending.value = false
@@ -640,6 +652,7 @@ async function loadExistingAnalysis() {
   error.value = ''
   status.value = '正在读取已保存的分析结果…'
   clearLoadedAnalysis()
+  analysisState.value = 'reading'
   let playbackWarning = ''
   if (selectedFile.value && !confirmedMedia.value) {
     playbackWarning = mediaBindingState(localStorage.getItem(`analysisMedia:${id}`), selectedFile.value.size, selectedFingerprint.value) === 'unverified'
@@ -657,6 +670,7 @@ async function loadExistingAnalysis() {
   } catch (cause) {
     if (!request.current()) return
     error.value = cause instanceof Error ? cause.message : String(cause)
+    if (analysisState.value !== 'failed') analysisState.value = 'interrupted'
     status.value = '未能读取分析结果'
   } finally {
     if (request.current()) isAnalysisPending.value = false
@@ -698,6 +712,8 @@ async function deleteHistory(entry: HistoryEntry) {
     studyNotes.value = studyNotes.value.filter(note => note.scope !== entry.id)
     localStorage.setItem('studyNotes:v1', JSON.stringify(studyNotes.value))
     if (existingJobId.value === entry.id) {
+      analysisState.value = ''
+      analysisProgress.value = null
       clearSubtitleJob()
       invalidateAnalysisRequests()
       setAnalysisId('')
@@ -725,6 +741,8 @@ async function retryAnalysis() {
   const request = analysisRequests.begin()
   isAnalysisPending.value = true
   error.value = ''
+  analysisState.value = 'queued'
+  analysisProgress.value = null
   status.value = '正在重新分析保留的上传文件…'
   try {
     const id = failedJobId.value
@@ -736,6 +754,7 @@ async function retryAnalysis() {
   } catch (cause) {
     if (!request.current()) return
     error.value = cause instanceof Error ? cause.message : String(cause)
+    if (analysisState.value !== 'failed') analysisState.value = 'interrupted'
     status.value = '分析未完成'
   } finally {
     if (request.current()) isAnalysisPending.value = false
@@ -884,6 +903,7 @@ onUnmounted(() => {
         <label class="file-picker"><StudyIcon name="upload" />选择本地视频 <input type="file" accept="video/*,audio/*" @change="chooseVideo" /></label>
         <button v-if="selectedFile && !transcript.length" class="run" type="button" :disabled="isAnalysisPending" @click="runTranscription">{{ isAnalysisPending ? '处理中…' : '开始分析' }}</button>
       </div>
+      <AnalysisProgressBar :state="analysisState" :progress="analysisProgress" />
     </header>
     <aside class="study-sidebar" aria-label="学习工具">
       <div class="sidebar-heading"><div><span class="eyebrow">YOUR STUDY SPACE</span><h2>学习工作台</h2></div><span class="workspace-mark"><StudyIcon name="spark" />跟着课程，找到依据</span></div>
@@ -897,9 +917,9 @@ onUnmounted(() => {
       </div>
       <section v-show="rightTab === 'map'" id="tab-map" class="sidebar-pane" role="tabpanel" aria-label="思维导图">
         <div v-if="mindMap" class="mind-map-panel">
-          <div class="mind-map-heading"><div><span class="eyebrow">KNOWLEDGE MAP</span><h2>知识导图</h2><p>点击节点，回看课程中的对应讲解</p></div>
+          <div class="mind-map-heading"><div><span class="eyebrow">KNOWLEDGE MAP</span><h2>知识导图</h2><p>核心知识看导图，例题按时间回看</p></div>
             <span class="mind-map-badge">{{ mindMap.root.children.length }} 个主题</span></div>
-          <p v-if="mindMap.status === 'empty'" class="status">没有可用的语音转写，暂时无法生成有出处的导图。</p>
+          <p v-if="mindMap.status === 'empty'" class="status">{{ mindMap.examples?.length ? '本段课程未提取到核心知识，可通过下方例题节点回看。' : '没有可用的核心知识依据，暂时无法生成导图。' }}</p>
           <p v-else-if="mindMap.status === 'failed'" class="status">{{ mindMap.root.children.length ? '部分导图内容未生成；已显示的节点仍可查看原文和回放。' : '导图尚未生成；原转写和页面分析仍可查看，可以重试。' }}</p>
           <div v-if="selectedMindNode?.evidenceRefs.length" class="mind-source">
             <strong>{{ selectedMindNode.title }} · 课程依据</strong>
@@ -908,6 +928,11 @@ onUnmounted(() => {
             </button>
           </div>
           <MindMapCanvas v-if="mindMap.root.children.length" :root="mindMap.root" @select="selectMindMapNode" />
+          <section v-if="mindMap.examples?.length" class="example-timeline" aria-label="例题时间节点">
+            <div class="example-timeline-heading"><h3>例题时间节点</h3><span>{{ mindMap.examples.length }} 个讲解片段</span></div>
+            <p>例题独立列出，点击回看对应讲解。</p>
+            <button v-for="example in mindMap.examples" :key="example.id" type="button" @click="seekTo(example.evidenceRefs[0]?.startMs ?? example.startMs, example.evidenceRefs[0]?.sourceId)"><span class="time">{{ formatTime(example.startMs) }}</span><span>{{ example.title }}</span><StudyIcon name="play" /></button>
+          </section>
         </div>
         <div v-else class="sidebar-empty">
           <div class="map-preview" aria-hidden="true"><span class="preview-root"><StudyIcon name="play" />课程</span><i></i><div><span><StudyIcon name="map" />知识脉络</span><span><StudyIcon name="transcript" />原文依据</span><span><StudyIcon name="notes" />学习笔记</span></div></div>

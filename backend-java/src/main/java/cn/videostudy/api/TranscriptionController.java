@@ -117,7 +117,8 @@ public class TranscriptionController {
 
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable String id) {
-        return store.find(id).<ResponseEntity<?>>map(ResponseEntity::ok)
+        return store.find(id).<ResponseEntity<?>>map(job -> ResponseEntity.ok(new TranscriptionJob(
+            job.id(), job.status(), job.result(), job.error(), readProgress(job.id(), job.status()))))
             .orElseGet(() -> ResponseEntity.status(404).body(Map.of("error", "job_not_found")));
     }
 
@@ -209,6 +210,7 @@ public class TranscriptionController {
         }
         for (int attempt = 1; ; attempt++) {
             try {
+                clearProgress(id);
                 var result = ignoredRegion == null ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken)
                     : agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken, ignoredRegion);
                 if (result != null && analysisMode.equals("full")) {
@@ -228,6 +230,34 @@ public class TranscriptionController {
                 Thread.sleep(500);
             }
         }
+    }
+
+    private Path progressPath(String id) {
+        return keyframeDirectory == null ? null : Path.of(keyframeDirectory).toAbsolutePath().normalize()
+            .resolve(UUID.fromString(id).toString()).resolve(".analysis").resolve("progress.json");
+    }
+
+    private void clearProgress(String id) {
+        try { var path = progressPath(id); if (path != null) Files.deleteIfExists(path); }
+        catch (IOException | IllegalArgumentException error) { log.debug("Unable to reset task progress {}", id); }
+    }
+
+    private AnalysisProgress readProgress(String id, String status) {
+        if (!List.of("processing", "failed").contains(status)) return null;
+        try {
+            var path = progressPath(id);
+            if (path == null || !Files.isRegularFile(path) || Files.size(path) > 4096) return null;
+            var json = new com.fasterxml.jackson.databind.ObjectMapper().readTree(Files.readString(path));
+            if (json == null || !json.isObject() || !json.has("stage") || !json.get("stage").isTextual()) return null;
+            for (var key : List.of("completedStages", "totalStages", "completedUnits", "totalUnits"))
+                if (!json.has(key) || !json.get(key).isIntegralNumber() || !json.get(key).canConvertToInt()) return null;
+            var stage = json.get("stage").textValue();
+            int completed = json.get("completedStages").intValue(), total = json.get("totalStages").intValue();
+            int units = json.get("completedUnits").intValue(), count = json.get("totalUnits").intValue();
+            var stages = Map.of("media", 0, "coverage", 1, "grouping", 2, "pages", 3, "materials", 4, "saving", 4);
+            if (!stages.containsKey(stage) || completed != stages.get(stage) || total != 5 || count < 0 || units < 0 || units > count) return null;
+            return new AnalysisProgress(stage, completed, total, units, count);
+        } catch (IOException | IllegalArgumentException error) { return null; }
     }
 
     private void deleteTaskDirectory(String id, boolean checkpointsOnly) throws IOException {
@@ -276,7 +306,10 @@ public class TranscriptionController {
     public record MindMapNode(String id, String title, long startMs, long endMs,
                               List<MindMapEvidence> evidenceRefs, List<MindMapNode> children) {}
     public record MindMapResult(String status, String provider, String modelId, String promptVersion,
-                                String createdAt, MindMapNode root) {
+                                String createdAt, MindMapNode root, List<MindMapNode> examples) {
+        public MindMapResult(String status, String provider, String modelId, String promptVersion, String createdAt, MindMapNode root) {
+            this(status, provider, modelId, promptVersion, createdAt, root, null);
+        }
         public MindMapResult(String status, String modelId, String promptVersion, MindMapNode root) {
             this(status, null, modelId, promptVersion, null, root);
         }
@@ -333,5 +366,10 @@ public class TranscriptionController {
             this(language, segments, visualEvidence, ocrModelId, imageModelId, review, null, null, null, null, null, null);
         }
     }
-    public record TranscriptionJob(String id, String status, TranscriptResult result, String error) {}
+    public record AnalysisProgress(String stage, int completedStages, int totalStages, int completedUnits, int totalUnits) {}
+    public record TranscriptionJob(String id, String status, TranscriptResult result, String error, AnalysisProgress progress) {
+        public TranscriptionJob(String id, String status, TranscriptResult result, String error) {
+            this(id, status, result, error, null);
+        }
+    }
 }

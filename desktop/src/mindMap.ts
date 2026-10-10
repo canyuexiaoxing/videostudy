@@ -22,6 +22,7 @@ export type MindMapResult = {
   promptVersion: string
   createdAt: string
   root: MindMapNode
+  examples?: MindMapNode[] | null
 }
 
 export type CanvasNode = {

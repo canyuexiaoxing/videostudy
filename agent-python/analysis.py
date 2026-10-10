@@ -14,8 +14,9 @@ from slide_grouping import GROUPING_VERSION, group_pages
 from transcription import transcribe_file
 from visual_evidence import OCR_MODEL_ID, VisualOcrWorker
 from checkpoints import Checkpoints
+from analysis_progress import AnalysisProgress
 from ignored_region import normalize_region
-from mind_map import PROMPT_VERSION as MAP_VERSION
+from mind_map import CACHE_CONTEXT_PROMPT_VERSION as MAP_VERSION
 from page_understanding import PAGE_PROMPT_VERSION
 from agent_review import PROMPT_VERSION as REVIEW_VERSION
 from subtitle_delivery import publish_subtitle_source
@@ -50,6 +51,8 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
         raise FileNotFoundError("uploaded media not found")
 
     keyframe_dir = Path(os.environ.get("KEYFRAME_DIR", "../.local/keyframes")).resolve() / file_id
+    progress = AnalysisProgress(keyframe_dir / ".analysis")
+    progress.enter("media", 0, 2)
     started = perf_counter()
     timings = {}
     metadata = media_path.stat()
@@ -68,6 +71,10 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
         before = perf_counter()
         value = function(*args)
         timings[name] = round((perf_counter() - before) * 1000)
+        if name in ('transcription', 'visualOcr'):
+            progress.unit_done(name, 'media')
+        elif name in ('overview', 'mindMap') and (not isinstance(value, dict) or value.get('status') != 'failed'):
+            progress.unit_done(name, 'materials')
         return value
     try:
         with VisualOcrWorker(media_path, keyframe_dir,
@@ -82,6 +89,7 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
             else:
                 transcript = timed("transcription", cached, 'transcription', {}, lambda: transcribe_file(file_id))
                 visuals = timed("visualOcr", cached, 'visualOcr', {}, visual_worker.analyze)
+            progress.enter("coverage", 1)
             before = perf_counter()
             def coverage():
                 return review_visual_coverage(
@@ -94,20 +102,28 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
             visuals, review = cached('coverageReview', {'speech': transcript, 'visuals': visuals}, coverage,
                 accept=lambda value: value[1].get('status') in ('completed', 'not_applicable'))
             timings["coverageReview"] = round((perf_counter() - before) * 1000)
+        progress.enter("grouping", 2)
         page_groups, transition_times = timed("pageGrouping", cached, 'pageGrouping',
             {'visuals': visuals, 'speech': transcript['segments']},
             lambda: group_pages(visuals, keyframe_dir, transcript['segments'], **({'ignore_region': ignore_region} if ignore_region else {})))
         before = perf_counter()
+        progress.enter("pages", 3, len(page_groups))
         if page_groups:
             by_time = {frame["frameTimeMs"]: frame for frame in visuals}
             with ThreadPoolExecutor(max_workers=max(1, int(os.environ.get("PAGE_CONCURRENCY", "5")))) as pool:
                 # map preserves order even when later pages finish first.
-                page_groups = list(pool.map(lambda page: cached(f'page:{page["pageIndex"]}',
-                    {'page': page, 'pages': page_groups, 'speech': transcript['segments']},
-                    lambda: analyze_page(page, page_groups, by_time, keyframe_dir,
-                                        transcript['segments'], visual_analysis_mode),
-                    accept=lambda result: (result.get('imageAnalysis') or result.get('textAnalysis') or {}).get('status') != 'failed'),
-                    page_groups))
+                def understand(page):
+                    result = cached(
+                        f'page:{page["pageIndex"]}',
+                        {'page': page, 'pages': page_groups, 'speech': transcript['segments']},
+                        lambda: analyze_page(page, page_groups, by_time, keyframe_dir,
+                                             transcript['segments'], visual_analysis_mode),
+                        accept=lambda value: (value.get('imageAnalysis') or value.get('textAnalysis') or {}).get('status') != 'failed',
+                    )
+                    if (result.get('imageAnalysis') or result.get('textAnalysis') or {}).get('status') != 'failed':
+                        progress.unit_done(str(page['pageIndex']), 'pages')
+                    return result
+                page_groups = list(pool.map(understand, page_groups))
         timings["pageUnderstanding"] = round((perf_counter() - before) * 1000)
         if subtitle_callback_token:
             try:
@@ -116,6 +132,9 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
             except Exception as error:
                 logging.getLogger(__name__).warning('Unable to schedule subtitle source: %s',
                                                     type(error).__name__)
+        pages_failed = any((page.get('imageAnalysis') or page.get('textAnalysis') or {}).get('status') == 'failed' for page in page_groups)
+        if not pages_failed:
+            progress.enter('materials', 4, 2)
         with ThreadPoolExecutor(max_workers=2) as pool:
             overview_job=pool.submit(timed,"overview",cached,'overview',
                 {'speech':transcript['segments'],'pages':page_groups},
@@ -124,6 +143,8 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
             map_job=pool.submit(timed,"mindMap",lambda:build_mind_map(transcript['segments'],page_groups,checkpoint=checkpoint))
             mind_map=map_job.result()
             overview=overview_job.result()
+        if not pages_failed and mind_map.get('status') != 'failed' and overview.get('status') != 'failed':
+            progress.enter('saving', 4)
         timings["total"] = round((perf_counter() - started) * 1000)
         return {
             "language": transcript["language"],
