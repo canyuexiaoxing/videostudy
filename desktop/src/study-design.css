@@ -436,3 +436,8 @@ body { background: radial-gradient(ellipse at 10% 0%, #eaf0ff, transparent 55%),
 .study-app .study-sidebar .mind-map-panel:has(.example-timeline) .example-timeline { flex: none; }
 .study-app .study-sidebar .mind-map-panel:has(.example-timeline) .map-canvas-shell { flex: 0 0 clamp(380px, 55vh, 620px); min-height: 380px; }
 .study-app .study-sidebar .mind-map-panel:has(.example-timeline) .mind-map-canvas { min-height: 300px; }
+
+.mind-map-heading-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+.expand-map-button { flex: none; padding: 6px 10px; border: 1px solid #dce5fb; border-radius: 8px; background: #f5f8ff; color: #315dec; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.expand-map-button:hover { border-color: #a9bef7; background: #ecf2ff; }
+.expand-map-button:focus-visible { outline: 2px solid #7194f4; outline-offset: 2px; }

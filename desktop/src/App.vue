@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import MindMapCanvas from './MindMapCanvas.vue'
+import MindMapDialog from './MindMapDialog.vue'
 import StudyIcon from './StudyIcon.vue'
 import ChapterPlayer from './ChapterPlayer.vue'
 import AnalysisProgressBar from './AnalysisProgress.vue'
 import type { AnalysisProgress } from './analysisProgress'
 import VideoWorkspace from './VideoWorkspace.vue'
-import { normalizeRegion } from './videoRegion'
-import type { VideoRegion } from './videoRegion'
+import { normalizeIgnoreSetting } from './videoRegionTimeline'
+import type { IgnoreSetting } from './videoRegionTimeline'
 import SubtitleSettings from './SubtitleSettings.vue'
 import AiOverview from './AiOverview.vue'
 import AiPractice from './AiPractice.vue'
@@ -88,19 +89,26 @@ const historyError = ref('')
 const selectedFile = ref<File | null>(null)
 const selectedFingerprint = ref('')
 const workspaceOpen = ref(false)
-const ignoredRegion = ref<VideoRegion|null>(null)
+const ignoredRegion = ref<IgnoreSetting|null>(null)
+const analysisRegion = ref<IgnoreSetting|null>(null)
 watch(selectedFingerprint, fingerprint => {
-  try { ignoredRegion.value = fingerprint ? normalizeRegion(JSON.parse(localStorage.getItem(`videoIgnoreRegion:v1:${fingerprint}`) ?? 'null')) : null }
+  try { ignoredRegion.value = fingerprint ? normalizeIgnoreSetting(JSON.parse(localStorage.getItem(`videoIgnoreRegion:v1:${fingerprint}`) ?? 'null')) : null }
   catch { ignoredRegion.value = null }
+  try { analysisRegion.value=fingerprint?normalizeIgnoreSetting(JSON.parse(localStorage.getItem(`videoAnalysisRegion:v1:${fingerprint}`)??'null'),true):null }catch {analysisRegion.value=null}
 })
-function saveIgnoredRegion(region: VideoRegion|null) {
-  ignoredRegion.value = normalizeRegion(region)
+function saveIgnoredRegion(region: IgnoreSetting|null) {
+  ignoredRegion.value = normalizeIgnoreSetting(region)
   if (!selectedFingerprint.value) return
   try {
     const key = `videoIgnoreRegion:v1:${selectedFingerprint.value}`
     if (ignoredRegion.value) localStorage.setItem(key, JSON.stringify(ignoredRegion.value))
     else localStorage.removeItem(key)
   } catch { /* Keep the current setting even when browser storage is unavailable. */ }
+}
+function saveAnalysisRegion(region:IgnoreSetting|null){
+ analysisRegion.value=normalizeIgnoreSetting(region,true)
+ if(!selectedFingerprint.value)return
+ try{const key=`videoAnalysisRegion:v1:${selectedFingerprint.value}`;if(analysisRegion.value)localStorage.setItem(key,JSON.stringify(analysisRegion.value));else localStorage.removeItem(key)}catch{}
 }
 function openVideoWorkspace() { video.value?.pause(); workspaceOpen.value = true }
 
@@ -223,6 +231,7 @@ const visualEvidence = ref<VisualEvidence[]>([])
 const pageGroups = ref<PageGroup[]>([])
 const mindMap = ref<MindMapResult | null>(null)
 const selectedMindNode = ref<MindNode | null>(null)
+const expandedMap = ref(false)
 const activeSegmentId = ref('')
 const generatingMindMap = ref(false)
 const isAnalysisPending = ref(false)
@@ -233,6 +242,7 @@ const advancedOpen = ref(false)
 const review = ref<Review | null>(null)
 const failedJobId = ref('')
 const existingJobId = ref('')
+watch([mindMap, selectedFile, existingJobId], () => { expandedMap.value = false })
 const confirmedMedia = computed(() => !!selectedFile.value && !checkingMedia.value && !!existingJobId.value &&
   mediaBindingState(localStorage.getItem(`analysisMedia:${existingJobId.value}`), selectedFile.value.size, selectedFingerprint.value) === 'matched')
 function setAnalysisId(id: string) {
@@ -615,7 +625,7 @@ async function runTranscription() {
     form.append('visualAnalysisMode', visualAnalysisMode.value)
     form.append('coarseChangePercent', coarseChangePercent.value)
     form.append('coarseSampleSeconds', String(coarseSampleSeconds.value))
-    if (ignoredRegion.value) form.append('ignoredRegion', JSON.stringify(ignoredRegion.value))
+    if (analysisRegion.value||ignoredRegion.value) form.append('ignoredRegion',JSON.stringify(analysisRegion.value?{analysisRegion:analysisRegion.value,ignoredRegion:ignoredRegion.value}:ignoredRegion.value))
     form.append('aiSubtitles', 'false')
     form.append('subtitleTargetLanguage', subtitleTargetLanguage.value)
     const response = await fetch(`${apiBase}/transcriptions`, { method: 'POST', body: form, signal: request.signal })
@@ -798,6 +808,11 @@ function seekTo(startMs: number, sourceId?: string) {
   void video.value.play().catch(() => { status.value = '已跳转，请点击播放器继续播放' })
 }
 
+function selectExpandedMindNode(node: MindNode) {
+  expandedMap.value = false
+  void selectMindMapNode(node)
+}
+
 async function selectMindMapNode(node: MindNode) {
   const id = existingJobId.value
   const fingerprint = selectedFingerprint.value
@@ -918,7 +933,7 @@ onUnmounted(() => {
       <section v-show="rightTab === 'map'" id="tab-map" class="sidebar-pane" role="tabpanel" aria-label="思维导图">
         <div v-if="mindMap" class="mind-map-panel">
           <div class="mind-map-heading"><div><span class="eyebrow">KNOWLEDGE MAP</span><h2>知识导图</h2><p>核心知识看导图，例题按时间回看</p></div>
-            <span class="mind-map-badge">{{ mindMap.root.children.length }} 个主题</span></div>
+            <div class="mind-map-heading-actions"><button v-if="mindMap.root.children.length" type="button" class="expand-map-button" @click="expandedMap = true">放大查看</button><span class="mind-map-badge">{{ mindMap.root.children.length }} 个主题</span></div></div>
           <p v-if="mindMap.status === 'empty'" class="status">{{ mindMap.examples?.length ? '本段课程未提取到核心知识，可通过下方例题节点回看。' : '没有可用的核心知识依据，暂时无法生成导图。' }}</p>
           <p v-else-if="mindMap.status === 'failed'" class="status">{{ mindMap.root.children.length ? '部分导图内容未生成；已显示的节点仍可查看原文和回放。' : '导图尚未生成；原转写和页面分析仍可查看，可以重试。' }}</p>
           <div v-if="selectedMindNode?.evidenceRefs.length" class="mind-source">
@@ -1005,7 +1020,7 @@ onUnmounted(() => {
     </aside>
     <section class="workspace">
       <div class="panel player-panel">
-        <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button type="button" class="subtitle-toggle workspace-entry" @click="openVideoWorkspace"><StudyIcon name="slides" />视频工作台<span v-if="ignoredRegion" class="workspace-entry-dot" aria-label="已保存忽略区域"></span></button><button v-if="selectedFile" type="button" class="subtitle-toggle" :disabled="compatibilityBusy" title="使用后台显卡生成 H.264 播放副本，需要上传原视频，不重新分析课程" @click="generateCompatibility">{{ compatibilityBusy ? '转换中…' : compatibilityActive ? '返回原视频' : compatibilityId ? '使用兼容副本' : '显卡兼容播放' }}</button><button v-if="compatibilityBusy" type="button" class="subtitle-toggle" @click="clearCompatibility">取消转码</button><button v-if="transcript.length && videoUrl" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>{{ compatibilityActive ? '兼容播放' : '本地播放' }} · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
+        <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button type="button" class="subtitle-toggle workspace-entry" @click="openVideoWorkspace"><StudyIcon name="slides" />视频工作台<span v-if="ignoredRegion||analysisRegion" class="workspace-entry-dot" aria-label="已保存画面区域"></span></button><button v-if="selectedFile" type="button" class="subtitle-toggle" :disabled="compatibilityBusy" title="使用后台显卡生成 H.264 播放副本，需要上传原视频，不重新分析课程" @click="generateCompatibility">{{ compatibilityBusy ? '转换中…' : compatibilityActive ? '返回原视频' : compatibilityId ? '使用兼容副本' : '显卡兼容播放' }}</button><button v-if="compatibilityBusy" type="button" class="subtitle-toggle" @click="clearCompatibility">取消转码</button><button v-if="transcript.length && videoUrl" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>{{ compatibilityActive ? '兼容播放' : '本地播放' }} · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
         <p v-if="compatibilityMessage" class="empty-hint" role="status" aria-live="polite">{{ compatibilityMessage }}</p>
         <div v-if="transcript.length" class="subtitle-controls">
           <SubtitleSettings v-model="subtitleAppearance" />
@@ -1115,6 +1130,7 @@ onUnmounted(() => {
         </details>
       </div>
     </section>
-    <VideoWorkspace v-if="workspaceOpen" :src="videoUrl" :filename="filename" :model-value="ignoredRegion" :time-ms="currentPlaybackMs" :checking="checkingMedia" @close="workspaceOpen=false" @select-file="chooseVideo" @update:model-value="saveIgnoredRegion" />
+    <MindMapDialog v-if="expandedMap && mindMap?.root.children.length" :root="mindMap.root" @close="expandedMap = false" @select="selectExpandedMindNode" />
+    <VideoWorkspace v-if="workspaceOpen" :src="videoUrl" :filename="filename" :model-value="ignoredRegion" :analysis-region="analysisRegion" @update:analysis-region="saveAnalysisRegion" :time-ms="currentPlaybackMs" :checking="checkingMedia" @close="workspaceOpen=false" @select-file="chooseVideo" @update:model-value="saveIgnoredRegion" />
   </main>
 </template>

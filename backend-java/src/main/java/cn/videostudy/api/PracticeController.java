@@ -41,8 +41,8 @@ public class PracticeController {
         try{
             var result=parent.get().result();var source=source(result,request);
             String hash=hash(json.writeValueAsString(result.mindMap()));
-            String key=hash(hash+":"+Objects.toString(request.nodeId(),"")+":"+json.writer().with(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).writeValueAsString(source)+":mindmap-practice-v1");
-            var set=store.request(id,hash,key,request.nodeId()==null||request.nodeId().isBlank()?"整课知识点":find(result.mindMap().root(),request.nodeId()).title(),source,request.retry());
+            String key=hash(hash+":"+source.get("scopeNodeId")+":"+json.writer().with(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).writeValueAsString(source)+":mindmap-practice-v2");
+            var set=store.request(id,hash,key,result.mindMap().root().id().equals(source.get("scopeNodeId"))?"整课知识点":(String)source.get("scopeTitle"),source,request.retry());
             dispatch();return ResponseEntity.accepted().body(store.publicSet(id,set.id()));
         }catch(IllegalArgumentException error){return ResponseEntity.unprocessableEntity().body(Map.of("error",error.getMessage()));}
         catch(Exception error){return ResponseEntity.status(500).body(Map.of("error","practice_request_failed"));}
@@ -61,6 +61,23 @@ public class PracticeController {
         if(node.id().equals(id))return node;
         if(node.children()!=null)for(var child:node.children()){var found=find(child,id);if(found!=null)return found;}return null;
     }
+    private static int leafCount(MindMapNode node) {
+        if(node.children()==null||node.children().isEmpty())return 1;
+        return node.children().stream().mapToInt(PracticeController::leafCount).sum();
+    }
+    private static boolean scopePath(MindMapNode node,String id,List<MindMapNode> path) {
+        path.add(node);
+        if(node.id().equals(id))return true;
+        if(node.children()!=null)for(var child:node.children())if(scopePath(child,id,path))return true;
+        path.removeLast();return false;
+    }
+    static MindMapNode practiceScope(MindMapNode root,String id) {
+        if(id==null||id.isBlank())return root;
+        var path=new ArrayList<MindMapNode>();
+        if(!scopePath(root,id,path))throw new IllegalArgumentException("unknown_mindmap_node");
+        for(int i=path.size()-1;i>0;i--){var node=path.get(i);if(node.children()!=null&&!node.children().isEmpty()&&leafCount(node)>1)return node;}
+        return root;
+    }
     private static void flatten(MindMapNode node,List<MindMapNode> nodes){
         if(node.children()!=null&&!node.children().isEmpty())node.children().forEach(child->flatten(child,nodes));
         else nodes.add(node);
@@ -68,7 +85,7 @@ public class PracticeController {
     static Map<String,Object> source(TranscriptResult result,Request request){
         if(!List.of(0,3,5,10).contains(request.count())||!List.of("basic","application","advanced").contains(Objects.toString(request.difficulty(),"")))throw new IllegalArgumentException("invalid_practice_settings");
         if(result.mindMap()==null||!"completed".equals(result.mindMap().status())||result.mindMap().root()==null)throw new IllegalArgumentException("mindmap_not_ready");
-        var root=result.mindMap().root();var chosen=request.nodeId()==null||request.nodeId().isBlank()?root:find(root,request.nodeId());
+        var root=result.mindMap().root();var chosen=practiceScope(root,request.nodeId());
         if(chosen==null)throw new IllegalArgumentException("unknown_mindmap_node");
         var candidates=new ArrayList<MindMapNode>();flatten(chosen,candidates);
         var speech=new HashMap<String,TranscriptSegment>();result.segments().forEach(segment->speech.put(segment.id(),segment));
@@ -91,7 +108,7 @@ public class PracticeController {
             if(analysis!=null&&"completed".equals(analysis.status()))pages.add(Map.of("firstFrameTimeMs",page.firstFrameTimeMs(),"lastFrameTimeMs",page.lastFrameTimeMs(),"pageIndex",page.pageIndex(),"title",Objects.toString(analysis.title(),""),"content",Objects.toString(analysis.content(),"")));
             else if(page.ocrLines()!=null)pages.add(Map.of("firstFrameTimeMs",page.firstFrameTimeMs(),"lastFrameTimeMs",page.lastFrameTimeMs(),"pageIndex",page.pageIndex(),"ocr",page.ocrLines().stream().map(OcrLine::text).toList()));
         }
-        return Map.of("nodes",nodes,"pages",pages,"count",request.count()==0?Math.min(10,nodes.size()*2):request.count(),"difficulty",request.difficulty());
+        return Map.of("scopeNodeId",chosen.id(),"scopeTitle",chosen.title(),"nodes",nodes,"pages",pages,"count",request.count()==0?Math.min(10,nodes.size()*2):request.count(),"difficulty",request.difficulty());
     }
     private static String hash(String value)throws Exception{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));}
     @Scheduled(fixedDelay=2000) public void dispatch(){

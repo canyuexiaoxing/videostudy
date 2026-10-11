@@ -1,0 +1,3 @@
+# 分析区域与忽略区域叠加
+User authorized implementation. Green analysis frame selects visible content; blue ignore frame subtracts overlappingportion; both independenttimelines. Ignoredrectangle outsideanalysis hasnoeffect and UIhint. Existing ignoredRegion payload supports backwardcompatible {analysisRegion,ignoredRegion} composite, legacy static/timelineunchanged. Original screenshots retained; OCR and modelvisualinput respectvisiblemask, audio unchanged. Empty effective area rejected.
+Tasks: helpertests→Pythonmask/OCR/image/FFmpeg/grouping→Javawirevalidation→Appstorage/workspace modes→regression/browser/review/localdeployment/handoff. No paidmodels or unsolicitedcommits.

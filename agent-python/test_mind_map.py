@@ -66,7 +66,7 @@ class MindMapTest(unittest.TestCase):
             if len(calls) == 3:
                 repair = json.loads(body['messages'][-1]['content'])['responseRepair']
                 self.assertIn('error', repair)
-            return provider_response(json.dumps({'topic': '章节', 'children': [
+            return provider_response(json.dumps({'topic': '章节', 'teachingSourceIds': [item['id'] for item in payload['segments']], 'exampleSourceIds': [], 'children': [
                 {'title': '有效知识', 'sourceIds': [payload['segments'][0]['id']]}]}))
         with patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test-only'}), \
              patch('mind_map.urlopen', side_effect=fake_open):
@@ -102,7 +102,7 @@ class MindMapTest(unittest.TestCase):
             calls.append(first_id)
             if first_id == 't_80':
                 return provider_response('{broken JSON')
-            return provider_response(json.dumps({'topic': '章节', 'children': [
+            return provider_response(json.dumps({'topic': '章节', 'teachingSourceIds': [item['id'] for item in payload['segments']], 'exampleSourceIds': [], 'children': [
                 {'title': '有效知识', 'sourceIds': [first_id]}]}))
         with patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'test-only'}), \
              patch('mind_map.urlopen', side_effect=fake_open):

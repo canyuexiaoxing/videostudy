@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 from pydantic import BaseModel, field_validator
-from ignored_region import normalize_region
+from ignored_region import normalize_setting as normalize_region
 from fastapi import HTTPException
 from typing import Literal
 
@@ -153,3 +153,21 @@ def generate_overview(request: MindMapRequest) -> dict:
         if error.code==402:
             raise HTTPException(status_code=424,detail='overview_provider_payment_required') from error
         raise
+
+
+class RegionFramesRequest(BaseModel):
+    frames: list[dict]
+
+from threading import BoundedSemaphore
+_region_slots = BoundedSemaphore(2)
+
+@app.post('/video-region-detections')
+def video_region_detections(request: RegionFramesRequest):
+    from auto_region import detect_frames
+    from urllib.error import HTTPError,URLError
+    if not _region_slots.acquire(blocking=False):raise HTTPException(429,'region_detector_busy')
+    try:return {'detections':detect_frames(request.frames)}
+    except ValueError as error:raise HTTPException(422,str(error)) from error
+    except HTTPError as error:raise HTTPException(502,'region_provider_failed') from error
+    except (RuntimeError,URLError,TimeoutError,KeyError,TypeError) as error:raise HTTPException(503,'region_provider_unavailable') from error
+    finally:_region_slots.release()

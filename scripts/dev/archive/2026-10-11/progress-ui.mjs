@@ -1,0 +1,53 @@
+import {chromium} from 'file:///C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import assert from 'node:assert/strict';
+const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
+try{
+ const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ const id='b8bcf59e-6094-4eac-9617-2124ba0a5e11';let state='queued',units=8,uploads=0;
+ await page.route('**/api/transcriptions',async route=>{
+  if(route.request().method()!=='POST')return route.continue();
+  uploads++;await route.fulfill({status:202,json:{id,status:'queued'}});
+ });
+ await page.route(`**/api/transcriptions/${id}`,route=>route.request().method()==='DELETE'?route.fulfill({status:204}):route.fulfill({json:{id,status:state,progress:state==='processing'||state==='failed'?{stage:'pages',completedStages:3,totalStages:5,completedUnits:units,totalUnits:20}:null,result:state==='completed'?{language:'zh',segments:[],visualEvidence:[],pageGroups:[]}:null,error:state==='failed'?'analysis_failed':null}}));
+ await page.route(`**/api/transcriptions/${id}/retry`,route=>route.fulfill({status:202,json:{id,status:'queued'}}));
+ await page.route('**/api/**',async route=>{
+  if(route.request().url().includes('/transcriptions'))return route.fallback();
+  await route.fulfill({status:404,json:{error:'qa_no_other_calls'}});
+ });
+ await page.goto('http://127.0.0.1:5173/');
+ assert.equal(await page.locator('.analysis-progress').count(),0);
+ await page.locator('input[type=file]').first().setInputFiles('E:/workp/videostudy/.local/qa/compat-h264-8s.mp4');
+ await page.waitForFunction(()=>!document.querySelector('#app').__vue_app__._instance.setupState.checkingMedia);
+ await page.getByRole('button',{name:'开始分析',exact:true}).click();
+ await page.getByRole('status').filter({hasText:'等待分析任务…'}).first().waitFor();
+ assert.equal(await page.getByRole('progressbar').getAttribute('aria-valuenow'),null);
+ state='processing';
+ await page.locator('.progress-heading').filter({hasText:'已完成 8 / 20 页'}).waitFor();
+ const first=Number(await page.getByRole('progressbar').getAttribute('aria-valuenow'));assert(Math.abs(first-3.4)<1e-9);
+ units=13;
+ await page.locator('.progress-heading').filter({hasText:'已完成 13 / 20 页'}).waitFor();
+ await page.locator('.analysis-progress').screenshot({path:'C:/Users/Administrator/.codex/visualizations/2026/10/10/01a123b6-19aa-7d32-8d1e-83e31cc453a1/analysis-progress.png'});
+ await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ state='failed';await page.locator('.analysis-progress.progress-failed').waitFor();
+ assert(Number(await page.getByRole('progressbar').getAttribute('aria-valuenow'))<5);
+ state='queued';
+ await page.getByRole('button',{name:/重试.*分析|重新分析/}).first().click();
+ await page.waitForFunction(()=>document.querySelector('#app').__vue_app__._instance.setupState.analysisState==='queued');
+ state='completed';
+ await page.locator('.progress-heading').filter({hasText:'分析完成'}).waitFor();
+ assert.equal(await page.getByRole('progressbar').getAttribute('aria-valuenow'),'5');
+ await page.locator('input[type=file]').first().setInputFiles({name:'another.mp4',mimeType:'video/mp4',buffer:Buffer.from([1,2,3])});
+ await page.waitForFunction(()=>document.querySelector('#app').__vue_app__._instance.setupState.analysisState==='');
+ assert.equal(await page.locator('.analysis-progress').count(),0);
+ await page.getByRole('tab',{name:'历史记录'}).click();
+ await page.locator('.history-open').first().click();
+ await page.locator('.progress-heading').filter({hasText:'分析完成'}).waitFor();
+ page.on('dialog',dialog=>dialog.accept());
+ await page.getByRole('tab',{name:'历史记录'}).click();
+ await page.locator('.history-delete').first().click();
+ await page.waitForFunction(()=>document.querySelector('#app').__vue_app__._instance.setupState.existingJobId==='');
+ assert.equal(await page.locator('.analysis-progress').count(),0,'deleted task must clear its progress');
+ assert.deepEqual(errors,[]);assert.equal(uploads,1);
+ console.log(JSON.stringify({queuedIndeterminate:true,actualPageCounts:true,failedPreservesProgress:true,retry:true,completedOnlyAtStoredStatus:true,fileSwitchClears:true,mobileOverflow:false,modelCalls:0,errors}));
+}finally{await browser.close();}

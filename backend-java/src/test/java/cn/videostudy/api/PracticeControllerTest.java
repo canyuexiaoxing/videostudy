@@ -42,4 +42,17 @@ class PracticeControllerTest {
         q.remove("diagram");q.put("citations",List.of(Map.of("sourceId","s1","startMs",0,"endMs",1000,"quote","改写了依据")));
         assertThrows(IllegalArgumentException.class,()->PracticeController.validate(result,source));
     }
+
+    @Test void leafPracticeExpandsToParentTopicAndSiblingEvidence() {
+        var a=course().mindMap().root().children().getFirst();
+        var b=new MindMapNode("n2","适用条件",1000,2000,List.of(new MindMapEvidence("transcript","s2",1000,2000,"适用条件")),List.of());
+        var single=new MindMapNode("detail","公式细节",0,1000,List.of(),List.of(a));
+        var topic=new MindMapNode("topic","增长量计算",0,2000,List.of(),List.of(single,b));
+        var root=new MindMapNode("root","课程",0,2000,List.of(),List.of(topic));
+        var result=new TranscriptResult("zh",List.of(new TranscriptSegment("s1",0,1000,"增长量公式"),new TranscriptSegment("s2",1000,2000,"适用条件")),List.of(),null,null,null).withMindMap(new MindMapResult("completed","model","v1",root));
+        var source=PracticeController.source(result,new PracticeController.Request("n1",3,"basic",false));
+        assertEquals(2,((List<?>)source.get("nodes")).size());
+        assertEquals("topic",source.get("scopeNodeId"));assertEquals("增长量计算",source.get("scopeTitle"));
+        assertEquals(source,PracticeController.source(result,new PracticeController.Request("topic",3,"basic",false)));
+    }
 }

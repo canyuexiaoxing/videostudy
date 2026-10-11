@@ -10,7 +10,7 @@ from urllib.request import Request, urlopen
 
 import cv2
 import numpy as np
-from ignored_region import normalize_region, valid_mask, grouping_frame
+from ignored_region import normalize_setting as normalize_region, region_at, valid_mask, grouping_frame, effective_mask, filter_frame
 
 
 GROUPING_VERSION = "page-group-v1"
@@ -46,6 +46,7 @@ def _preview(path: Path) -> np.ndarray:
 
 
 def _difference(left: np.ndarray, right: np.ndarray, mask=None) -> float:
+    if mask is not None and not mask.any(): return 1.0
     difference = cv2.absdiff(left, right) > 25
     direct = float(np.mean(difference[mask] if mask is not None else difference))
     if direct < 0.015 or (left[mask] if mask is not None else left).std() < 8 or (right[mask] if mask is not None else right).std() < 8:
@@ -140,8 +141,9 @@ def _page(members: list[dict], images: dict[int, np.ndarray], decision: str,
     # OCR richness finds a completed slide; sharpness breaks ties on diagram pages.
     def quality(item: dict) -> tuple[int, float, int]:
         image = images[item["frameTimeMs"]]
+        visible = mask.get(item["frameTimeMs"]) if isinstance(mask, dict) else mask
         return (sum(len(text) for text in _texts(item)),
-                float((cv2.Laplacian(image, cv2.CV_64F)[cv2.erode(mask.astype(np.uint8), np.ones((3,3), np.uint8)).astype(bool)] if mask is not None else cv2.Laplacian(image, cv2.CV_64F)).var()), item["frameTimeMs"])
+                float((cv2.Laplacian(image, cv2.CV_64F)[cv2.erode(visible.astype(np.uint8), np.ones((3,3), np.uint8)).astype(bool)] if visible is not None else cv2.Laplacian(image, cv2.CV_64F)).var()), item["frameTimeMs"])
     best = max(members, key=quality)
     representatives = [best["frameTimeMs"]]
     # If the page was cleared during the explanation, keep an earlier complementary view.
@@ -177,14 +179,16 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
     if len(times) != len(set(times)):
         raise ValueError("Candidate screenshot timestamps must be unique")
     ignore_region = normalize_region(ignore_region)
-    mask = valid_mask(320,180,ignore_region) if ignore_region else None
+    masks = {time: effective_mask(320,180,ignore_region,time) for time in times} if ignore_region else None
     images = {time: _preview(keyframe_dir / f"{time}.jpg") for time in times}
+    dimensions = {}
     if ignore_region:
         filtered=[]
         for frame in frames:
             original=cv2.imread(str(keyframe_dir / f"{frame['frameTimeMs']}.jpg"),cv2.IMREAD_GRAYSCALE)
             height,width=original.shape
-            filtered.append(grouping_frame(frame,ignore_region,width,height))
+            dimensions[frame["frameTimeMs"]]=(width,height)
+            filtered.append(filter_frame(frame,ignore_region,frame["frameTimeMs"],width,height))
         frames=filtered
     pages: list[dict] = []
     transitions: list[int] = []
@@ -195,19 +199,44 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
     for current in frames:
         time_ms = current["frameTimeMs"]
         current_image = images[time_ms]
-        if _blank(current, current_image, mask):
+        mask = masks[time_ms] if masks is not None else None
+        blank = _blank(current, current_image, mask)
+        if blank and members and masks is not None:
+            # A moved mask may hide every visible lesson line. Confirm that
+            # the page anchor had content in the shared visible area before
+            # calling this a genuine blank transition; include repeated blanks.
+            anchor_frame, previous_frame = members[0], members[-1]
+            shared = mask & masks[anchor_frame["frameTimeMs"]] & masks[previous_frame["frameTimeMs"]]
+            common_anchor = anchor_frame
+            for item in (anchor_frame,previous_frame,current):
+                common_anchor = filter_frame(common_anchor,ignore_region,item["frameTimeMs"],*dimensions[anchor_frame["frameTimeMs"]])
+            if not shared.any() or _blank(common_anchor,images[anchor_frame["frameTimeMs"]],shared):
+                blank = False
+        if blank:
             transitions.append(time_ms)
             pending_transition = True
             continue
         if members and pending_transition:
-            pages.append(_page(members, images, decision, reason, len(pages) + 1, mask))
+            pages.append(_page(members, images, decision, reason, len(pages) + 1, masks))
             members = []
             decision, reason = "auto_new_page", "blank transition"
         pending_transition = False
         if members:
             previous, anchor = members[-1], members[0]
-            boundary = _boundary(anchor, previous, current, images[anchor["frameTimeMs"]],
-                                 images[previous["frameTimeMs"]], current_image, mask)
+            comparison_mask = mask & masks[previous["frameTimeMs"]] & masks[anchor["frameTimeMs"]] if masks is not None else None
+            # Compare OCR under the same exclusions as pixels. Moving the mask
+            # must not look like disappearing/replaced lesson text.
+            compare_anchor, compare_previous, compare_current = anchor, previous, current
+            if ignore_region:
+                regions = [item["frameTimeMs"] for item in (anchor,previous,current)]
+                def common_ocr(item):
+                    result = item
+                    for region in regions:
+                        result = filter_frame(result,ignore_region,region,*dimensions[item["frameTimeMs"]])
+                    return result
+                compare_anchor, compare_previous, compare_current = map(common_ocr,(anchor,previous,current))
+            boundary = _boundary(compare_anchor, compare_previous, compare_current, images[anchor["frameTimeMs"]],
+                                 images[previous["frameTimeMs"]], current_image, comparison_mask)
             boundary_reason = "local OCR and frame comparison"
             if boundary == "uncertain":
                 boundary = "new"
@@ -218,8 +247,8 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
                     end = time_ms
                     payload = {
                         "previousFrameTimeMs": start, "currentFrameTimeMs": end,
-                        "previousOcr": [block.get("text", "") for block in previous.get("ocrBlocks", [])],
-                        "currentOcr": [block.get("text", "") for block in current.get("ocrBlocks", [])],
+                        "previousOcr": [block.get("text", "") for block in compare_previous.get("ocrBlocks", [])],
+                        "currentOcr": [block.get("text", "") for block in compare_current.get("ocrBlocks", [])],
                         "transcript": [segment.get("text", "") for segment in segments
                                        if segment.get("startMs", 0) <= end and segment.get("endMs", 0) >= start][:20],
                     }
@@ -231,11 +260,11 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
                     except (ValueError, KeyError, OSError, TimeoutError):
                         pass
             if boundary == "new":
-                pages.append(_page(members, images, decision, reason, len(pages) + 1, mask))
+                pages.append(_page(members, images, decision, reason, len(pages) + 1, masks))
                 members = []
                 decision = "agent_new_page" if boundary_reason.startswith("text Agent") else "auto_new_page"
                 reason = boundary_reason
         members.append(current)
     if members:
-        pages.append(_page(members, images, decision, reason, len(pages) + 1, mask))
+        pages.append(_page(members, images, decision, reason, len(pages) + 1, masks))
     return pages, transitions

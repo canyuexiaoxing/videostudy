@@ -1,0 +1,30 @@
+import {chromium} from 'file:///C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import assert from 'node:assert/strict';
+const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
+try{
+ const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[],posts=[];
+ page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.method()==='POST')posts.push(r.url())});
+ const id='a5732f77-8f9b-452a-b838-7506f84ac0fa';
+ const segments=[{id:'s1',startMs:1000,endMs:1900,text:'增长量等于现期减基期'},{id:'s2',startMs:5000,endMs:6500,text:'例题一，现期120，基期100'}];
+ const ref=s=>({sourceType:'transcript',sourceId:s.id,startMs:s.startMs,endMs:s.endMs,quote:s.text});
+ const leaf={id:'core_1',title:'增长量＝现期－基期',startMs:1000,endMs:1900,evidenceRefs:[ref(segments[0])],children:[]};
+ const example={id:'example_0_0',title:'增长量计算例题',startMs:5000,endMs:6500,evidenceRefs:[ref(segments[1])],children:[]};
+ const map={status:'completed',provider:'deepseek',promptVersion:'grounded-mind-map-v3-core-examples',root:{...leaf,id:'course',title:'课程知识导图',children:[leaf]},examples:[example]};
+ await page.route(`**/api/transcriptions/${id}`,route=>route.fulfill({json:{id,status:'completed',result:{language:'zh',segments,visualEvidence:[],pageGroups:[],mindMap:map}}}));
+ await page.route('**/api/**',route=>route.request().url().endsWith('/'+id)?route.fallback():route.fulfill({status:404,json:{error:'qa_no_other_calls'}}));
+ await page.goto('http://127.0.0.1:5173/');
+ await page.locator('input[type=file]').first().setInputFiles('E:/workp/videostudy/.local/qa/compat-h264-8s.mp4');
+ await page.waitForFunction(()=>!!document.querySelector('#app').__vue_app__._instance.setupState.selectedFingerprint&&!document.querySelector('#app').__vue_app__._instance.setupState.checkingMedia);
+ await page.evaluate(id=>{const s=document.querySelector('#app').__vue_app__._instance.setupState;localStorage.setItem(`analysisMedia:${id}`,JSON.stringify({name:s.selectedFile.name,size:s.selectedFile.size,fingerprint:s.selectedFingerprint}));s.existingJobId=id;},id);
+ await page.getByRole('button',{name:'读取结果',exact:true}).click();
+ await page.locator('.example-timeline').waitFor();
+ assert.equal(await page.locator('.example-timeline button').count(),1);
+ await page.locator('.example-timeline button').click();
+ await page.waitForFunction(()=>Math.abs(document.querySelector('.course-video video')?.currentTime-5)<.8||Math.abs(document.querySelector('#app').__vue_app__._instance.setupState.video?.currentTime-5)<.8);
+ const node=await page.evaluate(()=>document.querySelector('#app').__vue_app__._instance.setupState.selectedMindNode);
+ assert.equal(node,null,'example playback must not select an AI-practice knowledge scope');
+ await page.locator('.example-timeline').screenshot({path:'C:/Users/Administrator/.codex/visualizations/2026/10/10/01a123b6-19aa-7d32-8d1e-83e31cc453a1/example-timeline.png'});
+ await page.setViewportSize({width:390,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ assert.equal(posts.length,0);assert.deepEqual(errors,[]);
+ console.log(JSON.stringify({separateTimeline:true,seekToEvidence:true,practiceScopeUnchanged:true,mobileOverflow:false,modelRequests:0,errors}));
+}finally{await browser.close();}

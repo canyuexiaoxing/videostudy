@@ -15,7 +15,7 @@ from transcription import transcribe_file
 from visual_evidence import OCR_MODEL_ID, VisualOcrWorker
 from checkpoints import Checkpoints
 from analysis_progress import AnalysisProgress
-from ignored_region import normalize_region
+from ignored_region import normalize_setting as normalize_region
 from mind_map import CACHE_CONTEXT_PROMPT_VERSION as MAP_VERSION
 from page_understanding import PAGE_PROMPT_VERSION
 from agent_review import PROMPT_VERSION as REVIEW_VERSION
@@ -113,6 +113,7 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
             with ThreadPoolExecutor(max_workers=max(1, int(os.environ.get("PAGE_CONCURRENCY", "5")))) as pool:
                 # map preserves order even when later pages finish first.
                 def understand(page):
+                    if ignore_region:page=dict(page,_visualRegions=ignore_region)
                     result = cached(
                         f'page:{page["pageIndex"]}',
                         {'page': page, 'pages': page_groups, 'speech': transcript['segments']},

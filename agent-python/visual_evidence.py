@@ -13,7 +13,7 @@ import cv2
 import numpy as np
 import os
 from checkpoints import Checkpoints
-from ignored_region import normalize_region
+from ignored_region import normalize_setting as normalize_region,prepare_image,active_regions
 
 
 SAMPLE_SECONDS = 2
@@ -48,11 +48,24 @@ def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACT
     read_bytes = FRAME_BYTES
     mask = None
     if ignore_region:
-        r = ignore_region
+        included = ignore_region.get('analysisRegion') if 'analysisRegion' in ignore_region else None
+        excluded = ignore_region.get('ignoredRegion') if 'analysisRegion' in ignore_region else ignore_region
+        def timed_nodes(value):return value['nodes'] if value and 'nodes' in value else [{'timeMs':0,'region':value}]
+        groups=[(timed_nodes(included),True),(timed_nodes(excluded),False)]
         geometry = f"scale={PREVIEW_WIDTH}:{PREVIEW_HEIGHT}:force_original_aspect_ratio=decrease,pad={PREVIEW_WIDTH}:{PREVIEW_HEIGHT}:(ow-iw)/2:(oh-ih)/2,format=gray"
+        boxes = []
+        for nodes,is_include in groups:
+            for index,node in enumerate(nodes):
+                r=node['region']
+                if r is None:continue
+                enabled=f"gte(t,{node['timeMs']/1000})"
+                if index+1<len(nodes):enabled+=f"*lt(t,{nodes[index+1]['timeMs']/1000})"
+                if is_include:boxes.append(f"drawbox=x=0:y=0:w=iw:h=ih:color=black:t=fill:enable='{enabled}'")
+                color='white' if is_include else 'black'
+                boxes.append(f"drawbox=x=iw*{r['x']}:y=ih*{r['y']}:w=iw*{r['width']}:h=ih*{r['height']}:color={color}:t=fill:enable='{enabled}'")
+        mask_filters = 'format=gray,lut=y=255,' + (','.join(boxes) + ',' if boxes else '') + geometry
         filters = (f"[0:v]fps=1/{sample_seconds},split=2[v][m];[v]{geometry}[p];"
-                   f"[m]format=gray,lut=y=255,drawbox=x=iw*{r['x']}:y=ih*{r['y']}:w=iw*{r['width']}:h=ih*{r['height']}:color=black:t=fill,{geometry}[mask];"
-                   "[p][mask]vstack,format=gray[out]")
+                   f"[m]{mask_filters}[mask];[p][mask]vstack,format=gray[out]")
         command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(path),
                    "-filter_complex", filters, "-map", "[out]", "-f", "rawvideo", "-pix_fmt", "gray", "pipe:1"]
         read_bytes = FRAME_BYTES * 2
@@ -64,6 +77,13 @@ def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACT
     last_chosen_frame = None
     last_chosen_ms = 0
     first_frame = None
+    previous_mask = first_mask = last_chosen_mask = None
+    def visible_difference(left, right, left_mask, right_mask):
+        difference = cv2.absdiff(left, right) > 25
+        if left_mask is None: return float(np.mean(difference))
+        visible = left_mask & right_mask
+        # No common visible area is not proof of sameness: conservatively retain evidence.
+        return float(np.mean(difference[visible])) if visible.any() else 1.0
     index = 0
     try:
         while frame_bytes := process.stdout.read(read_bytes):
@@ -77,21 +97,25 @@ def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACT
             time_ms = index * sample_seconds * 1000
             if first_frame is None:
                 first_frame = frame.copy()
+                first_mask = mask.copy() if mask is not None else None
             if previous is not None:
-                changed_fraction = float(np.mean((cv2.absdiff(previous, frame) > 25)[mask] if mask is not None else cv2.absdiff(previous, frame) > 25))
+                changed_fraction = visible_difference(previous, frame, previous_mask, mask)
                 if changed_fraction > page_change_fraction:
                     if not chosen or chosen[-1] != previous_ms:
                         chosen.append(previous_ms)
                     last_chosen_frame = previous.copy()
+                    last_chosen_mask = previous_mask.copy() if previous_mask is not None else None
                     last_chosen_ms = previous_ms
                 elif time_ms - last_chosen_ms >= MAX_PROGRESS_INTERVAL_MS:
                     baseline = last_chosen_frame if last_chosen_frame is not None else first_frame
-                    progress = float(np.mean((cv2.absdiff(baseline, previous) > 25)[mask] if mask is not None else cv2.absdiff(baseline, previous) > 25))
+                    progress = visible_difference(baseline, previous, last_chosen_mask if last_chosen_frame is not None else first_mask, previous_mask)
                     if progress > PROGRESS_FRACTION:
                         chosen.append(previous_ms)
                         last_chosen_frame = previous.copy()
+                        last_chosen_mask = previous_mask.copy() if previous_mask is not None else None
                         last_chosen_ms = previous_ms
             previous = frame.copy()
+            previous_mask = mask.copy() if mask is not None else None
             previous_ms = time_ms
             index += 1
         error = process.stderr.read().decode(errors="replace")
@@ -199,6 +223,13 @@ def _save_keyframe(frame: np.ndarray, keyframe_dir: Path, time_ms: int) -> None:
     temporary.replace(keyframe_dir / f"{time_ms}.jpg")
 
 
+def recognize_in_region(frame,setting,time_ms,recognize):
+    # Keep legacy full-frame OCR unchanged; analysis regions opt into masked OCR.
+    if setting and 'analysisRegion' in setting:
+        return recognize(prepare_image(frame,setting,time_ms))
+    return recognize(frame)
+
+
 def analyze_visuals(path: Path, recognize: Callable[[np.ndarray], list[dict]] | None = None,
                     keyframe_dir: Path | None = None,
                     page_change_fraction: float = PAGE_CHANGE_FRACTION,
@@ -212,7 +243,7 @@ def analyze_visuals(path: Path, recognize: Callable[[np.ndarray], list[dict]] | 
     for time_ms, frame in _frames_at(path, _candidate_times(path, page_change_fraction, sample_seconds, ignore_region)):
         if keyframe_dir is not None:
             _save_keyframe(frame, keyframe_dir, time_ms)
-        blocks = checkpoint.run(f'ocrFrame:{time_ms}', {}, lambda: recognize(frame)) if checkpoint else recognize(frame)
+        blocks = checkpoint.run(f'ocrFrame:{time_ms}', {'regions':ignore_region}, lambda: recognize_in_region(frame,ignore_region,time_ms,recognize)) if checkpoint else recognize_in_region(frame,ignore_region,time_ms,recognize)
         evidence.append({"frameTimeMs": time_ms, "ocrBlocks": blocks})
     return evidence
 
@@ -242,13 +273,13 @@ def _serve_visual_requests(connection) -> None:
                     frame = _frame_at(path, request["timeMs"])
                     if keyframe_dir is not None:
                         _save_keyframe(frame, keyframe_dir, request["timeMs"])
-                    response = checkpoint.run(f'ocrFrame:{request["timeMs"]}', {}, lambda: _recognize(frame)) if checkpoint else _recognize(frame)
+                    response = checkpoint.run(f'ocrFrame:{request["timeMs"]}', {'regions':ignore_region}, lambda: recognize_in_region(frame,ignore_region,request['timeMs'],_recognize)) if checkpoint else recognize_in_region(frame,ignore_region,request['timeMs'],_recognize)
                 elif request["op"] == "capture_batch":
                     response = []
                     for time_ms, frame in _frames_at(path, request["timesMs"]):
                         if keyframe_dir is not None:
                             _save_keyframe(frame, keyframe_dir, time_ms)
-                        blocks = checkpoint.run(f'ocrFrame:{time_ms}', {}, lambda: _recognize(frame)) if checkpoint else _recognize(frame)
+                        blocks = checkpoint.run(f'ocrFrame:{time_ms}', {'regions':ignore_region}, lambda: recognize_in_region(frame,ignore_region,time_ms,_recognize)) if checkpoint else recognize_in_region(frame,ignore_region,time_ms,_recognize)
                         response.append({"frameTimeMs": time_ms, "ocrBlocks": blocks})
                 else:
                     raise ValueError("Unknown visual worker operation")

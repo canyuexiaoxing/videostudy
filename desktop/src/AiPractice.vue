@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import StudyIcon from './StudyIcon.vue'
+import { practiceScopes, resolvePracticeScope } from './practiceScope'
 import QuestionChat from './QuestionChat.vue'
 import PracticeFigure, { type Diagram } from './PracticeFigure.vue'
 import { reviewTargets } from './practiceReview'
@@ -40,10 +41,11 @@ const wrongQuestions=computed(()=>questions.value.map((q,i)=>({question:q,index:
 async function openWrongQuestion(i:number){index.value=i;await nextTick();reviewCard.value?.scrollIntoView({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}
 const answered=computed(()=>questions.value.filter(q=>feedback.value[q.id]).length)
 const correct=computed(()=>questions.value.filter(q=>feedback.value[q.id]?.correct).length)
-const nodes=computed(()=>{const list:Node[]=[];function walk(n:Node){list.push(n);n.children?.forEach(walk)};props.mindMap?.root.children?.forEach(walk);return list})
+const nodes=computed(()=>practiceScopes(props.mindMap?.root))
 const letters=['A','B','C','D']
 watch([index,session,active],()=>{chatOpen.value=false;chartDialog.value?.close()})
-watch(()=>props.selectedNodeId,id=>{if(id)scope.value=id})
+watch(()=>props.selectedNodeId,id=>{if(id)scope.value=resolvePracticeScope(props.mindMap?.root,id)})
+watch(()=>props.mindMap?.root,root=>{scope.value=resolvePracticeScope(root,props.selectedNodeId||scope.value)})
 async function api(path:string,method='GET',body?:unknown,course=props.courseId){
  const response=await fetch(`${base}/${course}/practice${path}`,{method,headers:{'Content-Type':'application/json','X-Practice-Client':client!},body:body===undefined?undefined:JSON.stringify(body)})
  if(!response.ok)throw new Error('请求未完成，请稍后重试。')
@@ -118,6 +120,7 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
    <label>难度<select v-model="difficulty" :disabled="busy"><option value="basic">基础巩固</option><option value="application">应用练习</option><option value="advanced">进阶挑战</option></select></label>
    <button class="practice-primary" type="button" :disabled="busy||pending||!ready||!mindMap" @click="generate">{{ busy?'正在出题…':'生成练习' }}</button>
   </div>
+  <p v-if="courseId&&!demo" class="practice-intro">按完整知识分支练习，包含下级公式、条件和易错点。</p>
   <label v-if="sets.length" class="saved-set">已保存的练习<select :value="active?.id" :disabled="busy||pending" @change="switchSet(($event.target as HTMLSelectElement).value)"><option v-for="set in sets" :key="set.id" :value="set.id">{{ set.title }} · {{ set.status==='completed'?'已生成':set.status==='failed'?'失败':'生成中' }} · {{ set.id.slice(0,6) }}</option></select></label>
   <p v-if="error" class="practice-error" role="alert">{{ error }}</p>
   <p v-if="busy" class="practice-intro" role="status">正在根据知识点出题并检查答案，完成后自动显示。</p>

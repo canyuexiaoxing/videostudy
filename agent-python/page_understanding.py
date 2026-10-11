@@ -119,6 +119,7 @@ def build_page_context(page: dict, pages: list[dict], segments: list[dict], mode
             for item in segments if item["startMs"] < end and item["endMs"] > start
         ],
     }
+    if page.get('_visualRegions'):context['_visualRegions']=page['_visualRegions']
     if mode == "ocr_only":
         context["ocrLines"] = [
             {"text": line["text"], "sourceFrameTimeMs": line["sourceFrameTimeMs"]}
@@ -228,9 +229,17 @@ def _deepseek_page_json(context: dict, frames: list[tuple[int, Path]]) -> dict:
         "millisecond timestamps when citing evidence."
     )
     content: list[dict] = [{"type": "text", "text": instructions + "\n" +
-                          json.dumps(compact_payload(context), ensure_ascii=False, separators=(",", ":"))}]
+                          json.dumps(compact_payload({k:v for k,v in context.items() if k!='_visualRegions'}), ensure_ascii=False, separators=(",", ":"))}]
     for frame_time, path in frames:
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        if context.get('_visualRegions'):
+            import cv2
+            from ignored_region import prepare_image
+            original=cv2.imread(str(path))
+            if original is None:raise ValueError('unreadable_region_frame')
+            ok,image=cv2.imencode('.jpg',prepare_image(original,context['_visualRegions'],frame_time))
+            if not ok:raise ValueError('unreadable_region_frame')
+            encoded=base64.b64encode(image).decode('ascii')
+        else:encoded = base64.b64encode(path.read_bytes()).decode("ascii")
         content.append({"type": "text", "text": f"frameTimeMs={frame_time}; screenshot follows"})
         content.append({"type": "image_url", "image_url": {
             "url": f"data:image/jpeg;base64,{encoded}", "detail": "original"}})
@@ -439,7 +448,7 @@ def analyze_page(page: dict, pages: list[dict], visuals_by_time: dict[int, dict]
                  keyframe_dir: Path, segments: list[dict], mode: str, *,
                  ask_json: Callable[[dict, list[tuple[int, Path]]], dict] = _deepseek_page_json) -> dict:
     """One grounded request per page, with at most one conditional multi-image follow-up."""
-    result = dict(page)
+    result = {k:v for k,v in page.items() if k!='_visualRegions'}
     context = build_page_context(page, pages, segments, mode)
     if mode == "ocr_only":
         try:

@@ -50,7 +50,7 @@ class CoreMapTest(unittest.TestCase):
   self.assertEqual(len(result['examples']),1)
 
  def test_new_knowledge_explained_in_example_can_remain_core(self):
-  result=build_mind_map([segment(8,'例题开始'),segment(9,'这里首次推导新公式'),segment(10,'答案')],[],lambda _: {'topic':'新方法','children':[{'title':'新公式推导','teachingRole':'new_knowledge','sourceIds':['t_9']}],'examples':[{'title':'例题','sourceIds':['t_8','t_10']}]})
+  result=build_mind_map([segment(8,'例题开始'),segment(9,'这里首次推导新公式'),segment(10,'答案')],[],lambda _: {'topic':'新方法','children':[{'title':'新公式推导','teachingRole':'new_knowledge','sourceIds':['t_9']}],'examples':[{'title':'例题','sourceIds':['t_8','t_10']}],'teachingSourceIds':['t_9'],'exampleSourceIds':['t_8','t_10']})
   self.assertEqual(result['status'],'completed')
   self.assertEqual(result['root']['children'][0]['children'][0]['startMs'],9000)
   self.assertNotIn('_teachingRole',str(result))
@@ -76,3 +76,58 @@ class CoreMapTest(unittest.TestCase):
   self.assertEqual(result['status'],'completed')
   node=result['root']['children'][0]['children'][0]
   self.assertEqual(node['startMs'],1000);self.assertEqual(node['children'],[])
+
+ def test_example_review_after_short_range_is_not_new_core_knowledge(self):
+  speech=[segment(1,'前面专门讲过公式'),segment(8,'例题开始'),segment(9,'计算得出答案'),segment(10,'2017年同比增长比的是2016年')]
+  result=build_mind_map(speech,[],lambda _: {'topic':'课程','children':[{'title':'公式','sourceIds':['t_1']},{'title':'比较基础','teachingRole':'new_knowledge','sourceIds':['t_10']}],'examples':[{'title':'例题','sourceIds':['t_8','t_9']}],'teachingSourceIds':['t_1'],'exampleSourceIds':['t_8','t_9','t_10']})
+  self.assertEqual([n['title'] for n in result['root']['children'][0]['children']],['公式'])
+  self.assertEqual(result['examples'][0]['endMs'],10900)
+
+ def test_new_knowledge_label_alone_does_not_override_example_evidence(self):
+  result=build_mind_map([segment(8,'例题'),segment(9,'本题结果为整数')],[],lambda _: {'topic':'课程','children':[{'title':'本题整数','teachingRole':'new_knowledge','sourceIds':['t_9']}],'examples':[{'title':'例题','sourceIds':['t_8','t_9']}]})
+  self.assertEqual(result['status'],'empty')
+
+ def test_independent_teaching_during_example_requires_segment_level_evidence(self):
+  result=build_mind_map([segment(8,'例题'),segment(9,'现在单独推导新方法'),segment(10,'回到刚才的题')],[],lambda _: {'topic':'课程','children':[{'title':'新方法推导','teachingRole':'new_knowledge','sourceIds':['t_9']}],'examples':[{'title':'例题','sourceIds':['t_8','t_10']}],'teachingSourceIds':['t_9'],'exampleSourceIds':['t_8','t_10']})
+  self.assertEqual(result['status'],'completed')
+  self.assertEqual(result['root']['children'][0]['children'][0]['startMs'],9000)
+
+ def test_conflicting_role_ids_prioritize_example_and_fake_ids_are_ignored(self):
+  result=build_mind_map([segment(1,'讲解'),segment(8,'解题')],[],lambda _: {'topic':'课程','children':[{'title':'公式','sourceIds':['t_1','t_8']}],'examples':[{'title':'例题','sourceIds':['t_8']}],'teachingSourceIds':['t_1','t_8','fake'],'exampleSourceIds':['t_8','fake']})
+  self.assertEqual([r['sourceId'] for r in result['root']['children'][0]['children'][0]['evidenceRefs']],['t_1'])
+
+ def test_example_review_continues_across_chunk_boundary(self):
+  def ask(payload):
+   if payload['segments'][0]['id']=='t_1':
+    return {'topic':'课程','children':[{'title':'公式','sourceIds':['t_1']}],'examples':[{'title':'例题','sourceIds':['t_79','t_80']}],'teachingSourceIds':['t_1'],'exampleSourceIds':['t_79','t_80']}
+   return {'topic':'讲评','children':[],'examples':[],'teachingSourceIds':[],'exampleSourceIds':['t_81']}
+  result=build_mind_map([segment(i) for i in range(1,82)],[],ask)
+  self.assertEqual(result['examples'][0]['endMs'],81900)
+  self.assertEqual(result['examples'][0]['evidenceRefs'][-1]['sourceId'],'t_81')
+
+ def test_case_specific_leaf_cannot_be_whitelisted_as_teaching(self):
+  result=build_mind_map([segment(1,'先讲公式'),segment(8,'这一道题要注意2014年开头')],[],lambda _: {'topic':'课程','children':[{'title':'公式','sourceIds':['t_1']},{'title':'本题2014年开头要验证基期','kind':'knowledge','sourceIds':['t_8']}],'examples':[],'teachingSourceIds':['t_1','t_8'],'exampleSourceIds':[]})
+  self.assertEqual([n['title'] for n in result['root']['children'][0]['children']],['公式'])
+  self.assertEqual(len(result['examples']),1)
+
+ def test_case_specific_quote_is_filtered_even_under_general_title(self):
+  result=build_mind_map([segment(1,'先讲公式'),segment(8,'这道题算出来是20')],[],lambda _: {'topic':'课程','children':[{'title':'公式','sourceIds':['t_1','t_8']}],'examples':[],'teachingSourceIds':['t_1','t_8'],'exampleSourceIds':[]})
+  self.assertEqual([ref['sourceId'] for ref in result['root']['children'][0]['children'][0]['evidenceRefs']],['t_1'])
+
+ def test_case_reclassification_does_not_depend_on_node_order(self):
+  general={'title':'增长量比较','kind':'knowledge','sourceIds':['t_8']}
+  case={'title':'本题2014年增长量','kind':'knowledge','sourceIds':['t_8']}
+  for nodes in ([general,case],[case,general]):
+   result=build_mind_map([segment(8,'2014年比2013年多20')],[],lambda _: {'topic':'课程','children':nodes,'examples':[],'teachingSourceIds':['t_8'],'exampleSourceIds':[]})
+   self.assertEqual(result['root']['children'],[])
+   self.assertEqual(len(result['examples']),1)
+
+ def test_basic_question_types_are_not_a_reference_to_this_question(self):
+  result=build_mind_map([segment(1,'增长量计算的基本题型有两种')],[],lambda _: {'topic':'课程','children':[{'title':'基本题型','kind':'knowledge','sourceIds':['t_1']}],'examples':[],'teachingSourceIds':['t_1'],'exampleSourceIds':[]})
+  self.assertEqual(result['status'],'completed')
+  self.assertEqual(result['examples'],[])
+
+ def test_case_reclassification_includes_descendant_calculation_evidence(self):
+  result=build_mind_map([segment(8,'计算'),segment(9,'120减100等于20')],[],lambda _: {'topic':'课程','children':[{'title':'计算方法','sourceIds':['t_9']},{'title':'本题计算','sourceIds':['t_8'],'children':[{'title':'计算步骤','sourceIds':['t_9']}]}],'examples':[],'teachingSourceIds':['t_8','t_9'],'exampleSourceIds':[]})
+  self.assertEqual(result['root']['children'],[])
+  self.assertEqual([ref['sourceId'] for ref in result['examples'][0]['evidenceRefs']],['t_8','t_9'])
