@@ -11,7 +11,7 @@ from agent_review import review_visual_coverage
 from mind_map import build_mind_map
 from page_understanding import analyze_page
 from slide_grouping import GROUPING_VERSION, group_pages
-from transcription import transcribe_file
+from transcription import transcribe_file, speech_checkpoint_key
 from visual_evidence import OCR_MODEL_ID, VisualOcrWorker
 from checkpoints import Checkpoints
 from analysis_progress import AnalysisProgress
@@ -60,7 +60,7 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
         'size': metadata.st_size, 'mtime': metadata.st_mtime_ns,
         'mode': visual_analysis_mode, 'threshold': coarse_change_percent, 'sampleSeconds': coarse_sample_seconds,
         **({'ignoredRegion': ignore_region} if ignore_region else {}), 'ocr': OCR_MODEL_ID, 'ocrDevice': os.environ.get('OCR_DEVICE', 'cpu'),
-        'speech': 'faster-whisper-base:beam5:vad:int8',
+        'speech': speech_checkpoint_key(),
         'model': os.environ.get('DEEPSEEK_MODEL', 'deepseek-flash'),
         'endpoint': os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
         'prompts': [MAP_VERSION, PAGE_PROMPT_VERSION, REVIEW_VERSION, GROUPING_VERSION],

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { jumpToMindMapNode, mediaFingerprint, toCanvasNode } from './mindMap.ts'
+import { jumpToMindMapNode, mediaFingerprint, toCanvasNode, compactKnowledgeMap } from './mindMap.ts'
 
 const node = {
   id: 'concept_0_0', title: '增长量公式', startMs: 999999, endMs: 999999, children: [],
@@ -51,4 +51,22 @@ test('canvas adapter preserves every level and stable source IDs', () => {
   const compact = toCanvasNode(root, 2)
   assert.equal(compact.children[0].children[0].data.expand, false)
   assert.equal(compact.children[0].children[0].children.length, 1)
+})
+
+test('explanation sentences become sourced details of one concept, not many map leaves',()=>{
+ const point=(id,title,quote)=>({id,title,startMs:1000,endMs:1900,evidenceRefs:[{sourceType:'transcript',sourceId:id,startMs:1000,endMs:1900,quote}],children:[]})
+ const original={...node,id:'course',children:[{...node,id:'chapter',children:[{...node,id:'formula',title:'增长量公式',children:[point('meaning','符号含义','现期是当前时期'),point('condition','适用条件','时期口径保持一致'),point('case','本题代入计算','本题答案是20')]}]}]}
+ const snapshot=JSON.stringify(original),root=compactKnowledgeMap(original),concept=root.children[0].children[0]
+ assert.equal(concept.children.length,0);assert.deepEqual(concept.details.map(n=>n.title),['符号含义','适用条件']);assert.equal(concept.details[1].evidenceRefs[0].sourceId,'condition');assert.equal(JSON.stringify(original),snapshot)
+})
+test('independent subtopics are retained and a standalone formula is not discarded',()=>{
+ const leaf={...node,id:'single',children:[]},branch={...node,id:'branch',children:[{...leaf,id:'detail'}]}
+ const root=compactKnowledgeMap({...node,id:'course',children:[{...node,id:'chapter',children:[{...node,id:'topic',children:[branch,leaf]}]}]})
+ assert.equal(root.children[0].children[0].children.length,2)
+})
+
+test('independent named rules remain separate canvas entries even when all are leaves',()=>{
+ const leaf=(id,title)=>({...node,id,title,children:[]})
+ const root=compactKnowledgeMap({...node,id:'course',children:[{...node,id:'chapter',children:[{...node,id:'topic',title:'求导法则',children:[leaf('product','乘积法则'),leaf('quotient','商法则'),leaf('condition','适用条件')]}]}]})
+ const topic=root.children[0].children[0];assert.deepEqual(topic.children.map(n=>n.title),['乘积法则','商法则']);assert.deepEqual(topic.details.map(n=>n.title),['适用条件'])
 })

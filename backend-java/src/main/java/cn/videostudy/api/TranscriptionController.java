@@ -88,6 +88,7 @@ public class TranscriptionController {
         try {
             if (ignoredRegion == null) store.createQueued(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds);
             else store.createQueued(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion);
+            store.saveOriginalFilename(id, file.getOriginalFilename());
             if (aiSubtitles && subtitles != null) subtitles.createUploadRequest(id, subtitleTargetLanguage);
         } catch (RuntimeException error) {
             store.delete(id);
@@ -114,6 +115,9 @@ public class TranscriptionController {
         return upload(file, visualMode, threshold, true, "source");
     }
     public ResponseEntity<?> upload(MultipartFile file) throws IOException { return upload(file, "both", 2.0); }
+
+    @GetMapping
+    public List<TranscriptionJobStore.HistoryItem> history() { return store.listHistory(); }
 
     @GetMapping("/{id}")
     public ResponseEntity<?> get(@PathVariable String id) {

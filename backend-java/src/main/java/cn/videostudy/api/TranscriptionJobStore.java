@@ -46,6 +46,22 @@ public class TranscriptionJobStore {
         } catch (JsonProcessingException error) { throw new IllegalStateException("Unable to save ignored region", error); }
     }
 
+    public record HistoryItem(String id, String name, String status, Instant createdAt) {}
+
+    public void saveOriginalFilename(String id, String filename) {
+        var name = filename == null ? "" : filename.replace((char)92, (char)47);
+        name = name.substring(name.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}]", "").strip();
+        if (name.length() > 255) name = name.substring(0, 255);
+        requireOne(jdbc.update("UPDATE transcription_jobs SET original_filename = ? WHERE id = ?",
+            name.isEmpty() ? null : name, id));
+    }
+
+    public List<HistoryItem> listHistory() {
+        return jdbc.query("SELECT id, original_filename, status, created_at FROM transcription_jobs ORDER BY created_at DESC, id DESC",
+            (row, number) -> new HistoryItem(row.getString("id"), row.getString("original_filename"),
+                row.getString("status"), row.getTimestamp("created_at").toInstant()));
+    }
+
     public IgnoreRegion findIgnoredRegion(String id) {
         var values = jdbc.query("SELECT ignored_region_json FROM transcription_jobs WHERE id = ?",
             (row, number) -> row.getString(1), id);

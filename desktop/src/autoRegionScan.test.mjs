@@ -34,3 +34,15 @@ test('budget exhaustion is explicit and a late result cannot survive cancellatio
  const c=new AbortController()
  await assert.rejects(scanRegions(90000,async times=>{c.abort();return times.map(t=>d(t))},{signal:c.signal}),{name:'AbortError'})
 })
+
+test('fixed camera model jitter does not recursively expand or create many nodes',async()=>{
+ const estimates=[{x:.71,y:.75,width:.18,height:.25},{x:.74,y:.79,width:.13,height:.21},{x:.72,y:.78,width:.15,height:.22},{x:.735,y:.775,width:.145,height:.225}]
+ let calls=0;const result=await scanRegions(2613000,async times=>times.map(t=>d(t,estimates[calls++%4])))
+ assert.equal(calls,4);assert.equal(result.setting.nodes.length,1)
+})
+
+test('confirmed window borders are not averaged with uncorrected model estimates',async()=>{
+ const precise={x:.732,y:.8,width:.154,height:.2},estimate={x:.732,y:.775,width:.154,height:.22}
+ let calls=0;const result=await scanRegions(90000,async times=>times.map(t=>({...d(t,calls++<2?estimate:precise),precision:calls<=2?'estimated':'border'})))
+ assert.equal(result.setting.nodes.length,1);for(const key of Object.keys(precise))assert(Math.abs(result.setting.nodes[0].region[key]-precise[key])<1e-12)
+})

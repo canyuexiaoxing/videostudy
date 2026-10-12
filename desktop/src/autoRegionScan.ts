@@ -1,14 +1,16 @@
 import {normalizeIgnoreSetting,upsertRegionNode} from './videoRegionTimeline.ts'
 import type {RegionNode,IgnoreSetting} from './videoRegionTimeline.ts'
 import type {VideoRegion} from './videoRegion.ts'
-export type Detection={timeMs:number;status:'detected'|'absent'|'uncertain';region:VideoRegion|null;reason?:string}
+export type Detection={timeMs:number;status:'detected'|'absent'|'uncertain';region:VideoRegion|null;reason?:string;precision?:'border'|'estimated'}
 export type ScanResult={setting:{nodes:RegionNode[]};samples:Detection[];unresolved:{startMs:number;endMs:number}[]}
 function same(a:Detection,b:Detection):boolean {
  if(a.status==='uncertain'||b.status==='uncertain'||a.status!==b.status)return false
  if(a.status==='absent')return true
  const x=a.region!,y=b.region!
  const overlap=Math.max(0,Math.min(x.x+x.width,y.x+y.width)-Math.max(x.x,y.x))*Math.max(0,Math.min(x.y+x.height,y.y+y.height)-Math.max(x.y,y.y))
- return overlap/(x.width*x.height+y.width*y.height-overlap)>=.8&&['x','y','width','height'].every(k=>Math.abs(x[k as keyof VideoRegion]-y[k as keyof VideoRegion])<=.025)
+ return overlap/(x.width*x.height+y.width*y.height-overlap)>=.55&&
+  Math.abs(x.x+x.width/2-y.x-y.width/2)<=.025&&Math.abs(x.y+x.height/2-y.y-y.height/2)<=.025&&
+  Math.min(x.width,y.width)/Math.max(x.width,y.width)>=.65&&Math.min(x.height,y.height)/Math.max(x.height,y.height)>=.65
 }
 export async function scanRegions(durationMs:number,detect:(times:number[])=>Promise<Detection[]>,options:{signal?:AbortSignal;onProgress?:(count:number)=>void}={}):Promise<ScanResult>{
  if(!Number.isFinite(durationMs)||durationMs<1||durationMs>Number.MAX_SAFE_INTEGER)throw new Error('视频时长无效')
@@ -53,7 +55,22 @@ export async function scanRegions(durationMs:number,detect:(times:number[])=>Pro
   intervals=splits.flatMap(([l,m,r])=>[[l,m],[m,r]] as [number,number][])
  }
  const ordered=[...nodes].sort((a,b)=>a[0]-b[0]).map(([timeMs,region])=>({timeMs,region}))
- const compact=ordered.filter((node,i)=>i===0||JSON.stringify(node.region)!==JSON.stringify(ordered[i-1].region))
+ const compact:RegionNode[]=[]
+ for(const node of ordered){
+  const previous=compact.at(-1)
+  if(previous&&same({timeMs:previous.timeMs,status:previous.region?'detected':'absent',region:previous.region},{timeMs:node.timeMs,status:node.region?'detected':'absent',region:node.region}))continue
+  compact.push(node)
+ }
+ const median=(values:number[])=>{const sorted=[...values].sort((a,b)=>a-b),mid=Math.floor(sorted.length/2);return sorted.length%2?sorted[mid]!:(sorted[mid-1]!+sorted[mid]!)/2}
+ for(let i=0;i<compact.length;i++){
+  const node=compact[i]!,next=compact[i+1]?.timeMs??Infinity
+  if(!node.region)continue
+  const reference:Detection={timeMs:node.timeMs,status:'detected',region:node.region}
+  const matches=[...cache.values()].filter(d=>d.timeMs>=node.timeMs&&d.timeMs<next&&same(reference,d))
+  const confirmed=matches.filter(d=>d.precision==='border')
+  const estimates=(confirmed.length?confirmed:matches).map(d=>d.region!)
+  if(estimates.length){const region={x:median(estimates.map(v=>v.x)),y:median(estimates.map(v=>v.y)),width:median(estimates.map(v=>v.width)),height:median(estimates.map(v=>v.height))};const normalized=normalizeIgnoreSetting(region);if(normalized&&!('nodes' in normalized))node.region=normalized}
+ }
  const setting=normalizeIgnoreSetting({nodes:compact})
  if(!setting||!('nodes' in setting))throw new Error('扫描结果无法应用')
  return {setting,samples:[...cache.values()].sort((a,b)=>a.timeMs-b.timeMs),unresolved}

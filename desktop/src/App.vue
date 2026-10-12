@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import MindMapCanvas from './MindMapCanvas.vue'
 import MindMapDialog from './MindMapDialog.vue'
 import StudyIcon from './StudyIcon.vue'
@@ -34,8 +34,10 @@ type Review = { status: string; resampledTimesMs: number[]; concerns: string[] }
 type TranscriptionJob = { id: string; status: string; progress?: AnalysisProgress | null; result?: { language: string; segments: Segment[]; visualEvidence?: VisualEvidence[]; pageGroups?: PageGroup[]; mindMap?: MindMapResult; visualAnalysisMode?: 'ocr_only' | 'both'; ocrModelId?: string; imageModelId?: string; review?: Review }; error?: string }
 type RightTab = 'map' | 'practice' | 'transcript' | 'slides' | 'notes' | 'history'
 type StudyNote = { id: string; scope: string; timeMs: number; text: string; createdAt: string }
-type HistoryStatus = 'unknown' | 'queued' | 'processing' | 'completed' | 'failed'
-type HistoryEntry = { id: string; name: string; addedAt: string; status: HistoryStatus }
+import {groupExamples} from './exampleTimeline'
+import {compactKnowledgeMap} from './mindMap'
+import {serverHistory} from './history'
+import type {HistoryStatus, HistoryEntry} from './history'
 
 const jobIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -52,7 +54,7 @@ function readHistory(): HistoryEntry[] {
     const saved = JSON.parse(localStorage.getItem('analysisHistory:v1') ?? '[]')
     if (Array.isArray(saved)) entries = saved.filter(item => jobIdPattern.test(item?.id) &&
       typeof item.name === 'string' && typeof item.addedAt === 'string' &&
-      ['unknown', 'queued', 'processing', 'completed', 'failed'].includes(item.status))
+      ['unknown', 'queued', 'processing', 'completed', 'failed', 'expired'].includes(item.status))
   } catch { /* An invalid local list must not block the app. */ }
   const lastId = localStorage.getItem('lastAnalysisId') ?? ''
   const knownIds = new Set(entries.map(item => item.id))
@@ -86,6 +88,29 @@ const studyNotes = ref<StudyNote[]>(readStudyNotes())
 const analysisHistory = ref<HistoryEntry[]>(readHistory())
 const deletingHistoryId = ref('')
 const historyError = ref('')
+const historyLoading = ref(false), historySynced = ref(false)
+let historyController:AbortController|null = null, historyGeneration = 0
+function cacheHistory(){try{localStorage.setItem('analysisHistory:v1',JSON.stringify(analysisHistory.value))}catch{/* Keep server results when storage is unavailable. */}}
+async function refreshHistory(){
+ if(deletingHistoryId.value)return
+ const generation=++historyGeneration
+ historyController?.abort();const controller=new AbortController();historyController=controller;historyLoading.value=true
+ try{
+  const response=await fetch(`${apiBase}/transcriptions`,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(15000)])})
+  if(!response.ok)throw new Error(`HTTP ${response.status}`)
+  const data=await response.json()
+  if(controller.signal.aborted||generation!==historyGeneration)return
+  const cached=analysisHistory.value.map(item=>({...item,name:savedMediaName(item.id)||item.name}))
+  analysisHistory.value=serverHistory(data,cached);historySynced.value=true;historyError.value='';cacheHistory()
+ }catch(e){if(!controller.signal.aborted&&generation===historyGeneration)historyError.value='无法同步服务器历史，当前显示上次缓存。请稍后刷新。'}
+ finally{if(generation===historyGeneration){historyLoading.value=false;historyController=null}}
+}
+watch(rightTab,tab=>{if(tab==='history')void refreshHistory()})
+let historyTimer:ReturnType<typeof setInterval>|undefined
+function focusHistory(){void refreshHistory()}
+onMounted(()=>{void refreshHistory();window.addEventListener('focus',focusHistory);historyTimer=setInterval(()=>{if(rightTab.value==='history'&&!document.hidden&&!historyLoading.value)void refreshHistory()},15000)})
+onUnmounted(()=>{++historyGeneration;historyController?.abort();clearInterval(historyTimer);window.removeEventListener('focus',focusHistory)})
+
 const selectedFile = ref<File | null>(null)
 const selectedFingerprint = ref('')
 const workspaceOpen = ref(false)
@@ -229,7 +254,8 @@ const status = ref('请选择本地视频')
 const transcript = ref<Segment[]>([])
 const visualEvidence = ref<VisualEvidence[]>([])
 const pageGroups = ref<PageGroup[]>([])
-const mindMap = ref<MindMapResult | null>(null)
+const rawMindMap = ref<MindMapResult | null>(null)
+const mindMap = computed(()=>rawMindMap.value?{...rawMindMap.value,root:compactKnowledgeMap(rawMindMap.value.root)}:null)
 const selectedMindNode = ref<MindNode | null>(null)
 const expandedMap = ref(false)
 const activeSegmentId = ref('')
@@ -446,6 +472,7 @@ const noteScopes = computed(() => transcript.value.length || mindMap.value
   ? [existingJobId.value, selectedFingerprint.value].filter(Boolean)
   : selectedFile.value ? [selectedFingerprint.value].filter(Boolean) : [])
 const visibleNotes = computed(() => studyNotes.value.filter(note => noteScopes.value.includes(note.scope)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
+const exampleTimeline = computed(()=>groupExamples(mindMap.value?.examples,transcript.value))
 const currentHistoryName = computed(() => analysisHistory.value.find(entry => entry.id === existingJobId.value)?.name ?? '')
 
 function rememberAnalysis(id: string, status: HistoryStatus, name = '') {
@@ -453,11 +480,11 @@ function rememberAnalysis(id: string, status: HistoryStatus, name = '') {
   const entry: HistoryEntry = { id, name: name || previous?.name || savedMediaName(id) || '历史分析',
     addedAt: previous?.addedAt ?? new Date().toISOString(), status }
   analysisHistory.value = [entry, ...analysisHistory.value.filter(item => item.id !== id)]
-  localStorage.setItem('analysisHistory:v1', JSON.stringify(analysisHistory.value))
+  cacheHistory()
 }
 
 function historyStatusLabel(status: HistoryStatus) {
-  return { unknown: '未查询', queued: '排队中', processing: '分析中', completed: '已完成', failed: '失败' }[status]
+  return { unknown: '未查询', queued: '排队中', processing: '分析中', completed: '已完成', failed: '失败', expired: '已过期' }[status]
 }
 
 function clearLoadedAnalysis() {
@@ -468,7 +495,7 @@ function clearLoadedAnalysis() {
   transcript.value = []
   visualEvidence.value = []
   pageGroups.value = []
-  mindMap.value = null
+  rawMindMap.value = null
   selectedMindNode.value = null
   activeSegmentId.value = ''
   review.value = null
@@ -502,7 +529,7 @@ async function chooseVideo(event: Event) {
   const previousId = existingJobId.value
   const expected = localStorage.getItem(`analysisMedia:${previousId}`)
   const previous = { segments: transcript.value, language: sourceLanguage.value, frames: visualEvidence.value,
-    pages: pageGroups.value, map: mindMap.value, review: review.value }
+    pages: pageGroups.value, map: rawMindMap.value, review: review.value }
   invalidateAnalysisRequests()
   setAnalysisId('')
   clearLoadedAnalysis()
@@ -526,7 +553,7 @@ async function chooseVideo(event: Event) {
       sourceLanguage.value = previous.language
       visualEvidence.value = previous.frames
       pageGroups.value = previous.pages
-      mindMap.value = previous.map
+      rawMindMap.value = previous.map
       review.value = previous.review
       readSubtitleJob(previousId)
       status.value = '视频指纹匹配；已关联该任务，可回放课程依据'
@@ -553,13 +580,17 @@ async function waitForAnalysis(id: string, request: RequestTicket) {
       if (!query.ok) throw new Error(`查询转写状态失败：HTTP ${query.status}`)
       const job: TranscriptionJob = await query.json()
       if (!request.current() || existingJobId.value !== id) return
-      if (['queued', 'processing', 'completed', 'failed'].includes(job.status) &&
+      if (['queued', 'processing', 'completed', 'failed', 'expired'].includes(job.status) &&
           analysisHistory.value.find(entry => entry.id === id)?.status !== job.status) {
         rememberAnalysis(id, job.status as HistoryStatus)
       }
       analysisState.value = job.status
       analysisProgress.value = job.progress ?? null
       status.value = job.status === 'queued' ? '等待分析任务…' : '正在分析…'
+      if (job.status === 'expired') {
+        failedJobId.value = ''
+        throw new Error('此任务已过期，没有可读取的分析结果，请重新选择视频分析。')
+      }
       if (job.status === 'failed') {
         failedJobId.value = id
         throw new Error(job.error || '分析失败')
@@ -570,7 +601,7 @@ async function waitForAnalysis(id: string, request: RequestTicket) {
         sourceLanguage.value = job.result?.language || 'und'
         visualEvidence.value = job.result?.visualEvidence ?? []
         pageGroups.value = job.result?.pageGroups ?? []
-        mindMap.value = job.result?.mindMap ?? null
+        rawMindMap.value = job.result?.mindMap ?? null
         selectedMindNode.value = null
         activeSegmentId.value = ''
         review.value = job.result?.review ?? null
@@ -610,7 +641,7 @@ async function runTranscription() {
   transcript.value = []
   visualEvidence.value = []
   pageGroups.value = []
-  mindMap.value = null
+  rawMindMap.value = null
   selectedMindNode.value = null
   activeSegmentId.value = ''
   review.value = null
@@ -689,12 +720,13 @@ async function loadExistingAnalysis() {
 
 async function openHistory(entry: HistoryEntry) {
   if (isAnalysisPending.value) return
+  if (entry.status === 'expired') {historyError.value='此任务已过期，没有可读取的分析结果。可以删除这条记录，或重新选择视频分析。';return}
   if (existingJobId.value !== entry.id) {
     clearSubtitleJob()
     transcript.value = []
     visualEvidence.value = []
     pageGroups.value = []
-    mindMap.value = null
+    rawMindMap.value = null
     selectedMindNode.value = null
     activeSegmentId.value = ''
     if (selectedFile.value && mediaBindingState(localStorage.getItem(`analysisMedia:${entry.id}`), selectedFile.value.size, selectedFingerprint.value) !== 'matched') detachPlayback()
@@ -709,6 +741,7 @@ async function deleteHistory(entry: HistoryEntry) {
   if (!window.confirm(`永久删除“${entry.name}”的分析结果、服务器截图、练习及答题记录和本机笔记？此操作无法撤销。电脑上的原视频不会删除。`)) return
   const deletingCurrentSubtitles = subtitleCourseId.value === entry.id
   if (deletingCurrentSubtitles) clearSubtitleJob()
+  ++historyGeneration;historyController?.abort();historyLoading.value=false
   deletingHistoryId.value = entry.id
   historyError.value = ''
   try {
@@ -716,7 +749,7 @@ async function deleteHistory(entry: HistoryEntry) {
     if (response.status === 409) throw new Error('这条任务还在排队或分析中，请完成后再删除。')
     if (response.status !== 204 && response.status !== 404) throw new Error(`删除失败：HTTP ${response.status}`)
     analysisHistory.value = analysisHistory.value.filter(item => item.id !== entry.id)
-    localStorage.setItem('analysisHistory:v1', JSON.stringify(analysisHistory.value))
+    cacheHistory()
     localStorage.removeItem(`analysisMedia:${entry.id}`)
     if (localStorage.getItem('lastAnalysisId') === entry.id) localStorage.removeItem('lastAnalysisId')
     studyNotes.value = studyNotes.value.filter(note => note.scope !== entry.id)
@@ -730,7 +763,7 @@ async function deleteHistory(entry: HistoryEntry) {
       transcript.value = []
       visualEvidence.value = []
       pageGroups.value = []
-      mindMap.value = null
+      rawMindMap.value = null
       selectedMindNode.value = null
       activeSegmentId.value = ''
       review.value = null
@@ -743,6 +776,7 @@ async function deleteHistory(entry: HistoryEntry) {
     if (deletingCurrentSubtitles && existingJobId.value === entry.id) readSubtitleJob(entry.id)
   } finally {
     deletingHistoryId.value = ''
+    void refreshHistory()
   }
 }
 
@@ -783,10 +817,10 @@ async function generateExistingMindMap(refresh = false) {
     if (!response.ok) throw new Error(`导图生成失败：HTTP ${response.status}`)
     const result = await response.json() as MindMapResult
     if (!request.current() || existingJobId.value !== id) return
-    mindMap.value = result
+    rawMindMap.value = result
     selectedMindNode.value = null
     activeSegmentId.value = ''
-    status.value = mindMap.value.status === 'completed' ? '导图已生成并保存；点击节点可回放原片段'
+    status.value = result.status === 'completed' ? '导图已生成并保存；点击节点可回放原片段'
       : '导图未完全生成；有依据的节点仍可回放，也可以重试'
   } catch (cause) {
     if (!request.current() || existingJobId.value !== id) return
@@ -932,21 +966,27 @@ onUnmounted(() => {
       </div>
       <section v-show="rightTab === 'map'" id="tab-map" class="sidebar-pane" role="tabpanel" aria-label="思维导图">
         <div v-if="mindMap" class="mind-map-panel">
-          <div class="mind-map-heading"><div><span class="eyebrow">KNOWLEDGE MAP</span><h2>知识导图</h2><p>核心知识看导图，例题按时间回看</p></div>
+          <div class="mind-map-heading"><div><span class="eyebrow">KNOWLEDGE MAP</span><h2>知识导图</h2><p>图上看核心知识，点击查看公式条件与讲解细节</p></div>
             <div class="mind-map-heading-actions"><button v-if="mindMap.root.children.length" type="button" class="expand-map-button" @click="expandedMap = true">放大查看</button><span class="mind-map-badge">{{ mindMap.root.children.length }} 个主题</span></div></div>
-          <p v-if="mindMap.status === 'empty'" class="status">{{ mindMap.examples?.length ? '本段课程未提取到核心知识，可通过下方例题节点回看。' : '没有可用的核心知识依据，暂时无法生成导图。' }}</p>
+          <p v-if="mindMap.status === 'empty'" class="status">{{ exampleTimeline.length ? '本段课程未提取到核心知识，可通过下方例题节点回看。' : '没有可用的核心知识依据，暂时无法生成导图。' }}</p>
           <p v-else-if="mindMap.status === 'failed'" class="status">{{ mindMap.root.children.length ? '部分导图内容未生成；已显示的节点仍可查看原文和回放。' : '导图尚未生成；原转写和页面分析仍可查看，可以重试。' }}</p>
           <div v-if="selectedMindNode?.evidenceRefs.length" class="mind-source">
             <strong>{{ selectedMindNode.title }} · 课程依据</strong>
+            <div v-if="selectedMindNode.details?.length" class="knowledge-details">
+              <details v-for="detail in selectedMindNode.details" :key="detail.id">
+                <summary>{{ detail.title }}</summary>
+                <button v-for="source in detail.evidenceRefs" :key="source.sourceId" type="button" class="mind-source-link" @click="seekTo(source.startMs, source.sourceId)"><span class="time">{{ formatTime(source.startMs) }}</span> {{ source.quote }}</button>
+              </details>
+            </div>
             <button v-for="source in selectedMindNode.evidenceRefs" :key="source.sourceId" type="button" class="mind-source-link" @click="seekTo(source.startMs, source.sourceId)">
               <span class="time">{{ formatTime(source.startMs) }}</span> {{ source.quote }}
             </button>
           </div>
           <MindMapCanvas v-if="mindMap.root.children.length" :root="mindMap.root" @select="selectMindMapNode" />
-          <section v-if="mindMap.examples?.length" class="example-timeline" aria-label="例题时间节点">
-            <div class="example-timeline-heading"><h3>例题时间节点</h3><span>{{ mindMap.examples.length }} 个讲解片段</span></div>
-            <p>例题独立列出，点击回看对应讲解。</p>
-            <button v-for="example in mindMap.examples" :key="example.id" type="button" @click="seekTo(example.evidenceRefs[0]?.startMs ?? example.startMs, example.evidenceRefs[0]?.sourceId)"><span class="time">{{ formatTime(example.startMs) }}</span><span>{{ example.title }}</span><StudyIcon name="play" /></button>
+          <section v-if="exampleTimeline.length" class="example-timeline" aria-label="例题时间节点">
+            <div class="example-timeline-heading"><h3>例题时间节点</h3><span>{{ exampleTimeline.length }} 道例题</span></div>
+            <p>每道例题一个入口，点击从题目开始处回看完整讲解。</p>
+            <button v-for="example in exampleTimeline" :key="example.id" type="button" @click="seekTo(example.evidenceRefs[0]?.startMs ?? example.startMs, example.evidenceRefs[0]?.sourceId)"><span class="time">{{ formatTime(example.startMs) }}</span><span>{{ example.title }}</span><StudyIcon name="play" /></button>
           </section>
         </div>
         <div v-else class="sidebar-empty">
@@ -957,7 +997,7 @@ onUnmounted(() => {
           <p class="empty-hint" :class="{ 'is-processing': isAnalysisPending }"><span v-if="isAnalysisPending" class="activity-spinner" aria-hidden="true"></span>{{ isAnalysisPending ? '正在分析课程，完成后导图将在这里显示。你可以继续观看本地视频。' : selectedFile ? '视频已选好，点击顶部“开始分析”；已有任务可在下方按编号读取结果。' : '先点击右上角“选择本地视频”；已有任务可在下方按编号读取结果。' }}</p>
         </div>
       </section>
-      <section v-show="rightTab === 'practice'" id="tab-practice" class="sidebar-pane" role="tabpanel" aria-label="AI 练习"><AiPractice :course-id="(transcript.length || pageGroups.length || mindMap) && existingJobId ? existingJobId : undefined" :has-media="!!selectedFile || checkingMedia" :playback-ready="confirmedMedia" :mind-map="mindMap" :selected-node-id="selectedMindNode?.id" :ready="!!transcript.length" @seek="seekTo" /></section>
+      <section v-show="rightTab === 'practice'" id="tab-practice" class="sidebar-pane" role="tabpanel" aria-label="AI 练习"><AiPractice :course-id="(transcript.length || pageGroups.length || mindMap) && existingJobId ? existingJobId : undefined" :has-media="!!selectedFile || checkingMedia" :playback-ready="confirmedMedia" :mind-map="rawMindMap" :selected-node-id="selectedMindNode?.id" :ready="!!transcript.length" @seek="seekTo" /></section>
       <section v-show="rightTab === 'transcript'" id="tab-transcript" class="sidebar-pane" role="tabpanel" aria-label="字幕原文">
         <div class="sidebar-pane-heading"><div><span class="eyebrow">TRANSCRIPT</span><h3>字幕原文</h3></div><span>{{ transcript.length }} 段</span></div>
         <template v-if="transcript.length">
@@ -1002,20 +1042,21 @@ onUnmounted(() => {
         <p v-else-if="noteScopes.length" class="sidebar-message">还没有笔记。播放到想记住的地方，写下内容并保存。</p>
       </section>
       <section v-show="rightTab === 'history'" id="tab-history" class="sidebar-pane" role="tabpanel" aria-label="历史记录">
-        <div class="sidebar-pane-heading"><div><span class="eyebrow">MY LIBRARY</span><h3>本机历史</h3></div><span>{{ analysisHistory.length }} 条记录</span></div>
+        <div class="sidebar-pane-heading"><div><span class="eyebrow">MY LIBRARY</span><h3>分析历史</h3></div><span>{{ analysisHistory.length }} 条记录</span></div>
         <p class="sidebar-message">保存的是任务编号和课程记录，不保存视频。点击记录可读取字幕、导图和课件文字；回放时请重新选择本地原视频。</p>
+        <button type="button" class="text-link" :disabled="historyLoading || !!deletingHistoryId" @click="refreshHistory">{{ historyLoading ? '同步中…' : '刷新历史' }}</button>
         <p v-if="historyError" class="history-error" role="alert">{{ historyError }}</p>
         <div v-if="analysisHistory.length" class="history-list">
           <article v-for="entry in analysisHistory" :key="entry.id" class="history-item">
             <button type="button" class="history-open" :disabled="isAnalysisPending || !!deletingHistoryId" @click="openHistory(entry)">
-              <span class="history-item-top"><strong>{{ entry.name }}</strong><span>上次状态：{{ historyStatusLabel(entry.status) }}</span></span>
-              <small>加入本机 {{ formatHistoryDate(entry.addedAt) }} · {{ entry.id }}</small>
+              <span class="history-item-top"><strong>{{ entry.name }}</strong><span>{{ historyStatusLabel(entry.status) }}</span></span>
+              <small>创建于 {{ formatHistoryDate(entry.addedAt) }} · {{ entry.id }}</small>
             </button>
             <button type="button" class="history-delete" :aria-label="`永久删除 ${entry.name} 的分析记录`" :disabled="isAnalysisPending || !!deletingHistoryId" @click="deleteHistory(entry)">{{ deletingHistoryId === entry.id ? '删除中…' : '删除' }}</button>
           </article>
         </div>
-        <div v-else class="sidebar-empty compact"><h3>还没有历史记录</h3><p>第一次分析或按编号读取结果后，记录会出现在这里。</p></div>
-        <p class="sidebar-message">此列表只保存在当前设备。清除浏览器数据会清空列表，但不会自动删除服务器上的分析结果。</p>
+        <div v-else class="sidebar-empty compact"><h3>{{ historyLoading ? '正在读取历史记录' : historySynced ? '还没有历史记录' : '尚未读取到历史记录' }}</h3><p>分析记录由服务器统一保存。</p></div>
+        <p class="sidebar-message">历史列表从当前服务同步，清除浏览器缓存后仍可恢复。删除记录会同时清理服务器分析结果、截图及关联练习。</p>
       </section>
     </aside>
     <section class="workspace">

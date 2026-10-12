@@ -18,7 +18,7 @@ const error=ref(''),note=ref(''),ready=ref(false)
 type Anchor={x:number;y:number;pointerId:number;timeMs:number;mode:'draw'|'move'|'resize';region:VideoRegion|null}
 let observer:ResizeObserver|undefined,anchor:Anchor|null=null
 const scanMode=ref<'full'|'current'>('full')
-const scanBusy=ref(false),scanCount=ref(0),candidate=ref<ScanResult|null>(null)
+const scanBusy=ref(false),scanCount=ref(0),candidate=ref<ScanResult|null>(null),editingCandidate=ref(false)
 let scanController:AbortController|null=null
 const areaMode=ref<'ignore'|'analysis'>('ignore')
 const selectedSetting=computed(()=>areaMode.value==='analysis'?props.analysisRegion:props.modelValue)
@@ -37,6 +37,7 @@ const overlapNote=computed(()=>{
 function commitRegion(value:IgnoreSetting|null){
  try{validateRegionCombination(areaMode.value==='analysis'?value:props.analysisRegion,areaMode.value==='ignore'?value:props.modelValue)}
  catch(e){refresh();error.value=e instanceof Error?e.message:'区域设置冲突';return false}
+ if(candidate.value&&editingCandidate.value){candidate.value={...candidate.value,setting:{nodes:regionNodes(value)}};return true}
  if(areaMode.value==='analysis')emit('update:analysisRegion',value);else emit('update:modelValue',value)
  return true
 }
@@ -61,7 +62,7 @@ function cancelDrawing(){
 function startDrawing(){media.value?.pause();cancelDrawing();editing.value=true;note.value='拖动框选，松开鼠标自动保存。'}
 function point(event:PointerEvent){const box=surface.value!.getBoundingClientRect();return {x:Math.max(0,Math.min(1,(event.clientX-box.left)/box.width)),y:Math.max(0,Math.min(1,(event.clientY-box.top)/box.height))}}
 function down(event:PointerEvent){
- if(!canDraw.value||candidate.value||event.button!==0||anchor)return
+ if(!canDraw.value||(candidate.value&&!editingCandidate.value)||event.button!==0||anchor)return
  const target=event.target as HTMLElement
  const mode=editing.value?'draw':target.closest('[data-resize]')?'resize':target.closest('.workspace-region')?'move':null
  if(!mode)return
@@ -88,8 +89,9 @@ function up(event:PointerEvent){
   const first=!nodes.value.length
   const a=areaMode.value==='analysis'?draft.value:regionAt(props.analysisRegion,finished.timeMs),b=areaMode.value==='ignore'?draft.value:regionAt(props.modelValue,finished.timeMs)
   if(a&&b&&b.x<=a.x&&b.y<=a.y&&b.x+b.width>=a.x+a.width&&b.y+b.height>=a.y+a.height)throw new Error('忽略框覆盖了整个分析区域，请保留需要分析的内容')
-  if(!commitRegion(upsertRegionNode(selectedSetting.value,finished.timeMs,draft.value,areaMode.value==='analysis')))return
-  error.value='';note.value=first?'已保存默认区域，应用于整段视频。':`已保存 ${nodeClock(finished.timeMs)} 节点，之后沿用这个位置，直到下一个节点。`
+  const saveTime=candidate.value&&editingCandidate.value?(activeTime.value??0):finished.timeMs
+  if(!commitRegion(upsertRegionNode(candidate.value&&editingCandidate.value?displaySetting.value:selectedSetting.value,saveTime,draft.value,areaMode.value==='analysis')))return
+  error.value='';note.value=candidate.value&&editingCandidate.value?'已调整当前候选节点，点击应用后生效。':first?'已保存默认区域，应用于整段视频。':`已保存 ${nodeClock(finished.timeMs)} 节点，之后沿用这个位置，直到下一个节点。`
  }catch(e){refresh();error.value=e instanceof Error?e.message:'保存失败，请重新框选。'}
 }
 function clear(){cancelDrawing();draft.value=null;if(!commitRegion(null))return;note.value=areaMode.value==='analysis'?'已清除分析范围，恢复完整画面。':'已清除忽略区域节点。'}
@@ -97,11 +99,12 @@ function seek(seconds:number){if(!media.value||dragging.value)return;cancelDrawi
 function remove(timeMs:number){cancelDrawing();if(!commitRegion(removeRegionNode(selectedSetting.value,timeMs)))return;note.value='已删除节点，这一时段沿用前一个区域。'}
 async function toggle(){if(!media.value)return;if(media.value.paused){try{await media.value.play()}catch{error.value='视频暂时无法播放，可尝试主页面的兼容播放。'}}else media.value.pause()}
 function stopScan(){scanController?.abort();scanController=null;scanBusy.value=false}
-function discardCandidate(){candidate.value=null;refresh();note.value='已保留原有设置。'}
-function applyCandidate(){if(!candidate.value)return;const value=candidate.value.setting;try{validateRegionCombination(props.analysisRegion,value)}catch(e){error.value=e instanceof Error?e.message:'区域设置冲突';return}candidate.value=null;emit('update:modelValue',value);note.value='已应用自动识别的时间节点，可继续手动调整。';refresh()}
+function adjustCandidate(){editingCandidate.value=true;note.value='拖动候选框或右下角调整大小；也可重新框选。点击应用后才保存。'}
+function discardCandidate(){editingCandidate.value=false;candidate.value=null;refresh();note.value='已保留原有设置。'}
+function applyCandidate(){if(!candidate.value)return;const value=candidate.value.setting;try{validateRegionCombination(props.analysisRegion,value)}catch(e){error.value=e instanceof Error?e.message:'区域设置冲突';return}editingCandidate.value=false;candidate.value=null;emit('update:modelValue',value);note.value='已应用自动识别的时间节点，可继续手动调整。';refresh()}
 async function autoScan(mode:'full'|'current'='full'){
  if(!canDraw.value||!duration.value)return
- media.value?.pause();sync();cancelDrawing();candidate.value=null;error.value='';note.value='';scanCount.value=0;scanMode.value=mode
+ media.value?.pause();sync();cancelDrawing();editingCandidate.value=false;candidate.value=null;error.value='';note.value='';scanCount.value=0;scanMode.value=mode
  const capturedTime=Math.round(time.value*1000)
  const controller=new AbortController();scanController=controller;scanBusy.value=true
  let decoder:Awaited<ReturnType<typeof createRegionCapture>>|undefined
@@ -121,13 +124,13 @@ async function autoScan(mode:'full'|'current'='full'){
    result=currentRegionCandidate(props.modelValue,detections[0]);scanCount.value=1
   }else result=await scanRegions(Math.round(duration.value*1000),detect,{signal:controller.signal,onProgress:count=>{if(!controller.signal.aborted)scanCount.value=count}})
   if(scanController!==controller||controller.signal.aborted)return
-  candidate.value=result;refresh();note.value=mode==='current'?`已识别 ${nodeClock(capturedTime)} 的画面，请预览后应用。`:`识别完成，共检查 ${result.samples.length} 张画面。请预览后应用。`
+  candidate.value=result;editingCandidate.value=false;refresh();note.value=mode==='current'?`已识别 ${nodeClock(capturedTime)} 的画面，请预览后应用。`:`识别完成，共检查 ${result.samples.length} 张画面。请预览后应用。`
  }catch(e){if(!controller.signal.aborted&&scanController===controller)error.value=e instanceof Error?e.message:'自动识别失败，请手动框选'}
  finally{decoder?.dispose();if(scanController===controller){scanController=null;scanBusy.value=false}}
 }
 function close(){stopScan();media.value?.pause();emit('close')}
 watch(()=>props.src,()=>{stopScan();candidate.value=null;media.value?.pause();ready.value=false;videoWidth.value=0;videoHeight.value=0;time.value=0;duration.value=0;cancelDrawing()})
-watch(()=>[props.modelValue,props.analysisRegion],()=>{candidate.value=null;refresh()})
+watch(()=>[props.modelValue,props.analysisRegion],()=>{editingCandidate.value=false;candidate.value=null;refresh()})
 onMounted(()=>{
  dialog.value?.showModal()
  observer=new ResizeObserver(entries=>{width.value=entries[0].contentRect.width;height.value=entries[0].contentRect.height})
@@ -158,9 +161,9 @@ onBeforeUnmount(()=>{stopScan();observer?.disconnect();media.value?.pause();dial
     <button v-if="!scanBusy&&areaMode==='ignore'" class="workspace-primary" type="button" :disabled="!canDraw||dragging||!!candidate" @click="autoScan('full')">AI 扫描全片</button>
     <button v-else-if="scanBusy" class="workspace-secondary" type="button" @click="stopScan">{{ scanMode==='current'?'取消识别':'取消扫描' }}</button>
     <button v-if="!scanBusy&&areaMode==='ignore'" class="workspace-secondary" type="button" :disabled="!canDraw||dragging||!!candidate" @click="autoScan('current')">AI 识别当前区域</button>
-    <p v-if="areaMode==='ignore'" class="workspace-auto-hint">当前区域只识别这一帧；全片扫描从 4 张画面开始递归，时间粒度约 30 秒。截图会发送至当前配置的 AI 服务。</p>
-    <div v-if="candidate" class="workspace-candidate"><strong>{{ scanMode==='current'?'当前画面候选区域':'候选结果' }}</strong><p>{{ candidate.setting.nodes.length }} 个区域节点 · {{ candidate.samples.length }} 张检测画面</p><p v-if="candidate.unresolved.length" class="workspace-error">{{ candidate.unresolved.length }} 个区间无法确定，暂不忽略：{{ candidate.unresolved.map(r=>`${nodeClock(r.startMs)}—${nodeClock(r.endMs)}`).join('、') }}。请人工检查。</p><p v-else-if="scanMode==='current'">{{ modelValue?`应用后从 ${nodeClock(candidate.samples[0]!.timeMs)} 开始使用，已有后续节点保留。`:'首次应用默认覆盖整段视频。' }}请检查是否覆盖课件。</p><p v-else>请检查是否覆盖课件。相同采样位置之间的短暂移动可能漏检。</p><button type="button" class="workspace-primary" @click="applyCandidate">{{ scanMode==='current'?'应用当前区域':'应用自动框选' }}</button><button type="button" class="workspace-secondary" @click="discardCandidate">放弃结果，保留原设置</button></div>
-    <button class="workspace-primary" type="button" :disabled="!canDraw||dragging||!!candidate" @click="startDrawing">{{ draft?'重新框选':'开始框选' }}</button>
+    <p v-if="areaMode==='ignore'" class="workspace-auto-hint">当前区域只识别这一帧；全片扫描从 4 张画面开始递归，时间粒度约 30 秒，小幅定位抖动会合并。截图会发送至当前配置的 AI 服务。</p>
+    <div v-if="candidate" class="workspace-candidate"><strong>{{ scanMode==='current'?'当前画面候选区域':'候选结果' }}</strong><p>{{ candidate.setting.nodes.length }} 个区域节点 · {{ candidate.samples.length }} 张检测画面</p><p v-if="candidate.unresolved.length" class="workspace-error">{{ candidate.unresolved.length }} 个区间无法确定，暂不忽略：{{ candidate.unresolved.map(r=>`${nodeClock(r.startMs)}—${nodeClock(r.endMs)}`).join('、') }}。请人工检查。</p><p v-else-if="scanMode==='current'">{{ modelValue?`应用后从 ${nodeClock(candidate.samples[0]!.timeMs)} 开始使用，已有后续节点保留。`:'首次应用默认覆盖整段视频。' }}请检查是否覆盖课件。</p><p v-else>请检查是否覆盖课件。相同采样位置之间的短暂移动可能漏检。</p><button type="button" class="workspace-primary" :disabled="dragging" @click="applyCandidate">{{ scanMode==='current'?'应用当前区域':'应用自动框选' }}</button><p v-if="candidate.samples.some(s=>s.precision==='estimated')" class="workspace-error">部分边界仅为模型估计，请检查并手动调整。</p><button type="button" class="workspace-secondary" :disabled="dragging" @click="adjustCandidate">手动调整候选框</button><button type="button" class="workspace-secondary" :disabled="dragging" @click="discardCandidate">放弃结果，保留原设置</button></div>
+    <button class="workspace-primary" type="button" :disabled="!canDraw||dragging||(!!candidate&&!editingCandidate)" @click="startDrawing">{{ draft?'重新框选':'开始框选' }}</button>
     <button v-if="editing" class="workspace-secondary" type="button" @click="cancelDrawing">取消框选</button>
     <button class="workspace-secondary" type="button" :disabled="!selectedSetting||dragging||scanBusy||!!candidate" @click="clear">{{ areaMode==='analysis'?'清除分析范围':'清除全部节点' }}</button>
     <div v-if="nodes.length" class="workspace-nodes" aria-label="区域时间节点"><strong>{{ candidate?'候选时间节点 · 未应用':areaMode==='analysis'?'分析区域时间节点':'忽略区域时间节点' }}</strong><div v-for="node in nodes" :key="node.timeMs" :class="['workspace-node',{active:node.timeMs===activeTime}]"><button type="button" :disabled="!ready||dragging||scanBusy" :aria-label="`跳到区域节点 ${nodeClock(node.timeMs)}`" @click="seek(node.timeMs/1000)">{{ nodeClock(node.timeMs) }} <span>{{ !node.region?(areaMode==='analysis'?'完整画面':'暂停忽略'):node.timeMs===0?'默认区域':'新位置' }}</span></button><button v-if="node.timeMs!==0" type="button" :disabled="dragging||scanBusy||!!candidate" :aria-label="`删除区域节点 ${nodeClock(node.timeMs)}`" @click="remove(node.timeMs)">×</button></div></div>

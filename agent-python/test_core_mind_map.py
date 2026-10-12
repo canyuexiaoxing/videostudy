@@ -131,3 +131,19 @@ class CoreMapTest(unittest.TestCase):
   result=build_mind_map([segment(8,'计算'),segment(9,'120减100等于20')],[],lambda _: {'topic':'课程','children':[{'title':'计算方法','sourceIds':['t_9']},{'title':'本题计算','sourceIds':['t_8'],'children':[{'title':'计算步骤','sourceIds':['t_9']}]}],'examples':[],'teachingSourceIds':['t_8','t_9'],'exampleSourceIds':[]})
   self.assertEqual(result['root']['children'],[])
   self.assertEqual([ref['sourceId'] for ref in result['examples'][0]['evidenceRefs']],['t_8','t_9'])
+
+class MisclassifiedExampleTest(unittest.TestCase):
+ def test_teaching_label_cannot_turn_formula_reuse_in_question_into_core(self):
+  result=build_mind_map([segment(1,'先独立讲公式'),segment(8,'例题开始'),segment(9,'使用前面的公式化简'),segment(10,'答案')],[],lambda _: {'topic':'课程','children':[{'title':'公式','sourceIds':['t_1']},{'title':'公式使用','sourceIds':['t_9']}],'examples':[{'title':'例题','sourceIds':['t_8','t_10']}],'teachingSourceIds':['t_1','t_9'],'exampleSourceIds':['t_8','t_10']})
+  self.assertEqual([n['title'] for n in result['root']['children'][0]['children']],['公式'])
+
+ def test_cross_chunk_concepts_merge_without_an_extra_provider_request(self):
+  calls=[]
+  def ask(payload):
+   source=payload['segments'][0]['id'];calls.append(source)
+   return {'topic':'极限','children':[{'title':'洛必达法则的条件','conceptKey':'洛必达法则','subject':'极限计算','sourceIds':[source]}]}
+  result=build_mind_map([segment(i,'洛必达法则的适用条件') for i in range(81)],[],ask)
+  self.assertEqual(calls,['t_0','t_80']);self.assertEqual(len(result['root']['children']),1)
+  concept=result['root']['children'][0]['children'][0]
+  self.assertEqual(concept['title'],'洛必达法则');self.assertEqual([r['sourceId'] for r in concept['evidenceRefs']],['t_0','t_80'])
+  self.assertEqual(concept['children'][0]['title'],'洛必达法则的条件')

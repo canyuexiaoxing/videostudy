@@ -13,6 +13,7 @@ export type MindMapNode = {
   endMs: number
   evidenceRefs: MindMapEvidence[]
   children: MindMapNode[]
+  details?: MindMapNode[]
 }
 
 export type MindMapResult = {
@@ -63,4 +64,27 @@ export async function jumpToMindMapNode(
   } catch {
     return 'paused'
   }
+}
+
+/** Keep concept structure on the canvas; retain complete explanations in details. */
+export function compactKnowledgeMap(root: MindMapNode): MindMapNode {
+  const caseText=(text:string)=>/(?<!基)本题|该题|这道题|这一道题|这一题|这个题|当前题|(?<!基)本例|此例|^(?:例题|习题|练习题)\s*(?:[:：0-9一二三四五六七八九十]|$)/.test(text)
+  function clean(node:MindMapNode,depth:number):MindMapNode|null {
+    if(depth>0&&caseText(node.title))return null
+    let children=node.children.map(child=>clean(child,depth+1)).filter((n):n is MindMapNode=>!!n)
+    let details=(node.details??[]).map(child=>clean(child,depth+1)).filter((n):n is MindMapNode=>!!n)
+    let refs=node.evidenceRefs.filter(ref=>!caseText(ref.quote))
+    if(!refs.length)refs=children.flatMap(child=>child.evidenceRefs).concat(details.flatMap(child=>child.evidenceRefs))
+    if(depth>0&&!refs.length)return null
+    if(depth>=2&&children.length&&node.children.every(child=>!child.children.length)){
+      // Short named rules/formulas are independent concepts, even if leaves.
+      // Sentence descriptions and conditions belong in their parent's details.
+      const standalone=(child:MindMapNode)=>child.title.length<=24&&/(?:法则|公式|定理|方法|概念|原理|性质|模型|算法|方程|不等式|恒等式|增长量|增长率)$/.test(child.title)&&! /^(?:适用|应用|操作|注意|步骤|易错|符号|公式内容)/.test(child.title)
+      details=details.concat(children.filter(child=>!standalone(child)))
+      children=children.filter(standalone)
+    }
+    const unique=[...new Map(refs.map(ref=>[ref.sourceId,{...ref}])).values()].sort((a,b)=>a.startMs-b.startMs)
+    return {...node,evidenceRefs:unique,startMs:unique[0]?.startMs??0,endMs:Math.max(0,...unique.map(ref=>ref.endMs)),children,details}
+  }
+  return clean(root,0)!
 }

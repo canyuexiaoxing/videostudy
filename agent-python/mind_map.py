@@ -11,9 +11,11 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 from concurrent.futures import ThreadPoolExecutor
 from checkpoints import Checkpoints
+from example_timeline import group_examples
+from knowledge_outline import organize_chapters
 
 
-PROMPT_VERSION = "grounded-mind-map-v6-case-guards"
+PROMPT_VERSION = "grounded-mind-map-v8-concept-outline"
 # Preserve completed media/page checkpoints; map chunk inputs carry the new policy.
 CACHE_CONTEXT_PROMPT_VERSION = "grounded-mind-map-v2"
 CHUNK_SEGMENTS = 80
@@ -62,6 +64,16 @@ def _deepseek_json(payload: dict) -> dict:
         "time, never for recalling an already taught formula. Keep new knowledge separate from calculation steps. "
         "List actual worked examples separately in examples, citing their opening and final supporting speech segments "
         "so their video locations can be derived from real evidence. Return examples=[] if none. Never invent examples or times. "
+        "For each complete concept include conceptKey (the concise canonical name actually present in its title or "
+        "supporting speech, e.g. 洛必达法则) and subject (a consistent broad subject label). "
+        "Use the same conceptKey and subject when the same concept recurs, including across boundary context; "
+        "never use generic keys like formula, method or calculation, or one shared key for different formulas. "
+        "One node represents a complete independently learnable concept or method, never one speech sentence. "
+        "Use concise subject labels. Put symbol meanings, assumptions, steps and pitfalls under their shared concept, "
+        "not parallel new concepts. Merge repeated mentions of the same concept. Prefer 3-6 coherent concepts per chapter, "
+        "not a transcript outline. Do not promote frequency, teacher asides or calculation actions into key concepts. "
+        "When ASR is garbled or a formula cannot be reliably reconstructed from evidence, omit that claim; never turn "
+        "phonetic nonsense into a mathematical fact or invent missing conditions. "
         "Use as many meaningful levels as the lesson needs; do not force a fixed depth or pad with "
         "generic headings. Keep the entire chapter under 48 nodes. Leaf nodes must express specific "
         "taught ideas and cite one or more supplied speech segment IDs in sourceIds. Grouping nodes "
@@ -246,6 +258,8 @@ def build_mind_map(segments: list[dict], page_groups: list[dict],
                     return None
                 node = _node(f"node_{offset}_{index}", title.strip()[:80], refs, children)
                 node['_teachingRole'] = raw.get('teachingRole', 'explanation')
+                node['_conceptKey'] = raw.get('conceptKey')
+                node['_subject'] = raw.get('subject')
                 node['_ownEvidence'] = has_own_evidence
                 node['_dedicatedSourceIds'] = sorted(teaching_ids) if classified else None
                 return node
@@ -324,6 +338,7 @@ def build_mind_map(segments: list[dict], page_groups: list[dict],
             target['evidenceRefs'].append(ref)
             target['evidenceRefs'].sort(key=lambda evidence: evidence['startMs'])
             target['endMs'] = max(evidence['endMs'] for evidence in target['evidenceRefs'])
+    examples = group_examples(examples, valid)
     # Verified example intervals are applications unless an independent new explanation is explicit.
     # Prune after all chunks finish so ancestors can be rebuilt from retained evidence.
     ranges = [(example['startMs'], example['endMs']) for example in examples]
@@ -336,14 +351,21 @@ def build_mind_map(segments: list[dict], page_groups: list[dict],
         original_children = node['children']
         children = [retained for child in original_children
                     if (retained := dedicated_teaching(child)) is not None]
-        refs = [ref for ref in node['evidenceRefs'] if not _case_specific(ref['quote']) and (ref['sourceId'] in dedicated_ids if dedicated_ids is not None else not any(
-            start <= ref['startMs'] and ref['endMs'] <= end for start, end in ranges))] if has_own_evidence else []
+        refs = [ref for ref in node['evidenceRefs'] if not _case_specific(ref['quote'])
+                and (dedicated_ids is None or ref['sourceId'] in dedicated_ids)
+                and (not any(start <= ref['startMs'] and ref['endMs'] <= end for start,end in ranges)
+                     or (role == 'new_knowledge' and dedicated_ids is not None
+                         and re.search(r'首次|单独|定义|推导',ref['quote'])))] if has_own_evidence else []
         if not refs and children:
             refs = children[0]['evidenceRefs']
         if not refs:
             return None
-        return _node(node['id'], node['title'], refs, children)
+        retained = _node(node['id'], node['title'], refs, children)
+        retained['_conceptKey'] = node.get('_conceptKey')
+        retained['_subject'] = node.get('_subject')
+        return retained
     chapters = [retained for node in chapters if (retained := dedicated_teaching(node)) is not None]
+    chapters = organize_chapters(chapters)
     root_refs = chapters[0]["evidenceRefs"] if chapters else []
     return {"status": "failed" if failed else "empty" if not chapters else "completed",
             "provider": "deepseek", "modelId": model_id, "promptVersion": PROMPT_VERSION,

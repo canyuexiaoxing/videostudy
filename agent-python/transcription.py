@@ -4,6 +4,34 @@ import os
 import subprocess
 from pathlib import Path
 from uuid import UUID
+from functools import lru_cache
+from threading import Lock
+
+
+def transcription_config():
+    model=os.environ.get('WHISPER_MODEL','base').strip()
+    device=os.environ.get('WHISPER_DEVICE','cpu').strip()
+    precision=os.environ.get('WHISPER_COMPUTE_TYPE','float16' if device=='cuda' else 'int8').strip()
+    if model not in {'tiny','base','small','medium','large-v3','large-v3-turbo'}:raise ValueError('Unsupported Whisper model')
+    if device not in {'cpu','cuda'}:raise ValueError('Unsupported Whisper device')
+    if precision not in {'int8','float16','float32','int8_float16'}:raise ValueError('Unsupported Whisper precision')
+    if device=='cpu' and precision in {'float16','int8_float16'}:raise ValueError('CPU Whisper needs int8 or float32')
+    return model,device,precision
+
+def speech_checkpoint_key():
+    model,device,precision=transcription_config()
+    legacy=f'faster-whisper-{model}:beam5:vad:{precision}'
+    return legacy if (model,device,precision)==('base','cpu','int8') else legacy+':'+device
+
+_model_lock=Lock()
+@lru_cache(maxsize=1)
+def _load_model(model_path,device,precision):
+    from faster_whisper import WhisperModel
+    return WhisperModel(model_path,device=device,compute_type=precision)
+
+def _get_model(model_path,device,precision):
+    # Serialize first load so simultaneous tasks do not allocate two copies.
+    with _model_lock:return _load_model(model_path,device,precision)
 
 
 def transcribe_file(file_id: str) -> dict:
@@ -15,7 +43,8 @@ def transcribe_file(file_id: str) -> dict:
         raise FileNotFoundError("uploaded media not found")
 
     model_root = Path(os.environ.get("MODEL_DIR", "../.local/models")).resolve()
-    model_path = model_root / "faster-whisper-base"
+    model_name,device,precision=transcription_config()
+    model_path = model_root / ("faster-whisper-"+model_name)
     if not (model_path / "model.bin").is_file():
         raise FileNotFoundError("Whisper model is missing from the project model directory")
 
@@ -29,10 +58,8 @@ def transcribe_file(file_id: str) -> dict:
         return {"language": "und", "segments": []}
 
     # Import only when a real transcription is requested; the demo API stays lightweight.
-    from faster_whisper import WhisperModel
-
     # PyAV, bundled by faster-whisper, decodes the audio stream from the video.
-    model = WhisperModel(str(model_path), device="cpu", compute_type="int8")
+    model = _get_model(str(model_path),device,precision)
     segments, info = model.transcribe(str(video_path), beam_size=5, vad_filter=True)
     result = [
         {"id": f"t_{index}", "startMs": round(segment.start * 1000),

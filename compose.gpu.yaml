@@ -6,5 +6,8 @@ services:
       dockerfile: Dockerfile.gpu
     environment:
       OCR_DEVICE: gpu:0
+      WHISPER_MODEL: small
+      WHISPER_DEVICE: cuda
+      WHISPER_COMPUTE_TYPE: float16
       NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
     gpus: all
