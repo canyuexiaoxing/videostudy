@@ -38,8 +38,12 @@ public class TranscriptionController {
     private SubtitleService subtitles;
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private ChapterController chapters;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private OverviewController overviews;
     @Value("${analysis.stage-attempts:2}") private int stageAttempts = 2;
     @Value("${keyframe.dir:../.local/keyframes}") private String keyframeDirectory;
+    private final Object runLock = new Object();
+    private final java.util.Map<String,Object> activeRuns = new java.util.concurrent.ConcurrentHashMap<>();
     private final ThreadPoolExecutor worker = new ThreadPoolExecutor(
         1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(4));
 
@@ -62,13 +66,23 @@ public class TranscriptionController {
                                     @RequestParam(value = "coarseChangePercent", defaultValue = "2") double coarseChangePercent,
                                     @RequestParam(value = "coarseSampleSeconds", defaultValue = "2") int coarseSampleSeconds,
                                     @RequestParam(value = "ignoredRegion", required = false) String ignoredRegionJson,
+                                    @RequestParam(value = "groupedAnalysis", defaultValue = "false") boolean groupedAnalysis,
                                     @RequestParam(value = "aiSubtitles", defaultValue = "false") boolean aiSubtitles,
-                                    @RequestParam(value = "subtitleTargetLanguage", defaultValue = "source") String subtitleTargetLanguage)
+                                    @RequestParam(value = "subtitleTargetLanguage", defaultValue = "source") String subtitleTargetLanguage,
+                                    @RequestParam(value = "mindMapMode", required = false) String requestedMapMode)
                                     throws IOException {
+        final String mindMapMode=requestedMapMode==null?(groupedAnalysis?"grouped":"legacy"):requestedMapMode;
+        if (!List.of("legacy","grouped","direct").contains(mindMapMode))
+            return ResponseEntity.badRequest().body(Map.of("error","invalid_mind_map_mode"));
+        groupedAnalysis="grouped".equals(mindMapMode);
+        if (!"legacy".equals(mindMapMode) && (!"both".equals(visualAnalysisMode) || !"full".equals(analysisMode)))
+            return ResponseEntity.badRequest().body(Map.of("error","mind_map_mode_requires_full_images"));
         if (!List.of("source", "zh", "en").contains(subtitleTargetLanguage))
             return ResponseEntity.badRequest().body(Map.of("error", "invalid_subtitle_target_language"));
         if (!List.of("ocr_only", "both").contains(visualAnalysisMode))
             return ResponseEntity.badRequest().body(Map.of("error", "invalid_visual_analysis_mode"));
+        if (groupedAnalysis && !"both".equals(visualAnalysisMode))
+            return ResponseEntity.badRequest().body(Map.of("error", "grouped_analysis_requires_images"));
         if (coarseChangePercent != 0.5 && coarseChangePercent != 1.0 &&
             coarseChangePercent != 2.0 && coarseChangePercent != 3.0)
             return ResponseEntity.badRequest().body(Map.of("error", "invalid_coarse_change_percent"));
@@ -88,6 +102,8 @@ public class TranscriptionController {
         try {
             if (ignoredRegion == null) store.createQueued(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds);
             else store.createQueued(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion);
+            store.saveGroupedAnalysis(id, groupedAnalysis);
+            store.saveMindMapMode(id,mindMapMode);
             store.saveOriginalFilename(id, file.getOriginalFilename());
             if (aiSubtitles && subtitles != null) subtitles.createUploadRequest(id, subtitleTargetLanguage);
         } catch (RuntimeException error) {
@@ -96,7 +112,7 @@ public class TranscriptionController {
             throw error;
         }
         try {
-            worker.execute(() -> process(id, path, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion));
+            queueAnalysis(id, path, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion, groupedAnalysis, mindMapMode);
         } catch (RejectedExecutionException error) {
             store.delete(id);
             Files.deleteIfExists(path);
@@ -105,6 +121,12 @@ public class TranscriptionController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
 
+    public ResponseEntity<?> upload(MultipartFile file, String visualMode, double threshold, int seconds, String ignoredRegion, boolean groupedAnalysis, boolean aiSubtitles, String targetLanguage) throws IOException {
+        return upload(file,visualMode,threshold,seconds,ignoredRegion,groupedAnalysis,aiSubtitles,targetLanguage,null);
+    }
+    public ResponseEntity<?> upload(MultipartFile file, String visualMode, double threshold, int seconds, String ignoredRegion, boolean aiSubtitles, String targetLanguage) throws IOException {
+        return upload(file, visualMode, threshold, seconds, ignoredRegion, false, aiSubtitles, targetLanguage);
+    }
     public ResponseEntity<?> upload(MultipartFile file, String visualMode, double threshold, int seconds, boolean aiSubtitles, String targetLanguage) throws IOException {
         return upload(file, visualMode, threshold, seconds, null, aiSubtitles, targetLanguage);
     }
@@ -133,19 +155,40 @@ public class TranscriptionController {
         if (!"failed".equals(existing.get().status())) return ResponseEntity.status(409).body(Map.of("error", "job_not_failed"));
         var path = uploadRoot.resolve(id);
         if (!Files.isRegularFile(path)) return ResponseEntity.status(410).body(Map.of("error", "upload_no_longer_available"));
-        if (!store.markQueuedIfFailed(id)) return ResponseEntity.status(409).body(Map.of("error", "job_not_failed"));
+        synchronized (runLock) {
+            try { agent.resetAnalysis(id); }
+            catch (RuntimeException error) { return ResponseEntity.status(502).body(Map.of("error", "analysis_reset_failed")); }
+            if (!store.markQueuedIfFailed(id)) return ResponseEntity.status(409).body(Map.of("error", "job_not_failed"));
+        }
         try {
             var visualAnalysisMode = store.findVisualAnalysisMode(id);
             var coarseChangePercent = store.findCoarseChangePercent(id);
             var coarseSampleSeconds = store.findCoarseSampleSeconds(id);
             var ignoredRegion = store.findIgnoredRegion(id);
-            worker.execute(() -> process(id, path, visualAnalysisMode == null ? "both" : visualAnalysisMode,
-                                          coarseChangePercent, coarseSampleSeconds, ignoredRegion));
+            var groupedAnalysis = store.findGroupedAnalysis(id);
+            var mindMapMode=store.findMindMapMode(id);
+            if (mindMapMode==null) mindMapMode=groupedAnalysis?"grouped":"legacy";
+            queueAnalysis(id, path, visualAnalysisMode == null ? "both" : visualAnalysisMode,
+                                          coarseChangePercent, coarseSampleSeconds, ignoredRegion, groupedAnalysis, mindMapMode);
         } catch (RejectedExecutionException error) {
             store.markFailed(id, "analysis_queue_full");
             return ResponseEntity.status(429).body(Map.of("error", "analysis_queue_full"));
         }
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(new TranscriptionJob(id, "queued", null, null));
+    }
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<?> cancel(@PathVariable String id) {
+        if (!SubtitleController.validId(id)) return ResponseEntity.badRequest().build();
+        if (store.find(id).isEmpty()) return ResponseEntity.notFound().build();
+        boolean notified = true;
+        synchronized (runLock) {
+            if (!store.cancel(id)) return ResponseEntity.status(409).body(Map.of("error", "job_not_active"));
+            activeRuns.remove(id);
+            try { agent.cancelAnalysis(id); }
+            catch (RuntimeException error) { notified = false; log.warn("Agent cancellation notification failed for {}", id); }
+        }
+        return ResponseEntity.ok(Map.of("status", "cancelled", "agentNotified", notified));
     }
 
     @Scheduled(fixedDelayString = "${media.cleanup-interval-ms:3600000}")
@@ -172,20 +215,37 @@ public class TranscriptionController {
         if (count > 0) log.info("Marked {} interrupted analysis jobs as retryable", count);
     }
 
-    private void process(String id, Path path, String visualAnalysisMode, double coarseChangePercent, int coarseSampleSeconds, IgnoreRegion ignoredRegion) {
+    private void queueAnalysis(String id, Path path, String visualMode, double threshold, int seconds, IgnoreRegion region, boolean groupedAnalysis, String mindMapMode) {
+        var token = new Object();
+        activeRuns.put(id, token);
+        try { worker.execute(() -> process(id, path, visualMode, threshold, seconds, region, groupedAnalysis, mindMapMode, token)); }
+        catch (RejectedExecutionException error) { activeRuns.remove(id, token); throw error; }
+    }
+    private void process(String id, Path path, String visualAnalysisMode, double coarseChangePercent, int coarseSampleSeconds, IgnoreRegion ignoredRegion, boolean groupedAnalysis, String mindMapMode, Object token) {
         boolean saved = false;
         try {
-            store.markProcessing(id);
-            var result = analyzeWithResume(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion);
+            synchronized (runLock) {
+                if (activeRuns.get(id) != token) return;
+                store.markProcessing(id);
+            }
+            var result = analyzeWithResume(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion, groupedAnalysis, mindMapMode, token);
             if (result == null) throw new IllegalStateException("Agent returned no transcription result");
-            if (result.mindMap() != null && !MindMapValidator.isGrounded(result.mindMap(), result.segments()))
+            if (result.mindMap() != null && !MindMapValidator.isGrounded(result.mindMap(), result.segments(), result.visualEvidence()))
                 throw new IllegalStateException("Agent returned an ungrounded mind map");
             if (analysisMode.equals("full") &&
                 (result.review() == null || !List.of("completed", "not_applicable").contains(result.review().status()))) {
                 throw new IllegalStateException("Full analysis has not completed Agent review");
             }
-            store.complete(id, result);
-            saved = true;
+            synchronized (runLock) {
+                if (activeRuns.get(id) != token) return;
+                store.complete(id, result);
+                saved = true;
+                activeRuns.remove(id, token);
+            }
+            if (overviews != null && result.mindMap()!=null && "completed".equals(result.mindMap().status())) {
+                try { overviews.request(id); }
+                catch (RuntimeException error) { log.warn("Overview dispatch deferred for {}", id); }
+            }
             if (chapters != null) {
                 try { chapters.request(id); }
                 catch (RuntimeException error) { log.warn("Chapter dispatch deferred for {}", id); }
@@ -198,15 +258,17 @@ public class TranscriptionController {
             deleteTaskDirectory(id, true);
         } catch (Exception error) {
             log.warn("Transcription job {} failed", id, error);
-            if (!saved) {
-                try { store.markFailed(id, analysisMode.equals("full") ? "analysis_failed" : "transcription_failed"); }
-                catch (RuntimeException persistenceError) { log.error("Unable to persist failure for job {}", id, persistenceError); }
-                if (subtitles != null) subtitles.sourceUnavailable(id);
+            synchronized (runLock) {
+                if (!saved && activeRuns.get(id) == token) {
+                    try { store.markFailed(id, analysisMode.equals("full") ? "analysis_failed" : "transcription_failed"); }
+                    catch (RuntimeException persistenceError) { log.error("Unable to persist failure for job {}", id, persistenceError); }
+                    if (subtitles != null) subtitles.sourceUnavailable(id);
+                }
             }
-        }
+        } finally { activeRuns.remove(id, token); }
     }
 
-    private TranscriptResult analyzeWithResume(String id, String visualMode, double threshold, int sampleSeconds, IgnoreRegion ignoredRegion) throws Exception {
+    private TranscriptResult analyzeWithResume(String id, String visualMode, double threshold, int sampleSeconds, IgnoreRegion ignoredRegion, boolean groupedAnalysis, String mindMapMode, Object token) throws Exception {
         String callbackToken = null;
         if (subtitles != null) {
             try { callbackToken = subtitles.callbackToken(id); }
@@ -215,9 +277,12 @@ public class TranscriptionController {
         for (int attempt = 1; ; attempt++) {
             try {
                 clearProgress(id);
-                var result = ignoredRegion == null ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken)
+                if (activeRuns.get(id) != token) throw new IllegalStateException("Analysis cancelled");
+                var result = "direct".equals(mindMapMode) ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken, ignoredRegion, false, "direct")
+                    : groupedAnalysis ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken, ignoredRegion, true)
+                    : ignoredRegion == null ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken)
                     : agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken, ignoredRegion);
-                if (result != null && analysisMode.equals("full")) {
+                if (result != null && analysisMode.equals("full") && "legacy".equals(mindMapMode)) {
                     if (result.mindMap() != null && "failed".equals(result.mindMap().status()))
                         throw new IllegalStateException("Mind-map chunks incomplete; resume successful checkpoints");
                     if (result.pageGroups() != null && result.pageGroups().stream().anyMatch(page ->
@@ -229,7 +294,7 @@ public class TranscriptionController {
             } catch (Exception error) {
                 boolean permanent = error instanceof org.springframework.web.client.RestClientResponseException response &&
                     response.getStatusCode().is4xxClientError() && response.getStatusCode().value() != 429;
-                if (permanent || attempt >= Math.max(1, stageAttempts) || Thread.currentThread().isInterrupted()) throw error;
+                if (activeRuns.get(id) != token || permanent || attempt >= Math.max(1, stageAttempts) || Thread.currentThread().isInterrupted()) throw error;
                 log.warn("Job {} automatically resuming after attempt {}: {}", id, attempt, error.getClass().getSimpleName());
                 Thread.sleep(500);
             }
@@ -258,10 +323,15 @@ public class TranscriptionController {
             var stage = json.get("stage").textValue();
             int completed = json.get("completedStages").intValue(), total = json.get("totalStages").intValue();
             int units = json.get("completedUnits").intValue(), count = json.get("totalUnits").intValue();
-            var stages = Map.of("media", 0, "coverage", 1, "grouping", 2, "pages", 3, "materials", 4, "saving", 4);
+            var stages = Map.of("media", 0, "coverage", 1, "grouping", 2, "pages", 3, "groups", 3, "materials", 4, "saving", 4);
             if (!stages.containsKey(stage) || completed != stages.get(stage) || total != 5 || count < 0 || units < 0 || units > count) return null;
-            return new AnalysisProgress(stage, completed, total, units, count);
+            return new AnalysisProgress(stage, completed, total, units, count, json.path("phase").asText(null), nullableInt(json,"readyGroups"), nullableInt(json,"completedGroups"), nullableInt(json,"totalGroups"), json.path("groupPhase").asText(null));
         } catch (IOException | IllegalArgumentException error) { return null; }
+    }
+
+    private static Integer nullableInt(com.fasterxml.jackson.databind.JsonNode json, String name) {
+        var value = json.get(name);
+        return value != null && value.isIntegralNumber() && value.canConvertToInt() && value.intValue() >= 0 ? value.intValue() : null;
     }
 
     private void deleteTaskDirectory(String id, boolean checkpointsOnly) throws IOException {
@@ -295,7 +365,10 @@ public class TranscriptionController {
     public record PageGroup(int pageIndex, long firstFrameTimeMs, long lastFrameTimeMs,
                             List<Long> memberFrameTimesMs, List<Long> representativeFrameTimesMs,
                             String decision, String decisionReason, List<OcrLine> ocrLines,
-                            ImageAnalysis imageAnalysis, ImageAnalysis textAnalysis) {
+                            ImageAnalysis imageAnalysis, ImageAnalysis textAnalysis, Map<String,Object> groupUnderstanding) {
+        public PageGroup(int pageIndex, long firstFrameTimeMs, long lastFrameTimeMs, List<Long> memberFrameTimesMs, List<Long> representativeFrameTimesMs, String decision, String decisionReason, List<OcrLine> ocrLines, ImageAnalysis imageAnalysis, ImageAnalysis textAnalysis) {
+            this(pageIndex, firstFrameTimeMs, lastFrameTimeMs, memberFrameTimesMs, representativeFrameTimesMs, decision, decisionReason, ocrLines, imageAnalysis, textAnalysis, null);
+        }
         public PageGroup(int pageIndex, long firstFrameTimeMs, long lastFrameTimeMs,
                          List<Long> memberFrameTimesMs, List<Long> representativeFrameTimesMs,
                          String decision, String decisionReason, List<OcrLine> ocrLines,
@@ -308,9 +381,16 @@ public class TranscriptionController {
                                List<Long> resampledTimesMs, List<String> concerns) {}
     public record MindMapEvidence(String sourceType, String sourceId, long startMs, long endMs, String quote) {}
     public record MindMapNode(String id, String title, long startMs, long endMs,
-                              List<MindMapEvidence> evidenceRefs, List<MindMapNode> children) {}
+                              List<MindMapEvidence> evidenceRefs, List<MindMapNode> children, List<MindMapNode> details) {
+        public MindMapNode(String id, String title, long startMs, long endMs, List<MindMapEvidence> evidenceRefs, List<MindMapNode> children) {
+            this(id, title, startMs, endMs, evidenceRefs, children, null);
+        }
+    }
     public record MindMapResult(String status, String provider, String modelId, String promptVersion,
-                                String createdAt, MindMapNode root, List<MindMapNode> examples) {
+                                String createdAt, MindMapNode root, List<MindMapNode> examples, List<String> uncertainties) {
+        public MindMapResult(String status, String provider, String modelId, String promptVersion, String createdAt, MindMapNode root, List<MindMapNode> examples) {
+            this(status, provider, modelId, promptVersion, createdAt, root, examples, null);
+        }
         public MindMapResult(String status, String provider, String modelId, String promptVersion, String createdAt, MindMapNode root) {
             this(status, provider, modelId, promptVersion, createdAt, root, null);
         }
@@ -370,7 +450,9 @@ public class TranscriptionController {
             this(language, segments, visualEvidence, ocrModelId, imageModelId, review, null, null, null, null, null, null);
         }
     }
-    public record AnalysisProgress(String stage, int completedStages, int totalStages, int completedUnits, int totalUnits) {}
+    public record AnalysisProgress(String stage, int completedStages, int totalStages, int completedUnits, int totalUnits, String phase, Integer readyGroups, Integer completedGroups, Integer totalGroups, String groupPhase) {
+        public AnalysisProgress(String stage, int completedStages, int totalStages, int completedUnits, int totalUnits) { this(stage, completedStages, totalStages, completedUnits, totalUnits, null, null, null, null, null); }
+    }
     public record TranscriptionJob(String id, String status, TranscriptResult result, String error, AnalysisProgress progress) {
         public TranscriptionJob(String id, String status, TranscriptResult result, String error) {
             this(id, status, result, error, null);

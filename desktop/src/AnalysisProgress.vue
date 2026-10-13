@@ -4,7 +4,7 @@ import {progressView} from './analysisProgress'
 import type {AnalysisProgress} from './analysisProgress'
 const props=defineProps<{state:string;progress:AnalysisProgress|null}>()
 const view=computed(()=>progressView(props.state,props.progress))
-const steps=['转写与选图','补采检查','同页分组','页面解读','学习资料']
+const steps=computed(()=>['转写与选图','补采检查','同页分组',props.progress?.totalGroups!=null||props.progress?.stage==='groups'?'组图文理解':'页面解读','思维导图'])
 </script>
 <template>
  <section v-if="state" class="analysis-progress" :class="{'progress-failed':['failed','interrupted'].includes(state)}" aria-label="视频分析进度">

@@ -45,6 +45,13 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
             .retrieve().body(new ParameterizedTypeReference<Map<String,Object>>() {});
     }
 
+    @Override public Map<String,Object> generateOverview(TranscriptionController.TranscriptResult source) {
+        var body=new LinkedHashMap<String,Object>();body.put("segments",source.segments());
+        body.put("pageGroups",source.pageGroups()==null?List.of():source.pageGroups());body.put("mindMap",source.mindMap());
+        body.put("visualEvidence",source.visualEvidence()==null?List.of():source.visualEvidence());
+        return agent.post().uri("/overview").body(body).retrieve().body(new ParameterizedTypeReference<Map<String,Object>>() {});
+    }
+
     @Override
     public TranscriptionController.TranscriptResult analyze(String fileId, String mode) {
         return analyze(fileId, mode, "both");
@@ -73,15 +80,58 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
 
     @Override public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode,
             double coarseChangePercent, int coarseSampleSeconds, String subtitleCallbackToken, IgnoreRegion region) {
+        return analyze(fileId, mode, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, subtitleCallbackToken, region, false);
+    }
+    @Override public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode,
+            double coarseChangePercent, int coarseSampleSeconds, String subtitleCallbackToken, IgnoreRegion region, boolean groupedAnalysis) {
+        return analyze(fileId, mode, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, subtitleCallbackToken, region, groupedAnalysis, null);
+    }
+    @Override public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode,
+            double coarseChangePercent, int coarseSampleSeconds, String subtitleCallbackToken, IgnoreRegion region, boolean groupedAnalysis, String mindMapMode) {
+        if (mindMapMode != null) groupedAnalysis="grouped".equals(mindMapMode);
         var endpoint = "full".equals(mode) ? "/analyze" : "/transcribe";
         var body = new LinkedHashMap<String,Object>();
         body.put("fileId", fileId); body.put("visualAnalysisMode", visualAnalysisMode);
         body.put("coarseChangePercent", coarseChangePercent);
         body.put("coarseSampleSeconds", coarseSampleSeconds);
+        body.put("groupedAnalysis", groupedAnalysis);
+        if (mindMapMode != null) body.put("mindMapMode", mindMapMode);
         if (region != null) body.put("ignoredRegion", region);
         if (subtitleCallbackToken != null) body.put("subtitleCallbackToken", subtitleCallbackToken);
         return agent.post().uri(endpoint).body(body)
             .retrieve().body(TranscriptionController.TranscriptResult.class);
+    }
+
+    @Override public void resetAnalysis(String fileId) {
+        agent.post().uri("/analysis-reset").body(Map.of("fileId", fileId)).retrieve().toBodilessEntity();
+    }
+    @Override public void cancelAnalysis(String fileId) {
+        agent.post().uri("/analysis-cancel").body(Map.of("fileId", fileId)).retrieve().toBodilessEntity();
+    }
+    @Override public TranscriptionController.MindMapResult generateMindMap(String courseId, boolean groupedAnalysis,
+            List<TranscriptionController.TranscriptSegment> segments, List<TranscriptionController.PageGroup> pages) {
+        return generateMindMap(courseId, groupedAnalysis, segments, pages, List.of());
+    }
+    @Override public TranscriptionController.MindMapResult generateMindMap(String courseId, boolean groupedAnalysis,
+            List<TranscriptionController.TranscriptSegment> segments, List<TranscriptionController.PageGroup> pages,
+            List<TranscriptionController.VisualEvidence> visuals) {
+        return generateMindMap(courseId, groupedAnalysis, segments, pages, visuals, null);
+    }
+    @Override public TranscriptionController.MindMapResult generateMindMap(String courseId, boolean groupedAnalysis,
+            List<TranscriptionController.TranscriptSegment> segments, List<TranscriptionController.PageGroup> pages,
+            List<TranscriptionController.VisualEvidence> visuals, IgnoreRegion region) {
+        return generateMindMap(courseId,groupedAnalysis,segments,pages,visuals,region,null);
+    }
+    @Override public TranscriptionController.MindMapResult generateMindMap(String courseId, boolean groupedAnalysis,
+            List<TranscriptionController.TranscriptSegment> segments, List<TranscriptionController.PageGroup> pages,
+            List<TranscriptionController.VisualEvidence> visuals, IgnoreRegion region, String mindMapMode) {
+        if (mindMapMode != null) groupedAnalysis="grouped".equals(mindMapMode);
+        var body = new LinkedHashMap<String,Object>();
+        body.put("courseId", courseId); body.put("groupedAnalysis", groupedAnalysis);
+        if (mindMapMode != null) body.put("mindMapMode",mindMapMode);
+        body.put("segments", segments); body.put("pageGroups", pages); body.put("visualEvidence", visuals);
+        if (region != null) body.put("ignoredRegion", region);
+        return agent.post().uri("/mind-map").body(body).retrieve().body(TranscriptionController.MindMapResult.class);
     }
 
     @Override public Map<String,Object> generateSubtitles(String language,

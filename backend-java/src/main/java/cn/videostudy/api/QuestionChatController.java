@@ -47,6 +47,7 @@ public class QuestionChatController {
         for(var item:citations){if(!(item instanceof Map<?,?> ref)||!(ref.get("sourceId") instanceof String id)||!sources.containsKey(id))throw new IllegalArgumentException("invalid_chat_citation");
             var source=sources.get(id);
             for(String key:List.of("startMs","endMs"))if(!(ref.get(key) instanceof Number a)||!(source.get(key) instanceof Number b)||a.doubleValue()!=b.doubleValue())throw new IllegalArgumentException("invalid_chat_citation");
+            if(ref.get("sourceType")!=null&&!Objects.equals(source.get("sourceType"),ref.get("sourceType")))throw new IllegalArgumentException("invalid_chat_citation");
             if(!Objects.equals(source.get("quote"),ref.get("quote")))throw new IllegalArgumentException("invalid_chat_citation");
             if(seen.add(id))checked.add(source);
         }

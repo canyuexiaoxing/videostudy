@@ -1,5 +1,5 @@
 export type MindMapEvidence = {
-  sourceType: 'transcript'
+  sourceType: 'transcript' | 'image'
   sourceId: string
   startMs: number
   endMs: number
@@ -24,6 +24,7 @@ export type MindMapResult = {
   createdAt: string
   root: MindMapNode
   examples?: MindMapNode[] | null
+  uncertainties?: string[] | null
 }
 
 export type CanvasNode = {
@@ -76,10 +77,10 @@ export function compactKnowledgeMap(root: MindMapNode): MindMapNode {
     let refs=node.evidenceRefs.filter(ref=>!caseText(ref.quote))
     if(!refs.length)refs=children.flatMap(child=>child.evidenceRefs).concat(details.flatMap(child=>child.evidenceRefs))
     if(depth>0&&!refs.length)return null
-    if(depth>=2&&children.length&&node.children.every(child=>!child.children.length)){
+    if(node.details == null&&depth>=2&&children.length&&node.children.every(child=>!child.children.length)){
       // Short named rules/formulas are independent concepts, even if leaves.
       // Sentence descriptions and conditions belong in their parent's details.
-      const standalone=(child:MindMapNode)=>child.title.length<=24&&/(?:法则|公式|定理|方法|概念|原理|性质|模型|算法|方程|不等式|恒等式|增长量|增长率)$/.test(child.title)&&! /^(?:适用|应用|操作|注意|步骤|易错|符号|公式内容)/.test(child.title)
+      const standalone=(child:MindMapNode)=>! /^(?:符号含义|适用条件|应用条件|操作步骤|注意事项|步骤[一二三四五六七八九十0-9：:]|易错点|公式内容)/.test(child.title)
       details=details.concat(children.filter(child=>!standalone(child)))
       children=children.filter(standalone)
     }

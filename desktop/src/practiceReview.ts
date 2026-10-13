@@ -1,4 +1,4 @@
-export type ReviewCitation = { sourceId: string; startMs: number; endMs?: number; quote: string }
+export type ReviewCitation = { sourceType?: 'transcript' | 'image'; sourceId: string; startMs: number; endMs?: number; quote: string }
 export type ReviewTarget = ReviewCitation & { matched: boolean }
 const ignored = new Set(['等于','就是','使用','计算','应该','这个','一个','进行','the','and','with'])
 function terms(text: string): Set<string> {
@@ -14,9 +14,10 @@ export function reviewTargets(citations: ReviewCitation[], nodeTitle: string, ta
   const weighted = [[terms(nodeTitle),3],[terms(takeaway),2],[terms(selectedReason),1]] as const
   const seen=new Set<string>()
   const rows = citations.filter(ref=>{
+    const image=ref?.sourceType==='image' && ref.sourceId===`frame_${ref.startMs}` && ref.endMs===ref.startMs && ref.quote==='课件截图'
     if(!ref || typeof ref.sourceId!=='string' || !ref.sourceId || seen.has(ref.sourceId) ||
       !Number.isSafeInteger(ref.startMs) || ref.startMs<0 || typeof ref.quote!=='string' || !ref.quote.trim() ||
-      (ref.endMs!==undefined && (!Number.isSafeInteger(ref.endMs) || ref.endMs<=ref.startMs)))return false
+      (ref.endMs!==undefined && (!Number.isSafeInteger(ref.endMs) || (ref.endMs<ref.startMs || ref.endMs===ref.startMs&&!image))))return false
     seen.add(ref.sourceId);return true
   }).map(ref=>{
     const quote=terms(ref.quote)

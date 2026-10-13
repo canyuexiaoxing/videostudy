@@ -31,7 +31,7 @@ class AnalysisTest(unittest.TestCase):
                 analyze_file(fid)
                 publish.assert_not_called()
 
-    def test_overview_starts_after_page_understanding_and_parallel_with_map(self):
+    def test_main_analysis_finishes_without_starting_overview(self):
         import threading
         started=threading.Event()
         with tempfile.TemporaryDirectory() as d:
@@ -42,7 +42,7 @@ class AnalysisTest(unittest.TestCase):
                 self.assertEqual(pages[0]['imageAnalysis']['content'],'完整页面理解')
                 started.set();return {'status':'completed'}
             def mind_map(*args,**kwargs):
-                self.assertTrue(started.wait(1),'Overview must start concurrently with mind map')
+                self.assertFalse(started.is_set(),'Overview is a separate post-map job')
                 return {'status':'completed'}
             with patch.dict(os.environ,{'MEDIA_TEMP_DIR':d,'KEYFRAME_DIR':str(Path(d)/'frames')}), \
                  patch('analysis.transcribe_file',return_value={'language':'zh','segments':speech}), \
@@ -55,8 +55,8 @@ class AnalysisTest(unittest.TestCase):
                  patch('analysis.build_mind_map',side_effect=mind_map):
                 worker.return_value.__enter__.return_value.analyze.return_value=[]
                 result=analyze_file(fid)
-            self.assertEqual(result['overview']['status'],'completed')
-            self.assertIn('overview',result['stageTimingsMs'])
+            self.assertIsNone(result['overview'])
+            self.assertNotIn('overview',result['stageTimingsMs'])
 
     def test_later_failure_reuses_completed_media_stages_on_retry(self):
         with tempfile.TemporaryDirectory() as d:

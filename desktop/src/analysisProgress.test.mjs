@@ -21,3 +21,11 @@ test('saving never moves backwards after both learning materials finish',()=>{
  assert.equal(saving.ratio,materials.ratio)
  assert.ok(saving.ratio<1)
 })
+
+test('parallel group status reports dynamic groups without advancing media stages',()=>{
+ const p={stage:'media',completedStages:0,totalStages:5,completedUnits:0,totalUnits:1,readyGroups:2,completedGroups:1,totalGroups:3,groupPhase:'linking'}
+ const view=progressView('processing',p)
+ assert.match(view.label,/衔接前后组 1 \/ 3 组/);assert.equal(view.completed,0)
+ const final=progressView('processing',{...p,stage:'groups',completedStages:3,completedUnits:2,totalUnits:4,totalGroups:4,completedGroups:2})
+ assert.match(final.label,/2 \/ 4 组/)
+})

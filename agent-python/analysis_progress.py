@@ -27,6 +27,13 @@ class AnalysisProgress:
             self.value['completedUnits'] = min(len(self.units), self.value['totalUnits'])
             self._publish()
 
+    def update_groups(self, ready, completed, total, phase):
+        """Publish overlapping group work without replacing the active media stage."""
+        with self.lock:
+            self.value.update(readyGroups=max(0, int(ready)), completedGroups=max(0, int(completed)),
+                              totalGroups=max(0, int(total)), groupPhase=str(phase))
+            self._publish()
+
     def _publish(self):
         temporary = self.root / f'progress.{uuid4().hex}.tmp'
         try:

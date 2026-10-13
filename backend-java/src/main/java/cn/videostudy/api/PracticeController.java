@@ -59,7 +59,8 @@ public class PracticeController {
     private static void requireClient(String client){if(!SubtitleController.validId(client))throw new IllegalArgumentException("invalid_practice_client");}
     static MindMapNode find(MindMapNode node,String id){
         if(node.id().equals(id))return node;
-        if(node.children()!=null)for(var child:node.children()){var found=find(child,id);if(found!=null)return found;}return null;
+        if(node.children()!=null)for(var child:node.children()){var found=find(child,id);if(found!=null)return found;}
+        if(node.details()!=null)for(var child:node.details()){var found=find(child,id);if(found!=null)return found;}return null;
     }
     private static int leafCount(MindMapNode node) {
         if(node.children()==null||node.children().isEmpty())return 1;
@@ -69,18 +70,22 @@ public class PracticeController {
         path.add(node);
         if(node.id().equals(id))return true;
         if(node.children()!=null)for(var child:node.children())if(scopePath(child,id,path))return true;
+        if(node.details()!=null)for(var child:node.details())if(scopePath(child,id,path))return true;
         path.removeLast();return false;
     }
     static MindMapNode practiceScope(MindMapNode root,String id) {
         if(id==null||id.isBlank())return root;
         var path=new ArrayList<MindMapNode>();
         if(!scopePath(root,id,path))throw new IllegalArgumentException("unknown_mindmap_node");
-        for(int i=path.size()-1;i>0;i--){var node=path.get(i);if(node.children()!=null&&!node.children().isEmpty()&&leafCount(node)>1)return node;}
+        for(int i=path.size()-1;i>0;i--){var node=path.get(i);if(node.details()!=null&&!node.details().isEmpty() || node.children()!=null&&!node.children().isEmpty()&&leafCount(node)>1)return node;}
         return root;
     }
     private static void flatten(MindMapNode node,List<MindMapNode> nodes){
-        if(node.children()!=null&&!node.children().isEmpty())node.children().forEach(child->flatten(child,nodes));
-        else nodes.add(node);
+        if(node.details()!=null&&!node.details().isEmpty()) {
+            nodes.add(node);
+            node.details().forEach(child->flatten(child,nodes));
+        } else if(node.children()==null||node.children().isEmpty()) nodes.add(node);
+        if(node.children()!=null)node.children().forEach(child->flatten(child,nodes));
     }
     static Map<String,Object> source(TranscriptResult result,Request request){
         if(!List.of(0,3,5,10).contains(request.count())||!List.of("basic","application","advanced").contains(Objects.toString(request.difficulty(),"")))throw new IllegalArgumentException("invalid_practice_settings");
@@ -89,11 +94,14 @@ public class PracticeController {
         if(chosen==null)throw new IllegalArgumentException("unknown_mindmap_node");
         var candidates=new ArrayList<MindMapNode>();flatten(chosen,candidates);
         var speech=new HashMap<String,TranscriptSegment>();result.segments().forEach(segment->speech.put(segment.id(),segment));
+        var frames=new HashSet<Long>();if(result.visualEvidence()!=null)result.visualEvidence().forEach(frame->frames.add(frame.frameTimeMs()));
         var nodes=new ArrayList<Map<String,Object>>();
         for(var node:candidates){
             var refs=new ArrayList<Map<String,Object>>();
             if(node.evidenceRefs()!=null)for(var ref:node.evidenceRefs()){
-                var segment=speech.get(ref.sourceId());if(segment!=null&&!segment.text().isBlank())refs.add(Map.of("sourceType","transcript","sourceId",segment.id(),"startMs",segment.startMs(),"endMs",segment.endMs(),"quote",segment.text()));
+                if("image".equals(ref.sourceType()) && (!frames.contains(ref.startMs()) || ref.startMs()!=ref.endMs() || !("frame_"+ref.startMs()).equals(ref.sourceId()) || !"课件截图".equals(ref.quote())))throw new IllegalArgumentException("practice_evidence_missing");
+                if("image".equals(ref.sourceType())&&frames.contains(ref.startMs()))refs.add(Map.of("sourceType","image","sourceId","frame_"+ref.startMs(),"startMs",ref.startMs(),"endMs",ref.startMs(),"quote","课件截图"));
+                var segment="transcript".equals(ref.sourceType())?speech.get(ref.sourceId()):null;if(segment!=null&&!segment.text().isBlank())refs.add(Map.of("sourceType","transcript","sourceId",segment.id(),"startMs",segment.startMs(),"endMs",segment.endMs(),"quote",segment.text()));
             }
             if(!refs.isEmpty())nodes.add(Map.of("id",node.id(),"title",node.title(),"evidenceRefs",refs));
         }
@@ -104,6 +112,10 @@ public class PracticeController {
         var pages=new ArrayList<Map<String,Object>>();
         if(result.pageGroups()!=null)for(var page:result.pageGroups()){
             if(page.lastFrameTimeMs()<first||page.firstFrameTimeMs()>last)continue;
+            if(page.groupUnderstanding()!=null&&"completed".equals(page.groupUnderstanding().get("status"))) {
+                pages.add(Map.of("firstFrameTimeMs",page.firstFrameTimeMs(),"lastFrameTimeMs",page.lastFrameTimeMs(),"pageIndex",page.pageIndex(),"groupUnderstanding",page.groupUnderstanding()));
+                continue;
+            }
             var analysis=page.imageAnalysis();if(analysis==null||!"completed".equals(analysis.status()))analysis=page.textAnalysis();
             if(analysis!=null&&"completed".equals(analysis.status()))pages.add(Map.of("firstFrameTimeMs",page.firstFrameTimeMs(),"lastFrameTimeMs",page.lastFrameTimeMs(),"pageIndex",page.pageIndex(),"title",Objects.toString(analysis.title(),""),"content",Objects.toString(analysis.content(),"")));
             else if(page.ocrLines()!=null)pages.add(Map.of("firstFrameTimeMs",page.firstFrameTimeMs(),"lastFrameTimeMs",page.lastFrameTimeMs(),"pageIndex",page.pageIndex(),"ocr",page.ocrLines().stream().map(OcrLine::text).toList()));
@@ -132,7 +144,7 @@ public class PracticeController {
             for(int i=0;i<reasons.size();i++)if(!(reasons.get(i) instanceof String s)||i!=answer.intValue()&&s.isBlank())throw new IllegalArgumentException("invalid_reasons");
             var canonical=(List<Map<String,Object>>)nodes.get(q.get("nodeId")).get("evidenceRefs");
             if(!(q.get("citations") instanceof List<?> refs)||refs.isEmpty())throw new IllegalArgumentException("missing_citations");
-            for(var ref:refs)if(!(ref instanceof Map<?,?> citation)||canonical.stream().noneMatch(c->Objects.equals(c.get("sourceId"),citation.get("sourceId"))&&Objects.equals(c.get("quote"),citation.get("quote"))&&citation.get("startMs") instanceof Number start&&citation.get("endMs") instanceof Number end&&start.longValue()==((Number)c.get("startMs")).longValue()&&end.longValue()==((Number)c.get("endMs")).longValue()))throw new IllegalArgumentException("ungrounded_citation");
+            for(var ref:refs)if(!(ref instanceof Map<?,?> citation)||canonical.stream().noneMatch(c->(citation.get("sourceType")==null||Objects.equals(c.get("sourceType"),citation.get("sourceType")))&&Objects.equals(c.get("sourceId"),citation.get("sourceId"))&&Objects.equals(c.get("quote"),citation.get("quote"))&&citation.get("startMs") instanceof Number start&&citation.get("endMs") instanceof Number end&&start.longValue()==((Number)c.get("startMs")).longValue()&&end.longValue()==((Number)c.get("endMs")).longValue()))throw new IllegalArgumentException("ungrounded_citation");
             if(q.get("diagram")!=null&&(!(q.get("diagram") instanceof Map<?,?> diagram)||!List.of("bar","line","table","circuit").contains(diagram.get("kind"))||!(q.get("validation") instanceof Map<?,?> flags)||!Boolean.TRUE.equals(flags.get("diagramChecked"))))throw new IllegalArgumentException("unvalidated_diagram");
         }
     }

@@ -169,7 +169,8 @@ def _page(members: list[dict], images: dict[int, np.ndarray], decision: str,
 
 
 def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *,
-                ask_json: Callable[[dict], dict] | None = None, ignore_region: dict | None = None) -> tuple[list[dict], list[int]]:
+                ask_json: Callable[[dict], dict] | None = None, ignore_region: dict | None = None,
+                on_page: Callable[[dict], None] | None = None) -> tuple[list[dict], list[int]]:
     """Use local image/OCR evidence; review only uncertain text boundaries."""
     if not visuals:
         return [], []
@@ -191,6 +192,12 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
             filtered.append(filter_frame(frame,ignore_region,frame["frameTimeMs"],width,height))
         frames=filtered
     pages: list[dict] = []
+    def publish(members, decision, reason):
+        page = _page(members, images, decision, reason, len(pages) + 1, masks)
+        pages.append(page)
+        if on_page is not None:
+            from copy import deepcopy
+            on_page(deepcopy(page))
     transitions: list[int] = []
     members: list[dict] = []
     decision, reason = "first_page", "first visible page"
@@ -217,7 +224,7 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
             pending_transition = True
             continue
         if members and pending_transition:
-            pages.append(_page(members, images, decision, reason, len(pages) + 1, masks))
+            publish(members, decision, reason)
             members = []
             decision, reason = "auto_new_page", "blank transition"
         pending_transition = False
@@ -260,11 +267,76 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
                     except (ValueError, KeyError, OSError, TimeoutError):
                         pass
             if boundary == "new":
-                pages.append(_page(members, images, decision, reason, len(pages) + 1, masks))
+                publish(members, decision, reason)
                 members = []
                 decision = "agent_new_page" if boundary_reason.startswith("text Agent") else "auto_new_page"
                 reason = boundary_reason
         members.append(current)
     if members:
-        pages.append(_page(members, images, decision, reason, len(pages) + 1, masks))
+        publish(members, decision, reason)
     return pages, transitions
+
+
+class IncrementalPageGrouper:
+    """Publish closed local page groups while retaining the unfinished tail.
+
+    Local uncertain boundaries split conservatively. Full-course grouping can
+    later revise these provisional pages with transcript and boundary reviews.
+    """
+
+    def __init__(self, keyframe_dir: Path, ignore_region=None):
+        self.keyframe_dir = Path(keyframe_dir)
+        self.ignore_region = normalize_region(ignore_region)
+        self._pending = []
+        self._last_time = None
+        self._page_count = 0
+        self._finished = False
+
+    def _groups(self):
+        return group_pages(self._pending, self.keyframe_dir, [],
+                           ask_json=lambda _: {"samePage": False,
+                                               "reason": "local incremental boundary"},
+                           ignore_region=self.ignore_region)
+
+    def _number(self, pages):
+        for page in pages:
+            self._page_count += 1
+            page["pageIndex"] = self._page_count
+        return pages
+
+    def add(self, frame):
+        if self._finished:
+            raise RuntimeError("Incremental page grouper is finished")
+        time_ms = frame["frameTimeMs"]
+        if self._last_time is not None and time_ms <= self._last_time:
+            raise ValueError("Incremental screenshot timestamps must strictly increase")
+        # Keep only the unfinished prefix. No paid boundary request is made.
+        self._pending.append(frame)
+        try:
+            pages, transitions = self._groups()
+        except BaseException:
+            self._pending.pop()
+            raise
+        self._last_time = time_ms
+        trailing_blank = bool(transitions and transitions[-1] == time_ms)
+        closed = pages if trailing_blank else pages[:-1]
+        for page in closed:
+            page["_closedAtMs"] = time_ms
+        if closed:
+            if trailing_blank:
+                self._pending = [frame]
+            else:
+                tail_start = pages[-1]["firstFrameTimeMs"]
+                self._pending = [item for item in self._pending
+                                 if item["frameTimeMs"] >= tail_start]
+        return self._number(closed)
+
+    def finish(self):
+        if self._finished:
+            return []
+        pages, _ = self._groups()
+        for page in pages:
+            page["_closedAtMs"] = None
+        self._finished = True
+        self._pending = []
+        return self._number(pages)

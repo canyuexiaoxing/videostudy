@@ -5,6 +5,7 @@ from pydantic import BaseModel, field_validator
 from ignored_region import normalize_setting as normalize_region
 from fastapi import HTTPException
 from typing import Literal
+from concurrent.futures import CancelledError
 
 from transcription import transcribe_file
 from analysis import analyze_file
@@ -66,6 +67,8 @@ class TranscribeRequest(BaseModel):
     coarseSampleSeconds: Literal[2, 3, 4] = 2
     subtitleCallbackToken: str | None = None
     ignoredRegion: dict | None = None
+    groupedAnalysis: bool = False
+    mindMapMode: Literal['legacy', 'grouped', 'direct'] | None = None
 
     @field_validator('ignoredRegion', mode='before')
     @classmethod
@@ -83,6 +86,18 @@ class SubtitleRequest(BaseModel):
 class MindMapRequest(BaseModel):
     segments: list[dict]
     pageGroups: list[dict] = []
+    courseId: str | None = None
+    groupedAnalysis: bool = False
+    mindMapMode: Literal['legacy', 'grouped', 'direct'] | None = None
+    visualAnalysisMode: str = 'both'
+    visualEvidence: list[dict] = []
+    ignoredRegion: dict | None = None
+    mindMap: dict | None = None
+
+    @field_validator('ignoredRegion', mode='before')
+    @classmethod
+    def validate_region(cls, value):
+        return normalize_region(value)
 
 
 @app.get("/health")
@@ -116,16 +131,40 @@ def analyze(request: TranscribeRequest) -> dict:
     try:
         if request.subtitleCallbackToken:
             return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent,
-                                request.subtitleCallbackToken, coarse_sample_seconds=request.coarseSampleSeconds, **({"ignore_region": request.ignoredRegion} if request.ignoredRegion else {}))
+                                request.subtitleCallbackToken, coarse_sample_seconds=request.coarseSampleSeconds, **({"ignore_region": request.ignoredRegion} if request.ignoredRegion else {}),
+                                **({"grouped_analysis": True} if request.groupedAnalysis else {}),
+                                **({"mind_map_mode": request.mindMapMode} if request.mindMapMode is not None else {}))
         return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent,
-                            coarse_sample_seconds=request.coarseSampleSeconds, **({"ignore_region": request.ignoredRegion} if request.ignoredRegion else {}))
+                            coarse_sample_seconds=request.coarseSampleSeconds, **({"ignore_region": request.ignoredRegion} if request.ignoredRegion else {}),
+                                **({"grouped_analysis": True} if request.groupedAnalysis else {}),
+                                **({"mind_map_mode": request.mindMapMode} if request.mindMapMode is not None else {}))
     except (FileNotFoundError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    except CancelledError as error:
+        raise HTTPException(status_code=409, detail='analysis_cancelled') from error
 
 
 @app.post("/mind-map")
 def generate_mind_map(request: MindMapRequest) -> dict:
-    return build_mind_map(request.segments, request.pageGroups)
+    mode = request.mindMapMode or ('grouped' if request.groupedAnalysis else 'legacy')
+    if mode == 'legacy':
+        return build_mind_map(request.segments, request.pageGroups)
+    try:
+        if request.visualAnalysisMode != 'both':
+            raise ValueError('groupedAnalysis requires visualAnalysisMode both')
+        if mode == 'direct':
+            if not request.courseId:raise ValueError('courseId is required for direct representative images')
+            from direct_course_map import build_saved_direct_map
+            return build_saved_direct_map(request.segments,request.pageGroups,request.visualEvidence,
+                keyframe_dir=_analysis_directory(request.courseId).parent,ignore_region=request.ignoredRegion)
+        from grouped_analysis import build_saved_group_map
+        directory = _analysis_directory(request.courseId).parent if request.courseId else None
+        return build_saved_group_map(request.segments, request.pageGroups, request.visualEvidence,
+                                     keyframe_dir=directory, ignore_region=request.ignoredRegion)
+    except (FileNotFoundError, ValueError) as error:
+        raise HTTPException(400, str(error)) from error
+    except CancelledError as error:
+        raise HTTPException(409, 'analysis_cancelled') from error
 
 
 @app.post('/subtitles')
@@ -148,7 +187,7 @@ def generate_overview(request: MindMapRequest) -> dict:
     from overview import build_overview
     from urllib.error import HTTPError
     try:
-        return build_overview(request.segments,request.pageGroups)
+        return build_overview(request.segments,request.pageGroups,mind_map=request.mindMap,visuals=request.visualEvidence)
     except HTTPError as error:
         if error.code==402:
             raise HTTPException(status_code=424,detail='overview_provider_payment_required') from error
@@ -171,3 +210,36 @@ def video_region_detections(request: RegionFramesRequest):
     except HTTPError as error:raise HTTPException(502,'region_provider_failed') from error
     except (RuntimeError,URLError,TimeoutError,KeyError,TypeError) as error:raise HTTPException(503,'region_provider_unavailable') from error
     finally:_region_slots.release()
+
+
+class AnalysisControlRequest(BaseModel):
+    fileId: str
+
+
+def _analysis_directory(file_id):
+    import os
+    from pathlib import Path
+    from uuid import UUID
+    try:
+        identity = str(UUID(file_id))
+    except (ValueError, TypeError, AttributeError) as error:
+        raise HTTPException(400, 'invalid_file_id') from error
+    root = Path(os.environ.get('KEYFRAME_DIR', '../.local/keyframes')).resolve()
+    target = (root / identity / '.analysis').resolve()
+    if not target.is_relative_to(root):
+        raise HTTPException(400, 'invalid_file_id')
+    return target
+
+
+@app.post('/analysis-cancel')
+def cancel_analysis(request: AnalysisControlRequest):
+    from group_scheduler import cancel_run
+    cancel_run(_analysis_directory(request.fileId))
+    return {'status': 'cancelled'}
+
+
+@app.post('/analysis-reset')
+def reset_analysis(request: AnalysisControlRequest):
+    from group_scheduler import reset_run
+    reset_run(_analysis_directory(request.fileId))
+    return {'status': 'ready'}

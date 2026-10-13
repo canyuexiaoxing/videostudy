@@ -7,3 +7,11 @@ test('practice options exclude leaves and singleton detail branches',()=>assert.
 test('leaf selection rises through a singleton parent to the full topic',()=>{assert.equal(resolvePracticeScope(root,'a'),'topic');assert.equal(resolvePracticeScope(root,'b'),'topic');assert.equal(resolvePracticeScope(root,'topic'),'topic')})
 test('whole course and stale node selections resolve to whole course',()=>{assert.equal(resolvePracticeScope(root,''),'');assert.equal(resolvePracticeScope(root,'old'), '');assert.equal(resolvePracticeScope(undefined,'a'),'')})
 test('a course with one detail supports whole-course practice',()=>{const single={id:'root',title:'课程',children:[{id:'one',title:'单个主题',children:[leaf('a')]}]};assert.deepEqual(practiceScopes(single),[]);assert.equal(resolvePracticeScope(single,'a'),'')})
+
+
+test('explicit details select their concept including image-only concepts',()=>{
+ const concept={id:'concept',title:'图中概念',children:[],details:[leaf('detail')]}
+ const course={id:'root',title:'课程',children:[concept]}
+ assert.deepEqual(practiceScopes(course).map(n=>n.id),['concept'])
+ assert.equal(resolvePracticeScope(course,'detail'),'concept')
+})

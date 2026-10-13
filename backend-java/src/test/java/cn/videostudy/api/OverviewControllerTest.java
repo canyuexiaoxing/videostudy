@@ -44,4 +44,14 @@ class OverviewControllerTest {
             store.delete(id);assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM overview_jobs",Integer.class));
         }finally{controller.close();}
     }
+
+    @Test void notesValidateImageSourcesAndTitleAnchor() {
+        var citation=Map.<String,Object>of("sourceType","transcript","sourceId","s1","startMs",1000,"endMs",5000,"quote","介绍增长量");
+        var image=Map.<String,Object>of("sourceType","image","sourceId","frame_2000","startMs",2000,"endMs",2000,"quote","课件截图");
+        var note=new HashMap<String,Object>();note.put("title","增长量计算");note.put("citations",List.of(citation,image));note.put("anchor",citation);note.put("image",image);note.put("children",List.of());note.put("points",List.of(Map.of("label","公式","text","增长量公式","citations",List.of(image))));
+        var source=new TranscriptionController.TranscriptResult("zh",segments,List.of(new TranscriptionController.VisualEvidence(2000,List.of(),null)),null,null,null);
+        assertDoesNotThrow(()->OverviewController.validateNotes(Map.of("notes",List.of(note)),source));
+        note.put("image",Map.of("sourceType","image","sourceId","frame_9999","startMs",9999,"endMs",9999,"quote","课件截图"));
+        assertThrows(IllegalArgumentException.class,()->OverviewController.validateNotes(Map.of("notes",List.of(note)),source));
+    }
 }

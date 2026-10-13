@@ -70,3 +70,20 @@ test('independent named rules remain separate canvas entries even when all are l
  const root=compactKnowledgeMap({...node,id:'course',children:[{...node,id:'chapter',children:[{...node,id:'topic',title:'求导法则',children:[leaf('product','乘积法则'),leaf('quotient','商法则'),leaf('condition','适用条件')]}]}]})
  const topic=root.children[0].children[0];assert.deepEqual(topic.children.map(n=>n.title),['乘积法则','商法则']);assert.deepEqual(topic.details.map(n=>n.title),['适用条件'])
 })
+
+
+test('explicit details preserve independent concepts and image evidence',()=>{
+ const ref={sourceType:'image',sourceId:'frame_1200',startMs:1200,endMs:1200,quote:'课件截图'}
+ const child={id:'independent',title:'任意独立知识点',startMs:1200,endMs:1200,evidenceRefs:[ref],children:[]}
+ const detail={...child,id:'detail',title:'图中条件'}
+ const root={...child,id:'root',title:'课程',children:[{...child,id:'topic',children:[{...child,id:'concept',children:[child],details:[detail]}]}]}
+ const concept=compactKnowledgeMap(root).children[0].children[0]
+ assert.deepEqual(concept.children.map(n=>n.id),['independent']);assert.deepEqual(concept.details.map(n=>n.id),['detail'])
+ assert.equal(concept.details[0].evidenceRefs[0].sourceType,'image')
+})
+
+test('numbered method classifications remain nested canvas nodes',()=>{
+ const methods=['1.给基期、增长率','2.给现期、基期','3.给现期、增长率'].map((title,i)=>({...node,id:`method_${i}`,title,children:[]}))
+ const root=compactKnowledgeMap({...node,id:'course',children:[{...node,id:'chapter',children:[{...node,id:'growth',title:'增长量计算',children:methods}]}]})
+ assert.equal(root.children[0].children[0].children.length,3)
+})

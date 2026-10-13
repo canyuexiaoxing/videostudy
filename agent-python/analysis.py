@@ -36,7 +36,10 @@ def media_duration_ms(path: Path) -> int:
 def analyze_file(file_id: str, visual_analysis_mode: str = "both",
                  coarse_change_percent: float = 2.0,
                  subtitle_callback_token: str | None = None, coarse_sample_seconds: int = 2,
-                 ignore_region: dict | None = None) -> dict:
+                 ignore_region: dict | None = None, grouped_analysis: bool = False, mind_map_mode: str | None = None) -> dict:
+    if mind_map_mode is not None:
+        if mind_map_mode not in ('legacy','grouped','direct'):raise ValueError('invalid mindMapMode')
+        grouped_analysis = mind_map_mode == 'grouped'
     ignore_region = normalize_region(ignore_region)
     if coarse_sample_seconds not in (2, 3, 4):
         raise ValueError("coarseSampleSeconds must be 2, 3 or 4")
@@ -51,6 +54,19 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
         raise FileNotFoundError("uploaded media not found")
 
     keyframe_dir = Path(os.environ.get("KEYFRAME_DIR", "../.local/keyframes")).resolve() / file_id
+    if mind_map_mode == 'direct':
+        if visual_analysis_mode != 'both':raise ValueError('direct mode requires visualAnalysisMode both')
+        from direct_analysis import analyze_direct_file
+        return analyze_direct_file(file_id, media_path, keyframe_dir,
+            coarse_change_percent=coarse_change_percent, coarse_sample_seconds=coarse_sample_seconds,
+            subtitle_callback_token=subtitle_callback_token, ignore_region=ignore_region)
+    if grouped_analysis:
+        if visual_analysis_mode != 'both':
+            raise ValueError('groupedAnalysis requires visualAnalysisMode both')
+        from grouped_analysis import analyze_grouped_file
+        return analyze_grouped_file(file_id, media_path, keyframe_dir,
+            coarse_change_percent=coarse_change_percent, coarse_sample_seconds=coarse_sample_seconds,
+            subtitle_callback_token=subtitle_callback_token, ignore_region=ignore_region)
     progress = AnalysisProgress(keyframe_dir / ".analysis")
     progress.enter("media", 0, 2)
     started = perf_counter()
@@ -73,7 +89,7 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
         timings[name] = round((perf_counter() - before) * 1000)
         if name in ('transcription', 'visualOcr'):
             progress.unit_done(name, 'media')
-        elif name in ('overview', 'mindMap') and (not isinstance(value, dict) or value.get('status') != 'failed'):
+        elif name == 'mindMap' and (not isinstance(value, dict) or value.get('status') != 'failed'):
             progress.unit_done(name, 'materials')
         return value
     try:
@@ -135,16 +151,10 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
                                                     type(error).__name__)
         pages_failed = any((page.get('imageAnalysis') or page.get('textAnalysis') or {}).get('status') == 'failed' for page in page_groups)
         if not pages_failed:
-            progress.enter('materials', 4, 2)
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            overview_job=pool.submit(timed,"overview",cached,'overview',
-                {'speech':transcript['segments'],'pages':page_groups},
-                lambda:safe_overview(transcript['segments'],page_groups),
-                lambda result:result.get('status') in ('completed','empty'))
-            map_job=pool.submit(timed,"mindMap",lambda:build_mind_map(transcript['segments'],page_groups,checkpoint=checkpoint))
-            mind_map=map_job.result()
-            overview=overview_job.result()
-        if not pages_failed and mind_map.get('status') != 'failed' and overview.get('status') != 'failed':
+            progress.enter('materials', 4, 1)
+        mind_map=timed("mindMap",lambda:build_mind_map(transcript['segments'],page_groups,checkpoint=checkpoint))
+        overview=None
+        if not pages_failed and mind_map.get('status') != 'failed':
             progress.enter('saving', 4)
         timings["total"] = round((perf_counter() - started) * 1000)
         return {

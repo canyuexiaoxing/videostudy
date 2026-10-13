@@ -35,11 +35,13 @@ public class OverviewController {
         if (main.find(id).isEmpty()) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(find(id));
     }
-    @PostMapping public ResponseEntity<?> generate(@PathVariable String id) {
+    public ResponseEntity<?> generate(String id) { return generate(id,false); }
+    @PostMapping public ResponseEntity<?> generate(@PathVariable String id,@RequestParam(defaultValue="false") boolean refresh) {
         if (!SubtitleController.validId(id)) return ResponseEntity.badRequest().body(Map.of("error","invalid_job_id"));
         var parent=main.find(id);
         if (parent.isEmpty()) return ResponseEntity.notFound().build();
         if (!"completed".equals(parent.get().status())) return ResponseEntity.status(409).body(Map.of("error","course_not_completed"));
+        jdbc.update("UPDATE overview_jobs SET status='queued',attempt_count=0,error_code=NULL,run_token=NULL WHERE transcription_id=? AND (status='failed' OR (? AND status='completed'))",id,refresh);
         request(id);
         return ResponseEntity.accepted().body(find(id));
     }
@@ -71,9 +73,9 @@ public class OverviewController {
         if (jdbc.update("UPDATE overview_jobs SET status='processing',run_token=?,attempt_count=attempt_count+1 WHERE transcription_id=? AND status='queued' AND attempt_count<3",token,id)!=1) return;
         try {
             var parent=main.find(id).orElseThrow();var source=parent.result();
-            var result=source.overview()!=null && List.of("completed","empty").contains(source.overview().get("status"))
-                ?source.overview():agent.generateOverview(source.segments(),source.pageGroups()==null?List.of():source.pageGroups());
+            var result=agent.generateOverview(source);
             validate(result,source.segments());
+            validateNotes(result,source);
             jdbc.update("UPDATE overview_jobs SET status='completed',run_token=NULL,result_json=?,error_code=NULL WHERE transcription_id=? AND status='processing' AND run_token=?",json.writeValueAsString(result),id,token);
         } catch (Exception e) {
             boolean temporary=e instanceof ResourceAccessException || e instanceof RestClientResponseException r && (r.getStatusCode().value()==429 || r.getStatusCode().is5xxServerError());
@@ -102,6 +104,37 @@ public class OverviewController {
                        || !source.text().equals(citation.get("quote")))throw new IllegalArgumentException("Ungrounded citation");
                 }
             }
+        }
+    }
+    static void validateNotes(Map<String,Object> result,TranscriptionController.TranscriptResult source) {
+        if(!result.containsKey("notes"))return; // Old summaries remain readable.
+        if(!(result.get("notes") instanceof List<?> notes))throw new IllegalArgumentException("Invalid notes");
+        var evidence=new HashMap<String,Map<String,Object>>();
+        source.segments().forEach(s->evidence.put(s.id(),Map.of("sourceType","transcript","sourceId",s.id(),"startMs",s.startMs(),"endMs",s.endMs(),"quote",s.text())));
+        if(source.visualEvidence()!=null)source.visualEvidence().forEach(v->evidence.put("frame_"+v.frameTimeMs(),Map.of("sourceType","image","sourceId","frame_"+v.frameTimeMs(),"startMs",v.frameTimeMs(),"endMs",v.frameTimeMs(),"quote","课件截图")));
+        validateNoteTree(notes,evidence,1,new int[]{0});
+    }
+    static void validateNoteRef(Object value,Map<String,Map<String,Object>> evidence) {
+        if(!(value instanceof Map<?,?> ref))throw new IllegalArgumentException("Invalid note citation");
+        var original=evidence.get(ref.get("sourceId"));
+        if(original==null || !original.get("sourceType").equals(ref.get("sourceType")) || !original.get("quote").equals(ref.get("quote"))
+          || !(ref.get("startMs") instanceof Number start)||!(ref.get("endMs") instanceof Number end)
+          || start.doubleValue()!=((Number)original.get("startMs")).doubleValue()||end.doubleValue()!=((Number)original.get("endMs")).doubleValue())throw new IllegalArgumentException("Ungrounded note citation");
+    }
+    static void validateNoteTree(List<?> notes,Map<String,Map<String,Object>> evidence,int depth,int[] count) {
+        for(var value:notes){
+            if(++count[0]>120||depth>8||!(value instanceof Map<?,?> node)||!(node.get("title") instanceof String title)||title.isBlank()
+              ||!(node.get("citations") instanceof List<?> refs)||refs.isEmpty()||!(node.get("points") instanceof List<?> points)
+              ||!(node.get("children") instanceof List<?> children))throw new IllegalArgumentException("Invalid note tree");
+            refs.forEach(ref->validateNoteRef(ref,evidence));validateNoteRef(node.get("anchor"),evidence);
+            if(!refs.contains(node.get("anchor")))throw new IllegalArgumentException("Unrelated anchor");
+            if(node.get("image")!=null){validateNoteRef(node.get("image"),evidence);if(!refs.contains(node.get("image"))||!"image".equals(((Map<?,?>)node.get("image")).get("sourceType")))throw new IllegalArgumentException("Unrelated image");}
+            for(var point:points){
+                if(!(point instanceof Map<?,?> row)||!(row.get("label") instanceof String)||!(row.get("text") instanceof String text)||text.isBlank()
+                  ||!(row.get("citations") instanceof List<?> cites)||cites.isEmpty())throw new IllegalArgumentException("Invalid note point");
+                cites.forEach(ref->validateNoteRef(ref,evidence));
+            }
+            validateNoteTree(children,evidence,depth+1,count);
         }
     }
     @PreDestroy public void close(){worker.shutdownNow();}

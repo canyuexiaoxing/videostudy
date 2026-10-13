@@ -17,7 +17,8 @@ export function questionOpening(text:string):number|null{
  return null
 }
 
-export function groupExamples(examples:MindMapNode[]|null|undefined,segments:Segment[]):MindMapNode[]{
+export function groupExamples(examples:MindMapNode[]|null|undefined,segments:Segment[],promptVersion=''):MindMapNode[]{
+ if(promptVersion.startsWith('whole-course-group-evidence-'))return examples ?? []
  if(!examples?.length)return []
  const ordered=[...segments].sort((a,b)=>a.startMs-b.startMs)
  const markers:{source:Segment;number:number|null}[]=[];let last:number|null=null

@@ -34,19 +34,13 @@ def _get_model(model_path,device,precision):
     with _model_lock:return _load_model(model_path,device,precision)
 
 
-def transcribe_file(file_id: str) -> dict:
+def transcribe_file(file_id: str, on_segment=None) -> dict:
     # UUID validation keeps the internal API from reading arbitrary filesystem paths.
     UUID(file_id)
     upload_root = Path(os.environ.get("MEDIA_TEMP_DIR", "../.local/uploads")).resolve()
     video_path = upload_root / file_id
     if not video_path.is_file():
         raise FileNotFoundError("uploaded media not found")
-
-    model_root = Path(os.environ.get("MODEL_DIR", "../.local/models")).resolve()
-    model_name,device,precision=transcription_config()
-    model_path = model_root / ("faster-whisper-"+model_name)
-    if not (model_path / "model.bin").is_file():
-        raise FileNotFoundError("Whisper model is missing from the project model directory")
 
     # A screen recording can have no audio stream. Keep its visual analysis usable.
     probe = subprocess.run(
@@ -57,13 +51,23 @@ def transcribe_file(file_id: str) -> dict:
     if not probe.stdout.strip():
         return {"language": "und", "segments": []}
 
+    model_root = Path(os.environ.get("MODEL_DIR", "../.local/models")).resolve()
+    model_name,device,precision=transcription_config()
+    model_path = model_root / ("faster-whisper-"+model_name)
+    if not (model_path / "model.bin").is_file():
+        raise FileNotFoundError("Whisper model is missing from the project model directory")
+
     # Import only when a real transcription is requested; the demo API stays lightweight.
     # PyAV, bundled by faster-whisper, decodes the audio stream from the video.
     model = _get_model(str(model_path),device,precision)
     segments, info = model.transcribe(str(video_path), beam_size=5, vad_filter=True)
-    result = [
-        {"id": f"t_{index}", "startMs": round(segment.start * 1000),
-         "endMs": round(segment.end * 1000), "text": segment.text.strip()}
-        for index, segment in enumerate(segments, start=1)
-    ]
+    result = []
+    for index, segment in enumerate(segments, start=1):
+        item = {"id": f"t_{index}", "startMs": round(segment.start * 1000),
+                "endMs": round(segment.end * 1000), "text": segment.text.strip()}
+        if item["startMs"] < 0 or item["endMs"] < item["startMs"]:
+            raise ValueError("Invalid transcription segment timestamps")
+        result.append(item)
+        if on_segment is not None:
+            on_segment(dict(item))
     return {"language": info.language, "segments": result}

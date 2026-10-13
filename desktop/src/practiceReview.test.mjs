@@ -18,3 +18,10 @@ test('deduplicates sources and preserves a chronological fallback without claimi
  {sourceId:'early',startMs:1000,quote:'请看题目'},{sourceId:'early',startMs:1000,quote:'请看题目'}], '基期','','')
  assert.equal(ranked.length,2);assert.equal(ranked[0].sourceId,'early');assert.equal(ranked[0].matched,false)
 })
+
+
+test('verified screenshot citations remain available as zero-duration review targets',()=>{
+ const ref={sourceType:'image',sourceId:'frame_1200',startMs:1200,endMs:1200,quote:'课件截图'}
+ assert.equal(reviewTargets([ref],'图中公式','','')[0].sourceId,'frame_1200')
+ assert.deepEqual(reviewTargets([{...ref,sourceId:'frame_9999'}],'图中公式','',''),[])
+})

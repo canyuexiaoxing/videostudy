@@ -46,6 +46,29 @@ public class TranscriptionJobStore {
         } catch (JsonProcessingException error) { throw new IllegalStateException("Unable to save ignored region", error); }
     }
 
+    public void saveGroupedAnalysis(String id, boolean groupedAnalysis) {
+        requireOne(jdbc.update("UPDATE transcription_jobs SET grouped_analysis = ? WHERE id = ?", groupedAnalysis, id));
+    }
+    public boolean findGroupedAnalysis(String id) {
+        return jdbc.query("SELECT grouped_analysis FROM transcription_jobs WHERE id = ?",
+            (row, number) -> row.getBoolean(1), id).stream().findFirst().orElse(false);
+    }
+    public void saveMindMapMode(String id, String mode) {
+        if (!List.of("legacy","grouped","direct").contains(mode)) throw new IllegalArgumentException("Invalid mind map mode");
+        requireOne(jdbc.update("UPDATE transcription_jobs SET mind_map_mode = ? WHERE id = ?",mode,id));
+    }
+    public String findMindMapMode(String id) {
+        var modes=jdbc.query("SELECT mind_map_mode FROM transcription_jobs WHERE id = ?",(row,n)->row.getString(1),id);
+        var saved=modes.isEmpty()?null:modes.getFirst();
+        return saved!=null?saved:findGroupedAnalysis(id)?"grouped":"legacy";
+    }
+    public boolean cancel(String id) {
+        return jdbc.update("UPDATE transcription_jobs SET status = 'failed', error_code = 'analysis_cancelled' WHERE id = ? AND status IN ('queued', 'processing')", id) == 1;
+    }
+    public boolean isCancelled(String id) {
+        return find(id).map(job -> "analysis_cancelled".equals(job.error())).orElse(true);
+    }
+
     public record HistoryItem(String id, String name, String status, Instant createdAt) {}
 
     public void saveOriginalFilename(String id, String filename) {
@@ -84,12 +107,12 @@ public class TranscriptionJobStore {
     }
 
     public void markProcessing(String id) {
-        requireOne(jdbc.update("UPDATE transcription_jobs SET status = 'processing', error_code = NULL WHERE id = ?", id));
+        requireOne(jdbc.update("UPDATE transcription_jobs SET status = 'processing', error_code = NULL WHERE id = ? AND status = 'queued'", id));
     }
 
     public void complete(String id, TranscriptionController.TranscriptResult result) {
         try {
-            requireOne(jdbc.update("UPDATE transcription_jobs SET status = 'completed', result_json = ?, error_code = NULL WHERE id = ?",
+            requireOne(jdbc.update("UPDATE transcription_jobs SET status = 'completed', result_json = ?, error_code = NULL WHERE id = ? AND status IN ('queued', 'processing')",
                 json.writeValueAsString(result), id));
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("Unable to serialize transcription result", error);
@@ -109,7 +132,7 @@ public class TranscriptionJobStore {
     }
 
     public void markFailed(String id, String errorCode) {
-        requireOne(jdbc.update("UPDATE transcription_jobs SET status = 'failed', error_code = ? WHERE id = ?", errorCode, id));
+        requireOne(jdbc.update("UPDATE transcription_jobs SET status = 'failed', error_code = ? WHERE id = ? AND (error_code IS NULL OR error_code <> 'analysis_cancelled')", errorCode, id));
     }
 
     public int recoverInterruptedJobs() {

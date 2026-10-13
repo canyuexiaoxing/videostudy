@@ -25,7 +25,7 @@ body { background: radial-gradient(ellipse at 10% 0%, #eaf0ff, transparent 55%),
 .study-app .map-toolbar button { min-width: 0; min-height: 31px; height: auto; padding: 5px 8px; border: 1px solid transparent; border-radius: 7px; background: #fff; color: #43537a; font-size: 11px; white-space: nowrap; }
 .study-app .map-toolbar button:hover { border-color: #c6d3fb; background: #f2f5ff; color: #2c52dc; }
 .study-app .mind-map-canvas { width: 100%; height: min(720px, calc(100vh - 212px)); min-height: 460px; background: #fff; }
-.study-app .mind-source { max-height: 112px; overflow: auto; margin: 0; padding: 11px 18px; border: 0; border-top: 1px solid #e9edf7; border-radius: 0; background: #f9faff; scrollbar-color: #cbd4ec transparent; }
+.study-app .mind-source { max-height: clamp(320px, 48vh, 560px); overflow: auto; margin: 0; padding: 11px 18px; border: 0; border-top: 1px solid #e9edf7; border-radius: 0; background: #f9faff; scrollbar-color: #cbd4ec transparent; }
 .study-app .mind-source > strong { margin-bottom: 8px; font-size: 13px; }
 .study-app .mind-source-link { padding: 8px 0; color: #384565; line-height: 1.5; }
 .study-app .mind-source-link:hover { color: #315af2; }
@@ -441,3 +441,12 @@ body { background: radial-gradient(ellipse at 10% 0%, #eaf0ff, transparent 55%),
 .expand-map-button { flex: none; padding: 6px 10px; border: 1px solid #dce5fb; border-radius: 8px; background: #f5f8ff; color: #315dec; font-size: 12px; white-space: nowrap; cursor: pointer; }
 .expand-map-button:hover { border-color: #a9bef7; background: #ecf2ff; }
 .expand-map-button:focus-visible { outline: 2px solid #7194f4; outline-offset: 2px; }
+
+.map-mode-row { align-items:flex-start; flex-wrap:wrap; }
+
+/* Keep evidence readable without squeezing the map canvas below it. */
+.study-app .mind-source .mind-evidence-image { max-height: none; height: auto; }
+.study-app .study-sidebar .mind-map-panel:has(.mind-source) { overflow: auto; }
+.study-app .study-sidebar .mind-map-panel:has(.mind-source) .mind-map-heading { flex: none; }
+.study-app .study-sidebar .mind-map-panel:has(.mind-source) .map-canvas-shell { flex: 0 0 clamp(380px, 55vh, 620px); min-height: 380px; }
+.study-app .study-sidebar .mind-map-panel:has(.mind-source) .mind-map-canvas { min-height: 300px; }

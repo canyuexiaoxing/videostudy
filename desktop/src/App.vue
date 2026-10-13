@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import MindMapCanvas from './MindMapCanvas.vue'
 import MindMapDialog from './MindMapDialog.vue'
+import MindMapEvidenceDetails from './MindMapEvidenceDetails.vue'
 import StudyIcon from './StudyIcon.vue'
 import ChapterPlayer from './ChapterPlayer.vue'
 import AnalysisProgressBar from './AnalysisProgress.vue'
@@ -29,7 +30,7 @@ type VisualEvidence = { frameTimeMs: number; ocrBlocks: OcrBlock[]; imageAnalysi
 type OcrLine = { text: string; sourceFrameTimeMs: number; sourceBlockIndex: number }
 type PageGroup = { pageIndex: number; firstFrameTimeMs: number; lastFrameTimeMs: number;
   memberFrameTimesMs: number[]; representativeFrameTimesMs: number[];
-  decision: string; decisionReason: string; ocrLines: OcrLine[]; imageAnalysis?: ImageAnalysis; textAnalysis?: ImageAnalysis }
+  decision: string; decisionReason: string; ocrLines: OcrLine[]; imageAnalysis?: ImageAnalysis; textAnalysis?: ImageAnalysis; groupUnderstanding?: Record<string, unknown> | null }
 type Review = { status: string; resampledTimesMs: number[]; concerns: string[] }
 type TranscriptionJob = { id: string; status: string; progress?: AnalysisProgress | null; result?: { language: string; segments: Segment[]; visualEvidence?: VisualEvidence[]; pageGroups?: PageGroup[]; mindMap?: MindMapResult; visualAnalysisMode?: 'ocr_only' | 'both'; ocrModelId?: string; imageModelId?: string; review?: Review }; error?: string }
 type RightTab = 'map' | 'practice' | 'transcript' | 'slides' | 'notes' | 'history'
@@ -261,6 +262,10 @@ const expandedMap = ref(false)
 const activeSegmentId = ref('')
 const generatingMindMap = ref(false)
 const isAnalysisPending = ref(false)
+const mindMapMode = ref<'legacy' | 'grouped' | 'direct'>('legacy')
+const groupedAnalysis = computed(() => mindMapMode.value === 'grouped')
+const mapModes = [{ value: 'legacy', label: '原流程' }, { value: 'grouped', label: '分组后汇总' }, { value: 'direct', label: '整课图文直生成' }] as const
+watch(mindMapMode, mode => { if(mode !== 'legacy') visualAnalysisMode.value = 'both' })
 const visualAnalysisMode = ref<'ocr_only' | 'both'>('both')
 const coarseChangePercent = ref('2')
 const coarseSampleSeconds = ref(2)
@@ -472,7 +477,7 @@ const noteScopes = computed(() => transcript.value.length || mindMap.value
   ? [existingJobId.value, selectedFingerprint.value].filter(Boolean)
   : selectedFile.value ? [selectedFingerprint.value].filter(Boolean) : [])
 const visibleNotes = computed(() => studyNotes.value.filter(note => noteScopes.value.includes(note.scope)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
-const exampleTimeline = computed(()=>groupExamples(mindMap.value?.examples,transcript.value))
+const exampleTimeline = computed(()=>groupExamples(mindMap.value?.examples,transcript.value,mindMap.value?.promptVersion))
 const currentHistoryName = computed(() => analysisHistory.value.find(entry => entry.id === existingJobId.value)?.name ?? '')
 
 function rememberAnalysis(id: string, status: HistoryStatus, name = '') {
@@ -607,12 +612,13 @@ async function waitForAnalysis(id: string, request: RequestTicket) {
         review.value = job.result?.review ?? null
         failedJobId.value = ''
         const pageStatuses = pageGroups.value.map(page =>
-          (job.result?.visualAnalysisMode === 'ocr_only' ? page.textAnalysis : page.imageAnalysis)?.status)
+          page.groupUnderstanding?.status ?? (job.result?.visualAnalysisMode === 'ocr_only' ? page.textAnalysis : page.imageAnalysis)?.status)
         const completedCount = pageStatuses.filter(value => value === 'completed').length
         const inferredCount = pageStatuses.filter(value => value === 'inferred').length
         const unverifiedCount = pageStatuses.filter(value => value === 'unverified').length
         const routeName = job.result?.visualAnalysisMode === 'ocr_only' ? '语音＋OCR 文字理解' : '语音＋图片理解'
         status.value = `分析完成：转写 ${transcript.value.length} 段；候选画面 ${visualEvidence.value.length} 张、归为 ${pageGroups.value.length} 页；OCR ${job.result?.ocrModelId || '未记录'}；${routeName}确认 ${completedCount} 页、含推导 ${inferredCount} 页、待核实 ${unverifiedCount} 页；导图${mindMap.value?.status === 'completed' ? '已生成' : mindMap.value?.status === 'failed' ? '部分失败' : '暂无'}`
+        if (rawMindMap.value?.promptVersion?.startsWith('whole-course-group-evidence-direct-')) status.value = `分析完成：转写 ${transcript.value.length} 段；归为 ${pageGroups.value.length} 页；已跳过逐页解读，整课图文导图${rawMindMap.value.status === 'completed' ? '已生成' : '未完全生成，可重试'}`
         if (selectedFile.value && !confirmedMedia.value) {
           const binding = mediaBindingState(localStorage.getItem(`analysisMedia:${id}`), selectedFile.value.size, selectedFingerprint.value)
           detachPlayback()
@@ -656,6 +662,8 @@ async function runTranscription() {
     form.append('visualAnalysisMode', visualAnalysisMode.value)
     form.append('coarseChangePercent', coarseChangePercent.value)
     form.append('coarseSampleSeconds', String(coarseSampleSeconds.value))
+    form.append('groupedAnalysis', String(groupedAnalysis.value))
+    form.append('mindMapMode', mindMapMode.value)
     if (analysisRegion.value||ignoredRegion.value) form.append('ignoredRegion',JSON.stringify(analysisRegion.value?{analysisRegion:analysisRegion.value,ignoredRegion:ignoredRegion.value}:ignoredRegion.value))
     form.append('aiSubtitles', 'false')
     form.append('subtitleTargetLanguage', subtitleTargetLanguage.value)
@@ -678,6 +686,22 @@ async function runTranscription() {
   } finally {
     if (request.current()) isAnalysisPending.value = false
   }
+}
+
+async function cancelAnalysis() {
+  const id = existingJobId.value
+  if (!id || !isAnalysisPending.value) return
+  try {
+    const response = await fetch(`${apiBase}/transcriptions/${id}/cancel`, {method:'POST'})
+    if (!response.ok) throw new Error(`取消失败：HTTP ${response.status}`)
+    if (existingJobId.value !== id) return
+    const cancellation = await response.json() as { agentNotified?: boolean }
+    invalidateAnalysisRequests()
+    analysisState.value = 'failed'
+    failedJobId.value = id
+    status.value = cancellation.agentNotified === false ? '已停止保存结果；模型服务尚未确认取消，可稍后重试' : '已取消分析，可保留原视频重试'
+    rememberAnalysis(id, 'failed')
+  } catch (cause) { error.value = cause instanceof Error ? cause.message : String(cause) }
 }
 
 async function loadExistingAnalysis() {
@@ -811,9 +835,9 @@ async function generateExistingMindMap(refresh = false) {
   const request = mindMapRequests.begin()
   generatingMindMap.value = true
   error.value = ''
-  status.value = '正在从已保存的转写生成可回溯导图…'
+  status.value = mindMapMode.value === 'direct' ? '正在将全部代表图和有效转写一起生成整课导图…' : '正在从已保存的课程资料生成可回溯导图…'
   try {
-    const response = await fetch(`${apiBase}/transcriptions/${id}/mind-map${refresh ? '?refresh=true' : ''}`, { method: 'POST', signal: request.signal })
+    const response = await fetch(`${apiBase}/transcriptions/${id}/mind-map?refresh=${refresh}&mindMapMode=${mindMapMode.value}&groupedAnalysis=${groupedAnalysis.value}`, { method: 'POST', signal: request.signal })
     if (!response.ok) throw new Error(`导图生成失败：HTTP ${response.status}`)
     const result = await response.json() as MindMapResult
     if (!request.current() || existingJobId.value !== id) return
@@ -970,19 +994,15 @@ onUnmounted(() => {
             <div class="mind-map-heading-actions"><button v-if="mindMap.root.children.length" type="button" class="expand-map-button" @click="expandedMap = true">放大查看</button><span class="mind-map-badge">{{ mindMap.root.children.length }} 个主题</span></div></div>
           <p v-if="mindMap.status === 'empty'" class="status">{{ exampleTimeline.length ? '本段课程未提取到核心知识，可通过下方例题节点回看。' : '没有可用的核心知识依据，暂时无法生成导图。' }}</p>
           <p v-else-if="mindMap.status === 'failed'" class="status">{{ mindMap.root.children.length ? '部分导图内容未生成；已显示的节点仍可查看原文和回放。' : '导图尚未生成；原转写和页面分析仍可查看，可以重试。' }}</p>
-          <div v-if="selectedMindNode?.evidenceRefs.length" class="mind-source">
+          <MindMapCanvas v-if="mindMap.root.children.length" :root="mindMap.root" @select="selectMindMapNode" />
+          <div v-if="selectedMindNode && (selectedMindNode.evidenceRefs.length || selectedMindNode.details?.length)" class="mind-source">
             <strong>{{ selectedMindNode.title }} · 课程依据</strong>
-            <div v-if="selectedMindNode.details?.length" class="knowledge-details">
-              <details v-for="detail in selectedMindNode.details" :key="detail.id">
-                <summary>{{ detail.title }}</summary>
-                <button v-for="source in detail.evidenceRefs" :key="source.sourceId" type="button" class="mind-source-link" @click="seekTo(source.startMs, source.sourceId)"><span class="time">{{ formatTime(source.startMs) }}</span> {{ source.quote }}</button>
-              </details>
-            </div>
+            <MindMapEvidenceDetails v-if="selectedMindNode.details?.length" :nodes="selectedMindNode.details" :api-base="apiBase" :course-id="existingJobId" :frame-times="visualEvidence.map(frame => frame.frameTimeMs)" @seek="seekTo" />
             <button v-for="source in selectedMindNode.evidenceRefs" :key="source.sourceId" type="button" class="mind-source-link" @click="seekTo(source.startMs, source.sourceId)">
               <span class="time">{{ formatTime(source.startMs) }}</span> {{ source.quote }}
             </button>
+            <img v-for="source in selectedMindNode.evidenceRefs.filter(ref => ref.sourceType === 'image' && frameAt(ref.startMs))" :key="source.sourceId" loading="lazy" :src="`${apiBase}/transcriptions/${existingJobId}/frames/${source.startMs}`" :alt="`${formatTime(source.startMs)} 的课件截图`" class="mind-evidence-image" />
           </div>
-          <MindMapCanvas v-if="mindMap.root.children.length" :root="mindMap.root" @select="selectMindMapNode" />
           <section v-if="exampleTimeline.length" class="example-timeline" aria-label="例题时间节点">
             <div class="example-timeline-heading"><h3>例题时间节点</h3><span>{{ exampleTimeline.length }} 道例题</span></div>
             <p>每道例题一个入口，点击从题目开始处回看完整讲解。</p>
@@ -997,7 +1017,7 @@ onUnmounted(() => {
           <p class="empty-hint" :class="{ 'is-processing': isAnalysisPending }"><span v-if="isAnalysisPending" class="activity-spinner" aria-hidden="true"></span>{{ isAnalysisPending ? '正在分析课程，完成后导图将在这里显示。你可以继续观看本地视频。' : selectedFile ? '视频已选好，点击顶部“开始分析”；已有任务可在下方按编号读取结果。' : '先点击右上角“选择本地视频”；已有任务可在下方按编号读取结果。' }}</p>
         </div>
       </section>
-      <section v-show="rightTab === 'practice'" id="tab-practice" class="sidebar-pane" role="tabpanel" aria-label="AI 练习"><AiPractice :course-id="(transcript.length || pageGroups.length || mindMap) && existingJobId ? existingJobId : undefined" :has-media="!!selectedFile || checkingMedia" :playback-ready="confirmedMedia" :mind-map="rawMindMap" :selected-node-id="selectedMindNode?.id" :ready="!!transcript.length" @seek="seekTo" /></section>
+      <section v-show="rightTab === 'practice'" id="tab-practice" class="sidebar-pane" role="tabpanel" aria-label="AI 练习"><AiPractice :course-id="(transcript.length || pageGroups.length || mindMap) && existingJobId ? existingJobId : undefined" :has-media="!!selectedFile || checkingMedia" :playback-ready="confirmedMedia" :mind-map="rawMindMap" :selected-node-id="selectedMindNode?.id" :ready="rawMindMap?.status === 'completed'" @seek="seekTo" /></section>
       <section v-show="rightTab === 'transcript'" id="tab-transcript" class="sidebar-pane" role="tabpanel" aria-label="字幕原文">
         <div class="sidebar-pane-heading"><div><span class="eyebrow">TRANSCRIPT</span><h3>字幕原文</h3></div><span>{{ transcript.length }} 段</span></div>
         <template v-if="transcript.length">
@@ -1084,19 +1104,30 @@ onUnmounted(() => {
         <p class="player-caption"><StudyIcon name="lock" />{{ filename || '本地回放 · 分析后点击知识节点，回到老师的讲解现场' }}</p>
       </div>
       <details class="panel video-overview">
-        <summary><span class="video-overview-title"><StudyIcon name="spark" />AI 解读</span><span class="video-overview-hint">课程整体分析</span><span class="video-overview-chevron" aria-hidden="true">⌄</span></summary>
-        <AiOverview :course-id="existingJobId" :ready="!!transcript.length" />
+        <summary><span class="video-overview-title"><StudyIcon name="spark" />AI 解读</span><span class="video-overview-hint">课程介绍 · 学习笔记</span><span class="video-overview-chevron" aria-hidden="true">⌄</span></summary>
+        <AiOverview :course-id="existingJobId" :ready="rawMindMap?.status === 'completed'" @seek="seekTo" />
       </details>
       <div class="panel results-panel">
         <div class="section-title"><h2>课程依据</h2><span>{{ transcript.length }} 段字幕 · {{ pageGroups.length ? `${pageGroups.length} 页课件` : `${visualEvidence.length} 张候选画面` }}</span></div>
         <p class="status" :class="{ 'is-processing': isAnalysisPending }" role="status"><span v-if="isAnalysisPending" class="activity-spinner" aria-hidden="true"></span>{{ status }}</p><p v-if="error" class="error">{{ error }}</p>
+        <button v-if="isAnalysisPending && existingJobId && ['queued','processing'].includes(analysisState)" type="button" class="text-link" @click="cancelAnalysis">取消分析</button>
         <details class="analysis-settings" :open="!transcript.length">
           <summary>分析与任务设置</summary>
           <div class="analysis-settings-content">
-        <label class="mode-picker">画面分析方式 <select v-model="visualAnalysisMode"><option value="both">语音文字＋每页代表图</option><option value="ocr_only">语音文字＋OCR 文字</option></select></label>
+        <label class="mode-picker">画面分析方式 <select v-model="visualAnalysisMode" :disabled="mindMapMode !== 'legacy' || isAnalysisPending"><option value="both">语音文字＋每页代表图</option><option value="ocr_only">语音文字＋OCR 文字</option></select></label>
         <div class="advanced-options">
           <button type="button" class="advanced-toggle" :aria-expanded="advancedOpen" aria-controls="advanced-settings" @click="advancedOpen = !advancedOpen">{{ advancedOpen ? '收起高级选项' : '高级选项' }}</button>
           <div v-if="advancedOpen" id="advanced-settings" class="advanced-fields">
+          <div class="advanced-row map-mode-row">
+            <span id="mind-map-mode-label">导图生成方式</span>
+            <div class="sampling-options" role="group" aria-labelledby="mind-map-mode-label">
+              <button v-for="mode in mapModes" :key="mode.value" type="button" :aria-pressed="mindMapMode === mode.value" :disabled="isAnalysisPending || generatingMindMap" @click="mindMapMode = mode.value">{{ mode.label }}</button>
+            </div>
+          </div>
+          <p class="advanced-help" v-if="mindMapMode === 'direct'">保留覆盖检查与缺失截图补采，等全部代表图和语音转写就绪后，将代表图与有效转写一起交给思维导图模型，跳过逐组内容解读。图片较多时，请求可能达到模型上限；不会自动删图或改成分批。</p>
+          <p class="advanced-help" v-else-if="mindMapMode === 'grouped'">先按组并行解读图文，再统一汇总整课导图；增加模型请求。</p>
+          <p class="advanced-help" v-else>沿用原有页面理解与转写导图流程。</p>
+          <p class="advanced-help">选择用于新分析和手动生成导图；重试整次分析沿用原任务设置。图文模式会将课件图片发送到已配置的模型服务。</p>
           <div class="advanced-row">
             <span id="coarse-sample-label">粗选采样间隔</span>
             <div class="sampling-options" role="group" aria-labelledby="coarse-sample-label">

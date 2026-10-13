@@ -6,7 +6,7 @@ import QuestionChat from './QuestionChat.vue'
 import PracticeFigure, { type Diagram } from './PracticeFigure.vue'
 import { reviewTargets } from './practiceReview'
 import type { ReviewCitation } from './practiceReview'
-type Node={id:string;title:string;children?:Node[]}
+type Node={id:string;title:string;children?:Node[];details?:Node[]}
 type Question={id:string;nodeTitle:string;kind:string;title:string;prompt:string;options:string[];diagram?:Diagram|null;scenario?:string}
 type Citation=ReviewCitation
 type Feedback={questionId:string;selectedIndex:number;answerIndex:number;correct:boolean;explanation:string;takeaway:string;selectedReason:string;citations:Citation[]}

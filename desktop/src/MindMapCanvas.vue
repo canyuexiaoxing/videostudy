@@ -26,7 +26,28 @@ function indexNodes(root: MindMapNode) {
   }
 }
 
-function fit() { canvas?.view.fit() }
+function fit() {
+  if (!canvas || !container.value?.clientWidth || !container.value.clientHeight) return
+  canvas.resize()
+  // Use viewport coordinates for both nodes and container. Library rbox includes
+  // document scrolling, while its cached container rect uses viewport coordinates.
+  const bounds = () => {
+    const rects = Array.from(container.value!.querySelectorAll('.smm-node'))
+      .map(node => node.getBoundingClientRect()).filter(r => r.width > 0 && r.height > 0)
+    if (!rects.length) return null
+    return { left: Math.min(...rects.map(r => r.left)), right: Math.max(...rects.map(r => r.right)),
+      top: Math.min(...rects.map(r => r.top)), bottom: Math.max(...rects.map(r => r.bottom)) }
+  }
+  const before = bounds(), box = container.value.getBoundingClientRect()
+  if (!before) return
+  const scale = canvas.view.scale * Math.min((box.width - 48) / (before.right - before.left),
+    (box.height - 48) / (before.bottom - before.top))
+  if (!Number.isFinite(scale) || scale <= 0) return
+  canvas.view.setScale(Math.min(1, scale))
+  const after = bounds()
+  if (after) canvas.view.translateXY(box.left + box.width / 2 - (after.left + after.right) / 2,
+    box.top + box.height / 2 - (after.top + after.bottom) / 2)
+}
 function zoomIn() { canvas?.view.enlarge() }
 function zoomOut() { canvas?.view.narrow() }
 function applyReadingZoom() {
@@ -47,12 +68,13 @@ function initialize() {
   indexNodes(props.root)
   expandedDepth = nodes.size > 80 && container.value.clientWidth < 760 ? 1 : nodes.size > 80 ? 2 : Infinity
   SimpleMindMap.usePlugin(RainbowLines)
+  fitAfterRender = true
   canvas = new SimpleMindMap({
     el: container.value,
     data: toCanvasNode(props.root, expandedDepth),
     layout: 'logicalStructure',
     readonly: true,
-    fit: window.innerWidth > 600,
+    fit: false,
     mousewheelAction: 'zoom',
     rainbowLinesConfig: {
       open: true,
@@ -82,14 +104,14 @@ function initialize() {
   canvas.on('node_tree_render_end', () => {
     if (fitAfterRender) {
       fitAfterRender = false
-      canvas?.view.fit()
+      fit()
       if (readingZoomAfterRender) {
         readingZoomAfterRender = false
         applyReadingZoom()
       }
     }
   })
-  window.setTimeout(applyReadingZoom, 200)
+  window.setTimeout(fit, 200)
 }
 onMounted(() => {
   if (!container.value) return

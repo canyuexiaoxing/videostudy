@@ -233,7 +233,8 @@ def recognize_in_region(frame,setting,time_ms,recognize):
 def analyze_visuals(path: Path, recognize: Callable[[np.ndarray], list[dict]] | None = None,
                     keyframe_dir: Path | None = None,
                     page_change_fraction: float = PAGE_CHANGE_FRACTION,
-                    sample_seconds: int = SAMPLE_SECONDS, ignore_region: dict | None = None) -> list[dict]:
+                    sample_seconds: int = SAMPLE_SECONDS, ignore_region: dict | None = None,
+                    on_frame: Callable[[dict], None] | None = None) -> list[dict]:
     """Return OCR from representative frames; audio-only input returns no visual evidence."""
     if not _has_video(path):
         return []
@@ -244,7 +245,11 @@ def analyze_visuals(path: Path, recognize: Callable[[np.ndarray], list[dict]] | 
         if keyframe_dir is not None:
             _save_keyframe(frame, keyframe_dir, time_ms)
         blocks = checkpoint.run(f'ocrFrame:{time_ms}', {'regions':ignore_region}, lambda: recognize_in_region(frame,ignore_region,time_ms,recognize)) if checkpoint else recognize_in_region(frame,ignore_region,time_ms,recognize)
-        evidence.append({"frameTimeMs": time_ms, "ocrBlocks": blocks})
+        item = {"frameTimeMs": time_ms, "ocrBlocks": blocks}
+        evidence.append(item)
+        if on_frame is not None and keyframe_dir is not None:
+            from copy import deepcopy
+            on_frame(deepcopy(item))
     return evidence
 
 
@@ -268,7 +273,9 @@ def _serve_visual_requests(connection) -> None:
                     response = None
                 elif request["op"] == "analyze":
                     response = analyze_visuals(path, keyframe_dir=keyframe_dir,
-                                               page_change_fraction=page_change_fraction, sample_seconds=sample_seconds, ignore_region=ignore_region)
+                                               page_change_fraction=page_change_fraction, sample_seconds=sample_seconds, ignore_region=ignore_region,
+                                               on_frame=(lambda frame: connection.send({"event": "frame", "value": frame}))
+                                               if request.get("streamFrames") else None)
                 elif request["op"] == "capture":
                     frame = _frame_at(path, request["timeMs"])
                     if keyframe_dir is not None:
@@ -349,24 +356,32 @@ class VisualOcrWorker:
             _worker_lock.release()
             raise
 
-    def _request(self, operation: str, **kwargs):
+    def _request(self, operation: str, on_frame=None, **kwargs):
         with self._request_lock:
             if self._closed:
                 raise RuntimeError("Visual worker lease is closed")
             try:
                 self.connection.send({"op": operation, **kwargs})
-                if not self.connection.poll(30 * 60):
-                    raise TimeoutError("Visual OCR worker timed out")
-                answer = self.connection.recv()
-            except (EOFError, OSError, TimeoutError):
+                while True:
+                    if not self.connection.poll(30 * 60):
+                        raise TimeoutError("Visual OCR worker timed out")
+                    answer = self.connection.recv()
+                    if answer.get("event") == "frame":
+                        if on_frame is not None:
+                            on_frame(answer["value"])
+                        continue
+                    break
+            except BaseException:
+                # A callback failure or cancellation can leave frame/final messages
+                # unread. Retire this pipe before any other media session uses it.
                 _stop_shared_worker()
                 raise
             if not answer["ok"]:
                 raise RuntimeError(answer["error"])
             return answer["value"]
 
-    def analyze(self) -> list[dict]:
-        return self._request("analyze")
+    def analyze(self, on_frame=None) -> list[dict]:
+        return self._request("analyze", on_frame=on_frame, streamFrames=on_frame is not None)
 
     def capture(self, time_ms: int) -> list[dict]:
         return self._request("capture", timeMs=time_ms)

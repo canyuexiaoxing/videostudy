@@ -18,3 +18,5 @@ test('guard applies to introduction rather than a subsequent comparison',()=>{as
 test('mixed numbered and unnumbered examples retain separate questions',()=>{const ss=[s('1',0,'第一题开始'),s('2',1000,'第一题答案'),s('3',2000,'来看这道例题'),s('4',3000,'第二道题答案'),s('5',4000,'下面看另一个例子')];assert.deepEqual(groupExamples([n('1',ss.slice(0,2)),n('2',ss.slice(2,4)),n('3',ss.slice(4))],ss).map(v=>v.startMs),[0,2000,4000])})
 
 test('rechecking the same question never creates a new entry',()=>{const ss=[s('1',0,'第一题开始'),s('2',1000,'计算分子的极限'),s('3',2000,'再看这道题，分母趋于零，所以用洛必达'),s('4',3000,'代入算出第一题答案')];assert.equal(groupExamples([n('1',ss)],ss).length,1)})
+
+test('whole course validated example identities bypass legacy opening heuristics',()=>{const ss=[s('1',0,'第一题开始'),s('2',1000,'再来第二题'),s('3',2000,'继续')],raw=[n('joined',ss),n('distinct',[ss[2]])];assert.equal(groupExamples(raw,ss,'whole-course-group-evidence-v2'),raw)})
