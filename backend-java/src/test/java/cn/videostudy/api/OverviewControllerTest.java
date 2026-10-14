@@ -54,4 +54,23 @@ class OverviewControllerTest {
         note.put("image",Map.of("sourceType","image","sourceId","frame_9999","startMs",9999,"endMs",9999,"quote","课件截图"));
         assertThrows(IllegalArgumentException.class,()->OverviewController.validateNotes(Map.of("notes",List.of(note)),source));
     }
+
+    @Test @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
+    void failureLogsTaskStageAndReason(org.springframework.boot.test.system.CapturedOutput output) throws Exception {
+        var ds=new DriverManagerDataSource("jdbc:h2:mem:"+UUID.randomUUID()+";MODE=MySQL;DB_CLOSE_DELAY=-1","sa","");
+        new ResourceDatabasePopulator(new ClassPathResource("db/migration/V1__create_transcription_jobs.sql"),new ClassPathResource("db/migration/V3__visual_analysis_mode.sql"),new ClassPathResource("db/migration/V4__coarse_change_percent.sql"),new ClassPathResource("db/migration/V7__overview_jobs.sql")).execute(ds);
+        var jdbc=new JdbcTemplate(ds);var store=new TranscriptionJobStore(jdbc,new ObjectMapper());var id=UUID.randomUUID().toString();
+        store.createQueued(id);store.complete(id,new TranscriptionController.TranscriptResult("zh",segments,List.of(),null,null,null));
+        var agent=new MediaAnalyzer(){public TranscriptionController.TranscriptResult analyze(String id,String mode){throw new AssertionError();}
+            public Map<String,Object> generateOverview(List<TranscriptionController.TranscriptSegment> s,List<TranscriptionController.PageGroup> p){return result(999);}};
+        var controller=new OverviewController(jdbc,new ObjectMapper(),store,agent);
+        try {
+            controller.request(id);
+            for(int i=0;i<150&&!"failed".equals(jdbc.queryForObject("SELECT status FROM overview_jobs WHERE transcription_id=?",String.class,id));i++)Thread.sleep(10);
+            assertEquals("failed",jdbc.queryForObject("SELECT status FROM overview_jobs WHERE transcription_id=?",String.class,id));
+            assertTrue(output.getAll().contains("task="+id));assertTrue(output.getAll().contains("stage=summary_validation"));
+            assertTrue(output.getAll().contains("reason=Ungrounded citation"));assertTrue(output.getAll().contains("retry=false"));
+            assertFalse(output.getAll().contains("介绍增长量"));
+        } finally {controller.close();}
+    }
 }

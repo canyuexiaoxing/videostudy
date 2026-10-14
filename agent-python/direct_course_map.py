@@ -10,7 +10,7 @@ import re
 import course_mind_map as course
 from ignored_region import normalize_setting, filter_frame
 
-PROMPT_VERSION = 'whole-course-group-evidence-direct-v2'
+PROMPT_VERSION = 'whole-course-group-evidence-direct-v5'
 INSTRUCTIONS = course.INSTRUCTIONS + '''
 DIRECT MODE: There are no prior candidates or group analyses. Read ALL attached
 final representative original images, page context/OCR and the full effective
@@ -79,10 +79,11 @@ def _prepare(segments, pages, visuals, root, ignore_region):
     source = [dict(sourceType='transcript', sourceId=s['id'], startMs=s['startMs'], endMs=s['endMs'], quote=s['text']) for s in speech]
     images = [(ms, root / f'{ms}.jpg', 'original') for ms in sorted(times)]
     image_evidence = [dict(sourceType='image', sourceId=f'frame_{ms}', startMs=ms, endMs=ms, quote='课件截图') for ms in sorted(times)]
-    payload = dict(promptVersion=PROMPT_VERSION, instructions=INSTRUCTIONS, concepts=[], examples=[], connections=[],
+    payload = dict(_diagnosticTaskId=root.name,promptVersion=PROMPT_VERSION, instructions=INSTRUCTIONS, concepts=[], examples=[], connections=[],
         sourceEvidence=source, imageEvidence=image_evidence, firstHandSourceIds=[s['id'] for s in speech],
         firstHandImageIds=[f'frame_{ms}' for ms in sorted(times)], uncertainties=[], pageContext=context,
         effectiveTranscript=speech, _visualRegionsByFrame=regions, _directEvidence=True)
+    payload['outlineHints'] = course.outline_hints([frames[ms] for ms in sorted(times)], root, regions)
     hashes = {f'frame_{ms}': hashlib.sha256(path.read_bytes()).hexdigest() for ms, path, _ in images}
     return payload, images, hashes
 
@@ -105,25 +106,31 @@ def build_direct_course_map(segments, pages, visuals, keyframe_dir, *, ask_json=
         return result('课程知识导图', [], [], [], False)
     def generate():
         check()
+        stage='provider'
         try:
             raw = (ask_json or course._deepseek_course_json)(deepcopy(payload), list(images))
             check()
+            stage='validation'
             if isinstance(raw, str):
                 raw = json.loads(raw)
             if (not isinstance(raw, dict) or not isinstance(raw.get('topic'), str) or not raw['topic'].strip()
                 or not isinstance(raw.get('children'), list) or not isinstance(raw.get('examples'), list)
                 or not isinstance(raw.get('uncertainties', []), list)):
                 raise ValueError('malformed direct whole-course reply')
-            builder = course._Builder(payload)
-            children = [node for item in raw['children'] if (node := builder.knowledge(item))]
-            examples = [node for item in raw['examples'] if (node := builder.example(item))]
-            uncertainties = raw.get('uncertainties', [])
-            if not all(isinstance(s, str) for s in uncertainties):
-                raise ValueError('invalid direct uncertainties')
-            return result(raw['topic'], children, examples, uncertainties + builder.errors, bool(builder.errors))
+            value=course.finalize_course_reply(raw,payload,PROMPT_VERSION)
+            value['mindMapMode']='direct'
+            if ask_json is None and value['status']=='completed':
+                try:
+                    from map_conversation import save_map_conversation
+                    save_map_conversation(Path(keyframe_dir),payload,images,raw,value,course.INSTRUCTIONS,expected_hashes=hashes)
+                except (OSError,ValueError):
+                    import logging
+                    logging.getLogger(__name__).warning('Map context snapshot unavailable; map itself remains usable')
+            return value
         except CancelledError:
             raise
         except Exception as error:
+            course.record_event('stage_failed',Path(keyframe_dir).name,operation='direct_map',stage=stage,error_type=type(error).__name__)
             # A limit/provider failure is explicit. Never retry using an image subset.
             return result('课程知识导图', [], [], [f'整课直接导图失败（全部代表图单次请求，未分批或裁减）：{type(error).__name__}: {error}'], True)
     inputs = dict(promptVersion=PROMPT_VERSION, payload=payload, imageSha256=hashes,

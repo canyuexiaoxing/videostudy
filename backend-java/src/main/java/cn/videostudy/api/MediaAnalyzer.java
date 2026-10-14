@@ -9,6 +9,9 @@ public interface MediaAnalyzer {
     default Map<String,Object> generatePractice(Map<String,Object> source) { throw new UnsupportedOperationException("Practice unavailable"); }
     default Map<String,Object> generateOverview(List<TranscriptionController.TranscriptSegment> segments,
         List<TranscriptionController.PageGroup> pages) { throw new UnsupportedOperationException("Overview unavailable"); }
+    default Map<String,Object> generateOverview(String courseId,TranscriptionController.TranscriptResult source) {
+        return generateOverview(source);
+    }
     default Map<String,Object> generateOverview(TranscriptionController.TranscriptResult source) {
         return generateOverview(source.segments(),source.pageGroups()==null?List.of():source.pageGroups());
     }

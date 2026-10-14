@@ -41,6 +41,20 @@ public class PracticeStore {
             r.getString("source_hash"),r.getString("scope_title"),r.getString("status"),decode(r.getString("source_json")),
             decode(r.getString("result_json")),r.getString("error_code")),id).stream().findFirst();
     }
+    public int conversationRevision(String analysis,String hash) {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM practice_sets WHERE transcription_id=? AND source_hash=? AND status='completed'",Integer.class,analysis,hash);
+    }
+    public List<Map<String,Object>> generationHistory(String currentId) {
+        var current=find(currentId).orElseThrow();
+        var history=jdbc.query("SELECT id,scope_title,source_json,result_json FROM practice_sets WHERE transcription_id=? AND source_hash=? AND status='completed' AND id<>? ORDER BY created_at DESC,id DESC LIMIT 50",(r,n)->{
+            var source=decode(r.getString("source_json"));var result=decode(r.getString("result_json"));
+            var request=new LinkedHashMap<String,Object>();request.put("scopeTitle",r.getString("scope_title"));
+            for(String key:List.of("count","difficulty","mode"))if(source!=null&&source.containsKey(key))request.put(key,source.get(key));
+            var row=new LinkedHashMap<String,Object>();row.put("id",r.getString("id"));row.put("request",request);
+            row.put("questions",result==null?List.of():result.getOrDefault("questions",List.of()));return (Map<String,Object>)row;
+        },current.analysisId(),current.sourceHash(),currentId);
+        Collections.reverse(history);return history;
+    }
     public List<String> due(){return jdbc.query("SELECT id FROM practice_sets WHERE status='queued' AND attempt_count<2 ORDER BY created_at LIMIT 5",(r,n)->r.getString(1));}
     public Optional<Run> claim(String id) {
         String token=UUID.randomUUID().toString();
@@ -67,7 +81,8 @@ public class PracticeStore {
         result.put("id",id);result.put("analysisId",analysis);result.put("sourceHash",set.sourceHash());result.put("title",set.title());
         result.put("status",set.status());result.put("error",set.error());
         result.put("count",set.source().get("count"));result.put("difficulty",set.source().get("difficulty"));
-        if(set.result()!=null)for(String key:List.of("rejectedCount","requestedCount","modelId","promptVersion"))result.put(key,set.result().get(key));
+        result.put("practiceMode",set.source().getOrDefault("mode","legacy"));
+        if(set.result()!=null)for(String key:List.of("rejectedCount","requestedCount","modelId","promptVersion","historyRounds","historyQuestions","historySummarized"))result.put(key,set.result().get(key));
         result.put("questions",questions(set).stream().map(q->{
             var publicQuestion=new LinkedHashMap<String,Object>();
             for(String key:List.of("id","nodeId","nodeTitle","kind","title","prompt","options","diagram","scenario","validation"))

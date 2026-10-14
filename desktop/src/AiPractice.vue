@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import StudyIcon from './StudyIcon.vue'
-import { practiceScopes, resolvePracticeScope } from './practiceScope'
+import { resolvePracticeScope } from './practiceScope'
+import PracticeScopePicker from './PracticeScopePicker.vue'
 import QuestionChat from './QuestionChat.vue'
 import PracticeFigure, { type Diagram } from './PracticeFigure.vue'
 import { reviewTargets } from './practiceReview'
@@ -10,7 +11,7 @@ type Node={id:string;title:string;children?:Node[];details?:Node[]}
 type Question={id:string;nodeTitle:string;kind:string;title:string;prompt:string;options:string[];diagram?:Diagram|null;scenario?:string}
 type Citation=ReviewCitation
 type Feedback={questionId:string;selectedIndex:number;answerIndex:number;correct:boolean;explanation:string;takeaway:string;selectedReason:string;citations:Citation[]}
-type SetData={id:string;title:string;status:string;error?:string;questions?:Question[];rejectedCount?:number}
+type SetData={id:string;title:string;status:string;error?:string;questions?:Question[];rejectedCount?:number;practiceMode?:string;historyRounds?:number;historyQuestions?:number}
 const props=defineProps<{courseId?:string;hasMedia?:boolean;playbackReady?:boolean;mindMap?:{root:Node}|null;selectedNodeId?:string;ready?:boolean}>()
 const emit=defineEmits<{seek:[timeMs:number,sourceId:string]}>()
 const base='http://127.0.0.1:18080/api/transcriptions'
@@ -18,6 +19,10 @@ const clientKey='videostudy:practice-client'
 let client=localStorage.getItem(clientKey)
 if(!client){client=crypto.randomUUID();localStorage.setItem(clientKey,client)}
 const count=ref(0), difficulty=ref('basic'), scope=ref('')
+
+const practiceMode=ref<'map_context'|'related_materials'>('related_materials')
+const practiceModes=[{value:'map_context',label:'整课导图资料'},{value:'related_materials',label:'当前范围资料'}] as const
+const practiceError=(code?:string)=>({practice_provider_invalid_json:'模型返回的题目格式不合法，无法读取；本次没有自动再次调用模型，可重新生成。',practice_map_context_missing:'这门课未保存导图上下文，请重新生成导图，或选择相关资料出题。',practice_map_context_changed:'导图或原图已变化，请重新生成导图后再沿用上下文。',practice_images_missing:'所需课件截图缺失，请恢复课程资料或重新分析；本次未裁减图片出题。',practice_images_invalid:'图片来源无法核对，请检查课程资料。',practice_evidence_missing:'缺少有效课程依据，请检查导图与原始资料。',practice_context_too_large:'模型拒绝了过大的图片或上下文请求；可以缩小范围或改用相关资料出题，本次未自动裁减。',practice_provider_rejected:'模型服务不接受这次请求，请核对多图支持和上下文限制。',practice_provider_payment_required:'模型服务余额或额度不足，请恢复后重试。'}[code??''] ?? '出题失败，请重试。')
 const sets=ref<SetData[]>([]), active=ref<SetData|null>(null), session=ref(''), index=ref(0)
 const feedback=ref<Record<string,Feedback>>({}), busy=ref(false), pending=ref(false), error=ref('')
 const chartDialog=ref<HTMLDialogElement|null>(null)
@@ -41,7 +46,6 @@ const wrongQuestions=computed(()=>questions.value.map((q,i)=>({question:q,index:
 async function openWrongQuestion(i:number){index.value=i;await nextTick();reviewCard.value?.scrollIntoView({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}
 const answered=computed(()=>questions.value.filter(q=>feedback.value[q.id]).length)
 const correct=computed(()=>questions.value.filter(q=>feedback.value[q.id]?.correct).length)
-const nodes=computed(()=>practiceScopes(props.mindMap?.root))
 const letters=['A','B','C','D']
 watch([index,session,active],()=>{chatOpen.value=false;chartDialog.value?.close()})
 watch(()=>props.selectedNodeId,id=>{if(id)scope.value=resolvePracticeScope(props.mindMap?.root,id)})
@@ -65,7 +69,7 @@ async function restore(set:SetData,version=epoch){
    index.value=Math.max(0,loaded.questions.findIndex((q:Question)=>!feedback.value[q.id]))
    busy.value=false
  }else if(['queued','processing'].includes(loaded.status)){busy.value=true;poll(set.id,version,course!,Date.now())}
- else busy.value=false
+ else {busy.value=false;if(loaded.status==='failed')error.value=practiceError(loaded.error)}
 }
 async function refresh(version:number){
  try{const data=await api('');if(version!==epoch)return;sets.value=data;if(data[0])await restore(data[0],version)}
@@ -82,14 +86,14 @@ function poll(id:string,version:number,course:string,started:number){
        if(Date.now()-started>15*60*1000){busy.value=false;error.value='生成仍在后台进行，可稍后重新打开查看。';return}
        poll(id,version,course,started);return
      }
-     if(set.status==='failed'){busy.value=false;error.value='出题失败，请重试。';return}
+     if(set.status==='failed'){busy.value=false;error.value=practiceError(set.error);return}
      await restore(set,version);sets.value=await api('','GET',undefined,course)
    }catch{if(version===epoch){busy.value=false;error.value='暂时无法获取出题进度，可重新打开查看。'}}
  },1500)
 }
 async function generate(){
  const version=epoch,course=props.courseId!;busy.value=true;error.value='';session.value=''
- try{const set=await api('','POST',{nodeId:scope.value||null,count:count.value,difficulty:difficulty.value,retry:true},course);if(version!==epoch)return;active.value=set;feedback.value={};index.value=0
+ try{const set=await api('','POST',{nodeId:scope.value||null,count:count.value,difficulty:difficulty.value,retry:true,mode:practiceMode.value},course);if(version!==epoch)return;active.value=set;feedback.value={};index.value=0
    if(['queued','processing'].includes(set.status))poll(set.id,version,course,Date.now());else await restore(set,version)
  }catch{if(version===epoch){busy.value=false;error.value='暂时无法出题，请确认思维导图已经生成。'}}
 }
@@ -113,14 +117,20 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
  <div class="practice">
   <div class="practice-heading"><div><span class="eyebrow">LEARN BY DOING</span><h3>AI 练习</h3></div><span class="practice-demo">{{ demo?'静态演示':courseId?'知识点练习':'未选择课程' }}</span></div>
   <p class="practice-intro">点击选项，立即查看对错与解析。</p>
+  <div v-if="courseId&&!demo" class="practice-mode-options" role="group" aria-label="出题参考资料">
+   <span>参考资料</span><button v-for="mode in practiceModes" :key="mode.value" type="button" :aria-pressed="practiceMode===mode.value" :disabled="busy||pending" @click="practiceMode=mode.value">{{ mode.label }}</button>
+  </div>
+  <p v-if="courseId&&!demo" class="practice-intro">{{ practiceMode==='map_context'?'参考生成导图时的整课资料和导图，按选定范围出题。':'参考选定范围的知识点、相关例题原图和讲解出题。' }}</p>
+  <p v-if="courseId&&!demo" class="practice-intro">同一课程连续出题，会参考已出的题尽量避免重复；这两个选项只决定参考资料范围。每道题的答疑分别保存。</p>
+  <p v-if="active?.historyRounds" class="practice-intro">本次已参考 {{ active.historyRounds }} 轮出题历史，共 {{ active.historyQuestions }} 道题。</p>
   <button v-if="!courseId&&!hasMedia" type="button" class="practice-secondary" @click="showDemo=!showDemo;feedback={};index=0">{{ demo?'关闭示例题':'查看示例题' }}</button>
   <div v-if="courseId&&!demo" class="practice-settings">
-   <label>练习范围<select v-model="scope" :disabled="busy"><option value="">整课知识点</option><option v-for="node in nodes" :key="node.id" :value="node.id">{{ node.title }}</option></select></label>
+   <PracticeScopePicker v-model="scope" :root="mindMap?.root" :disabled="busy||pending"/>
    <label>题量<select v-model.number="count" :disabled="busy"><option :value="0">智能推荐</option><option v-for="n in [3,5,10]" :key="n" :value="n">{{ n }} 道</option></select></label>
-   <label>难度<select v-model="difficulty" :disabled="busy"><option value="basic">基础巩固</option><option value="application">应用练习</option><option value="advanced">进阶挑战</option></select></label>
+   <label>难度<select aria-label="难度" v-model="difficulty" :disabled="busy||pending"><option value="basic">基础巩固</option><option value="application">应用练习</option><option value="advanced">进阶挑战</option></select></label>
    <button class="practice-primary" type="button" :disabled="busy||pending||!ready||!mindMap" @click="generate">{{ busy?'正在出题…':'生成练习' }}</button>
   </div>
-  <p v-if="courseId&&!demo" class="practice-intro">按完整知识分支练习，包含下级公式、条件和易错点。</p>
+
   <label v-if="sets.length" class="saved-set">已保存的练习<select :value="active?.id" :disabled="busy||pending" @change="switchSet(($event.target as HTMLSelectElement).value)"><option v-for="set in sets" :key="set.id" :value="set.id">{{ set.title }} · {{ set.status==='completed'?'已生成':set.status==='failed'?'失败':'生成中' }} · {{ set.id.slice(0,6) }}</option></select></label>
   <p v-if="error" class="practice-error" role="alert">{{ error }}</p>
   <p v-if="busy" class="practice-intro" role="status">正在根据知识点出题并检查答案，完成后自动显示。</p>
@@ -151,8 +161,12 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
       <p v-else class="review-hint">{{ demo?'示例题没有对应视频片段。':'这道题暂时没有可用的课程时间依据，无法精准定位；可以先复习上面的解法。' }}</p>
      </section><div v-if="current.correct" class="practice-citations"><button v-for="ref in current.citations" :key="ref.sourceId" type="button" @click="emit('seek',ref.startMs,ref.sourceId)">回看 {{ time(ref.startMs) }} · {{ ref.quote }}</button></div></div>
     <section v-if="current&&!demo&&courseId&&active&&session" class="practice-chat-entry">
-     <button class="practice-secondary" type="button" :aria-expanded="chatOpen" @click="chatOpen=!chatOpen">{{ chatOpen?'收起本题答疑':'本题答疑 · 解释我的思路' }}</button>
-     <QuestionChat v-if="chatOpen" :key="`${courseId}:${active.id}:${question.id}:${session}`" :course-id="courseId" :set-id="active.id" :question-id="question.id" :session-id="session" :client="client!" :playback-ready="playbackReady" @seek="(ms,id)=>emit('seek',ms,id)"/>
+     <button class="practice-chat-toggle" type="button" :aria-expanded="chatOpen" :aria-controls="`question-chat-${question.id}`" @click="chatOpen=!chatOpen">
+      <span class="practice-chat-icon"><StudyIcon name="chat"/></span>
+      <span class="practice-chat-copy"><strong>本题答疑 <span>AI 助教</span></strong><small>看不懂解析？聊聊你的解题思路</small></span>
+      <span class="practice-chat-action">{{ chatOpen?'收起':'打开答疑' }} <span aria-hidden="true">{{ chatOpen?'⌃':'⌄' }}</span></span>
+     </button>
+     <QuestionChat v-if="chatOpen" :id="`question-chat-${question.id}`" :key="`${courseId}:${active.id}:${question.id}:${session}`" :course-id="courseId" :set-id="active.id" :question-id="question.id" :session-id="session" :client="client!" :playback-ready="playbackReady" @seek="(ms,id)=>emit('seek',ms,id)"/>
     </section>
     <div class="practice-actions"><button class="practice-secondary" type="button" :disabled="index===0||pending" @click="index--">上一题</button><button v-if="index<questions.length-1" class="practice-primary" type="button" :disabled="pending" @click="index++">下一题 →</button><button v-else class="practice-secondary" type="button" :disabled="pending" @click="reset">重新练习</button></div>
    </article>
@@ -164,6 +178,14 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
 </template>
 <style scoped src="./AiPractice.css"></style>
 <style scoped>
+.practice-chat-entry{margin-top:22px;border:1px solid #bdccfb;border-radius:16px;overflow:hidden;background:#f7f9ff;box-shadow:0 5px 18px #4166ed0b}
+.practice-chat-toggle{display:flex;align-items:center;gap:13px;width:100%;padding:18px;text-align:left;border:0;background:linear-gradient(115deg,#eaf0ff,#f6f3ff);color:#254aab;cursor:pointer;font:inherit}
+.practice-chat-toggle:hover{background:#e5edff}.practice-chat-toggle:focus-visible{outline:3px solid #4166ed;outline-offset:-3px}
+.practice-chat-icon{display:grid;place-items:center;flex:none;width:44px;height:44px;border-radius:13px;background:#4166ed;color:white}.practice-chat-icon svg{width:24px;height:24px}
+.practice-chat-copy{flex:1;min-width:0}.practice-chat-copy strong{display:flex;align-items:center;gap:9px;font-size:16px;color:#203764}.practice-chat-copy strong span{padding:3px 7px;border-radius:6px;background:#fff;color:#536cb6;font-size:10px;font-weight:600}.practice-chat-copy small{display:block;margin-top:5px;line-height:1.6;font-size:12px;color:#5f7297}
+.practice-chat-action{flex:none;font-size:12px;font-weight:700;color:#355dd8}.practice-chat-action span{margin-left:5px}
+@media(max-width:600px){.practice-chat-toggle{gap:10px;padding:14px}.practice-chat-icon{width:36px;height:36px}.practice-chat-copy strong{font-size:14px}.practice-chat-copy small{font-size:11px}.practice-chat-action{font-size:11px}}
+
 .practice-review{margin-top:18px;padding:16px;border:1px solid #d8e1ff;border-radius:12px;background:linear-gradient(130deg,#edf3ff,#f8f5ff)}.review-heading{display:flex;align-items:center;gap:8px;color:#3759ca;font-size:14px}.review-heading svg{width:17px;height:17px}.practice-review .review-knowledge{margin-top:10px;color:#25395f;font-weight:650}.practice-review .review-hint{margin-top:8px;font-size:12px;color:#62749a}.practice-review blockquote{margin:12px 0;padding:10px 13px;border-left:3px solid #9cb3f7;background:#ffffffb0;font-size:13px;line-height:1.8;color:#405779;white-space:pre-wrap}.review-play{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;width:100%;padding:12px;border:0;border-radius:9px;background:#4166ed;color:white;font-size:13px;font-weight:650}.review-play svg{width:15px;height:15px}.review-other{margin-top:12px;font-size:12px;color:#526998}.review-other button{display:block;width:100%;margin-top:8px;padding:9px;border:1px solid #dce6ff;border-radius:7px;background:white;color:#4166cc;text-align:left;font-size:12px;line-height:1.7}.review-wrong-list{display:grid;gap:8px;margin-top:12px}.review-wrong-list button{padding:10px;border:1px solid #e0dafa;border-radius:8px;background:#fff;color:#6850b2;text-align:left;font-size:12px;line-height:1.7}.review-wrong-list button span{display:block;font-size:11px}.practice-summary>div{min-width:0;flex:1}
 .practice-settings{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;background:#f5f8ff;border:1px solid #e0e7fb;border-radius:13px;margin-bottom:18px}.practice-settings label,.saved-set{display:grid;gap:7px;font-size:12px;color:#53698f}.practice-settings select,.saved-set select{min-width:0;width:100%;padding:10px;border:1px solid #dce4f7;border-radius:8px;background:#fff;color:#25395f}.practice-settings .practice-primary{justify-content:center;align-self:end;padding:12px;border-radius:9px}.saved-set{margin-bottom:16px}.practice-empty{padding:30px 20px;background:#f7faff;border:1px dashed #d6e2fb;border-radius:12px;color:#62779c;font-size:13px;line-height:1.8}.practice-error{padding:12px;background:#fff4f3;color:#a44555;border-radius:8px;font-size:13px}.choice-reason{margin-top:12px!important}.practice-citations{display:grid;gap:8px;margin-top:14px}.practice-citations button{text-align:left;padding:10px;border:1px solid #dce6ff;background:#fff;border-radius:8px;color:#4166cc;font-size:12px;line-height:1.8}button:disabled{opacity:.5;cursor:default}fieldset:disabled label{cursor:default}
 </style>

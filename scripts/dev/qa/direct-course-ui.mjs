@@ -23,11 +23,12 @@ try {
  });
  await page.goto('http://127.0.0.1:5173/');
  await page.getByRole('button',{name:'高级选项',exact:true}).click();
- assert.equal(await page.getByRole('button',{name:'原流程',exact:true}).getAttribute('aria-pressed'),'true');
- await page.getByRole('button',{name:'整课图文直生成',exact:true}).click();
+ assert.equal(await page.getByRole('button',{name:'原流程',exact:true}).count(),0);
+ assert.equal(await page.getByRole('button',{name:'整课图文直生成（默认）',exact:true}).getAttribute('aria-pressed'),'true');
+ await page.getByRole('button',{name:'整课图文直生成（默认）',exact:true}).click();
  assert.equal(await page.locator('.mode-picker select').inputValue(),'both');assert(await page.locator('.mode-picker select').isDisabled());
- await page.getByRole('button',{name:'原流程',exact:true}).click();assert(await page.locator('.mode-picker select').isEnabled());
- await page.getByRole('button',{name:'整课图文直生成',exact:true}).click();
+ await page.getByRole('button',{name:'分组后汇总',exact:true}).click();assert(await page.locator('.mode-picker select').isDisabled());
+ await page.getByRole('button',{name:'整课图文直生成（默认）',exact:true}).click();
  // Exercise actual upload FormData without sending a file or provider request to the server.
  await page.evaluate(async()=>{
   const state=document.querySelector('#app').__vue_app__._instance.setupState;
@@ -44,5 +45,5 @@ try {
  assert(await page.locator('.map-mode-row').evaluate(el=>el.scrollWidth<=el.clientWidth+1));
  await page.screenshot({path:fileURLToPath(new URL('../../../.local/qa/direct-course-mobile.png',import.meta.url)),fullPage:true});
  assert.deepEqual(errors,[]);
- console.log(JSON.stringify({threeModes:true,uploadMode:'direct',manualRefreshMode:'direct',mobilePassed:true,paidModelCalls:0}));
+ console.log(JSON.stringify({twoModes:true,uploadMode:'direct',manualRefreshMode:'direct',mobilePassed:true,paidModelCalls:0}));
 }finally{await browser.close()}

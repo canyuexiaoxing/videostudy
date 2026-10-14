@@ -19,13 +19,17 @@ import static cn.videostudy.api.TranscriptionController.*;
 @RequestMapping("/api/transcriptions/{id}/practice")
 @CrossOrigin(origins={"http://localhost:5173","http://127.0.0.1:5173"})
 public class PracticeController {
+    private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(PracticeController.class);
     private final PracticeStore store;
     private final TranscriptionJobStore main;
     private final MediaAnalyzer agent;
     private final ObjectMapper json;
     private final ThreadPoolExecutor worker=new ThreadPoolExecutor(1,1,0,TimeUnit.MILLISECONDS,new ArrayBlockingQueue<>(4));
     private final Set<String> dispatched=ConcurrentHashMap.newKeySet();
-    public record Request(String nodeId,int count,String difficulty,boolean retry) {}
+    public record Request(String nodeId,int count,String difficulty,boolean retry,String mode) {
+        public Request(String nodeId,int count,String difficulty,boolean retry){this(nodeId,count,difficulty,retry,"legacy");}
+        @Override public String mode(){return mode==null?"legacy":mode;}
+    }
     public record SessionRequest(boolean fresh) {}
     public record AnswerRequest(String questionId,int selectedIndex) {}
     public PracticeController(PracticeStore store,TranscriptionJobStore main,MediaAnalyzer agent,ObjectMapper json){this.store=store;this.main=main;this.agent=agent;this.json=json;}
@@ -39,9 +43,11 @@ public class PracticeController {
         var parent=main.find(id);if(parent.isEmpty())return ResponseEntity.notFound().build();
         if(!"completed".equals(parent.get().status()))return ResponseEntity.status(409).body(Map.of("error","course_not_completed"));
         try{
-            var result=parent.get().result();var source=source(result,request);
+            var result=parent.get().result();var source=new LinkedHashMap<>(source(result,request));
+            if(!"legacy".equals(request.mode())) {source.put("courseId",id);source.put("ignoredRegion",main.findIgnoredRegion(id));}
             String hash=hash(json.writeValueAsString(result.mindMap()));
-            String key=hash(hash+":"+source.get("scopeNodeId")+":"+json.writer().with(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).writeValueAsString(source)+":mindmap-practice-v2");
+            if(!"legacy".equals(request.mode())) {source.put("conversationVersion","practice-course-history-v1");source.put("conversationRevision",store.conversationRevision(id,hash));}
+            String key=hash(hash+":"+source.get("scopeNodeId")+":"+json.writer().with(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).writeValueAsString(source)+":mindmap-practice-v6-history-json");
             var set=store.request(id,hash,key,result.mindMap().root().id().equals(source.get("scopeNodeId"))?"整课知识点":(String)source.get("scopeTitle"),source,request.retry());
             dispatch();return ResponseEntity.accepted().body(store.publicSet(id,set.id()));
         }catch(IllegalArgumentException error){return ResponseEntity.unprocessableEntity().body(Map.of("error",error.getMessage()));}
@@ -88,6 +94,7 @@ public class PracticeController {
         if(node.children()!=null)node.children().forEach(child->flatten(child,nodes));
     }
     static Map<String,Object> source(TranscriptResult result,Request request){
+        if(!List.of("legacy","map_context","related_materials").contains(request.mode()))throw new IllegalArgumentException("invalid_practice_mode");
         if(!List.of(0,3,5,10).contains(request.count())||!List.of("basic","application","advanced").contains(Objects.toString(request.difficulty(),"")))throw new IllegalArgumentException("invalid_practice_settings");
         if(result.mindMap()==null||!"completed".equals(result.mindMap().status())||result.mindMap().root()==null)throw new IllegalArgumentException("mindmap_not_ready");
         var root=result.mindMap().root();var chosen=practiceScope(root,request.nodeId());
@@ -120,7 +127,16 @@ public class PracticeController {
             if(analysis!=null&&"completed".equals(analysis.status()))pages.add(Map.of("firstFrameTimeMs",page.firstFrameTimeMs(),"lastFrameTimeMs",page.lastFrameTimeMs(),"pageIndex",page.pageIndex(),"title",Objects.toString(analysis.title(),""),"content",Objects.toString(analysis.content(),"")));
             else if(page.ocrLines()!=null)pages.add(Map.of("firstFrameTimeMs",page.firstFrameTimeMs(),"lastFrameTimeMs",page.lastFrameTimeMs(),"pageIndex",page.pageIndex(),"ocr",page.ocrLines().stream().map(OcrLine::text).toList()));
         }
-        return Map.of("scopeNodeId",chosen.id(),"scopeTitle",chosen.title(),"nodes",nodes,"pages",pages,"count",request.count()==0?Math.min(10,nodes.size()*2):request.count(),"difficulty",request.difficulty());
+        var source=new LinkedHashMap<String,Object>(Map.of("scopeNodeId",chosen.id(),"scopeTitle",chosen.title(),"nodes",nodes,"pages",pages,"count",request.count()==0?Math.min(10,nodes.size()*2):request.count(),"difficulty",request.difficulty()));
+        if(!"legacy".equals(request.mode())){
+            if(!MindMapValidator.isGrounded(result.mindMap(),result.segments(),result.visualEvidence()))throw new IllegalArgumentException("practice_evidence_missing");
+            source.put("mode",request.mode());source.put("mindMap",result.mindMap());
+            if("related_materials".equals(request.mode())){
+                source.put("sourceSegments",result.segments());source.put("pageGroups",result.pageGroups()==null?List.of():result.pageGroups());
+                source.put("visualEvidence",result.visualEvidence()==null?List.of():result.visualEvidence());
+            }
+        }
+        return source;
     }
     private static String hash(String value)throws Exception{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));}
     @Scheduled(fixedDelay=2000) public void dispatch(){
@@ -128,8 +144,10 @@ public class PracticeController {
     }
     @EventListener(ApplicationReadyEvent.class) public void recover(){store.recover();dispatch();}
     private void process(String id){
-        store.claim(id).ifPresent(run->{try{var result=agent.generatePractice(run.source());validate(result,run.source());store.complete(run,result);}
-            catch(Exception error){boolean temporary=error instanceof ResourceAccessException||error instanceof RestClientResponseException r&&(r.getStatusCode().value()==429||r.getStatusCode().is5xxServerError());store.fail(run,"practice_generation_failed",temporary);}});
+        store.claim(id).ifPresent(run->{try{var source=new LinkedHashMap<String,Object>(run.source());var history=store.generationHistory(id);source.put("practiceHistory",history);log.info("practice_history task={} course={} rounds={}",id,source.get("courseId"),history.size());var result=agent.generatePractice(source);validate(result,run.source());store.complete(run,result);}
+            catch(Exception error){boolean temporary=error instanceof ResourceAccessException||error instanceof RestClientResponseException r&&(r.getStatusCode().value()==429||r.getStatusCode().is5xxServerError());String code="practice_generation_failed";
+                if(error instanceof RestClientResponseException response)for(var known:List.of("practice_provider_invalid_json","practice_map_context_missing","practice_map_context_changed","practice_images_missing","practice_images_invalid","practice_evidence_missing","practice_provider_payment_required","practice_context_too_large","practice_provider_rejected"))if(response.getResponseBodyAsString().contains(known)){code=known;temporary=false;break;}
+                log.warn("practice_failed task={} type={} code={} retry={}",id,error.getClass().getSimpleName(),code,temporary);store.fail(run,code,temporary);}});
     }
     @SuppressWarnings("unchecked") static void validate(Map<String,Object> result,Map<String,Object> source){
         if(result==null||!List.of("completed","empty").contains(result.get("status"))||!(result.get("questions") instanceof List<?> questions)||questions.size()>((Number)source.get("count")).intValue())throw new IllegalArgumentException("invalid_practice_result");

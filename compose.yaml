@@ -21,10 +21,12 @@ services:
       - ./.local/models:/models
       - ./.local/uploads:/data/uploads
       - ./.local/keyframes:/data/keyframes
+      - ./.local/logs:/data/logs
     environment:
       MODEL_DIR: /models
       MEDIA_TEMP_DIR: /data/uploads
       KEYFRAME_DIR: /data/keyframes
+      MODEL_LOG_DIR: /data/logs
       JAVA_INTERNAL_BASE_URL: http://java-api:18080
       HF_HOME: /models/huggingface
       XDG_CACHE_HOME: /models/cache
@@ -34,6 +36,7 @@ services:
       PAGE_CONCURRENCY: ${PAGE_CONCURRENCY:-5}
       MINDMAP_CONCURRENCY: ${MINDMAP_CONCURRENCY:-3}
       OCR_DEVICE: ${OCR_DEVICE:-cpu}
+      WHISPER_BATCH_SIZE: ${WHISPER_BATCH_SIZE:-0}
       MEDIA_PARALLEL: ${MEDIA_PARALLEL:-1}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]

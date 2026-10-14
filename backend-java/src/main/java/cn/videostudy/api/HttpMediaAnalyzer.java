@@ -45,8 +45,9 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
             .retrieve().body(new ParameterizedTypeReference<Map<String,Object>>() {});
     }
 
-    @Override public Map<String,Object> generateOverview(TranscriptionController.TranscriptResult source) {
-        var body=new LinkedHashMap<String,Object>();body.put("segments",source.segments());
+    @Override public Map<String,Object> generateOverview(TranscriptionController.TranscriptResult source) { return generateOverview(null,source); }
+    @Override public Map<String,Object> generateOverview(String courseId,TranscriptionController.TranscriptResult source) {
+        var body=new LinkedHashMap<String,Object>();body.put("segments",source.segments());body.put("courseId",courseId);
         body.put("pageGroups",source.pageGroups()==null?List.of():source.pageGroups());body.put("mindMap",source.mindMap());
         body.put("visualEvidence",source.visualEvidence()==null?List.of():source.visualEvidence());
         return agent.post().uri("/overview").body(body).retrieve().body(new ParameterizedTypeReference<Map<String,Object>>() {});

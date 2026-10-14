@@ -4,10 +4,10 @@ import subprocess,time,json,urllib.request
 ROOT=Path(__file__).resolve().parents[3]
 STAGE=ROOT/'.local/dev/grouped-course';STAGE.mkdir(parents=True,exist_ok=True)
 def run(args):subprocess.run(args,cwd=ROOT,check=True)
-query="SELECT (SELECT COUNT(*) FROM transcription_jobs WHERE status IN ('queued','processing')) + (SELECT COUNT(*) FROM overview_jobs WHERE status IN ('queued','processing')) + (SELECT COUNT(*) FROM chapter_jobs WHERE status IN ('queued','processing'))"
+query="SELECT (SELECT COUNT(*) FROM transcription_jobs WHERE status IN ('queued','processing')) + (SELECT COUNT(*) FROM overview_jobs WHERE status IN ('queued','processing')) + (SELECT COUNT(*) FROM chapter_jobs WHERE status IN ('queued','processing')) + (SELECT COUNT(*) FROM practice_sets WHERE status IN ('queued','processing'))"
 command='MYSQL_PWD="$MYSQL_PASSWORD" mysql -u"$MYSQL_USER" "$MYSQL_DATABASE" -Nse "'+query+'"'
 if subprocess.check_output(['docker','exec','videostudy-mysql-1','sh','-c',command],text=True).strip()!='0':raise RuntimeError('分析任务正在运行，不能重启')
-modules=('analysis.py','analysis_progress.py','app.py','transcription.py','visual_evidence.py','slide_grouping.py','group_scheduler.py','group_understanding.py','grouped_analysis.py','course_mind_map.py','direct_analysis.py','direct_course_map.py','overview.py')
+modules=('analysis.py','analysis_progress.py','app.py','transcription.py','visual_evidence.py','slide_grouping.py','group_scheduler.py','group_understanding.py','grouped_analysis.py','course_mind_map.py','course_outline.py','model_diagnostics.py','direct_analysis.py','direct_course_map.py','overview.py','map_conversation.py','practice_materials.py','practice_history.py','practice.py')
 python=STAGE/'python';python.mkdir(exist_ok=True)
 for name in modules:(python/name).write_bytes((ROOT/'agent-python'/name).read_bytes())
 (python/'Dockerfile').write_text('FROM videostudy-agent-python:latest\nCOPY '+' '.join(modules)+' /app/\n')

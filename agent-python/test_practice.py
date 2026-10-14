@@ -69,5 +69,35 @@ class PracticeTests(unittest.TestCase):
             'check': {'operation': 'growth_rate', 'fromIndex': 0, 'toIndex': 1}}
         self.assertNotIn('check', validate_question(q, self.nodes)['diagram'])
 
+    def test_whole_course_random_plan_is_sampled_and_enforced(self):
+        from unittest.mock import patch
+        nodes=self.nodes+[dict(id='n2',title='公式',evidenceRefs=self.nodes[0]['evidenceRefs'])]
+        picked=self.question();picked['nodeId']='n2';seen=[]
+        def reply(payload):seen.append(payload);return {'questions':[self.question(),picked]}
+        with patch('practice.random.SystemRandom') as rng:
+            rng.return_value.sample.return_value=['n2']
+            result=generate_practice(nodes,[],1,'basic',ask_json=reply,whole_course=True)
+            rng.return_value.sample.assert_called_once_with(['n1','n2'],1)
+        self.assertEqual(seen[0]['questionPlan']['targetNodeIds'],['n2'])
+        self.assertEqual([q['nodeId'] for q in result['questions']],['n2']);self.assertEqual(result['rejectedCount'],1)
+
+    def test_specific_scope_does_not_get_whole_course_random_plan(self):
+        seen=[]
+        def reply(payload):seen.append(payload);return {'questions':[self.question()]}
+        result=generate_practice(self.nodes,[],3,'basic',ask_json=reply)
+        self.assertNotIn('questionPlan',seen[0]);self.assertEqual(result['status'],'completed')
+
+    def test_each_difficulty_has_explicit_distinct_policy(self):
+        policies=[]
+        for difficulty in ('basic','application','advanced'):
+            seen=[]
+            def reply(payload):seen.append(payload);return {'questions':[self.question()]}
+            generate_practice(self.nodes,[],3,difficulty,ask_json=reply)
+            self.assertEqual(seen[0]['difficulty'],difficulty)
+            self.assertIn('课程资料不足',seen[0]['difficultyPolicy']);policies.append(seen[0]['difficultyPolicy'])
+        self.assertEqual(len(set(policies)),3)
+        self.assertIn('低难度',policies[0]);self.assertIn('中等难度',policies[1]);self.assertIn('高难度',policies[2])
+        for policy in policies:self.assertIn('任何题型均可',policy)
+
 
 if __name__ == '__main__': unittest.main()

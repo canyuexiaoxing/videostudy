@@ -262,10 +262,10 @@ const expandedMap = ref(false)
 const activeSegmentId = ref('')
 const generatingMindMap = ref(false)
 const isAnalysisPending = ref(false)
-const mindMapMode = ref<'legacy' | 'grouped' | 'direct'>('legacy')
+const mindMapMode = ref<'grouped' | 'direct'>('direct')
 const groupedAnalysis = computed(() => mindMapMode.value === 'grouped')
-const mapModes = [{ value: 'legacy', label: '原流程' }, { value: 'grouped', label: '分组后汇总' }, { value: 'direct', label: '整课图文直生成' }] as const
-watch(mindMapMode, mode => { if(mode !== 'legacy') visualAnalysisMode.value = 'both' })
+const mapModes = [{ value: 'direct', label: '整课图文直生成（默认）' }, { value: 'grouped', label: '分组后汇总' }] as const
+watch(mindMapMode, () => { visualAnalysisMode.value = 'both' })
 const visualAnalysisMode = ref<'ocr_only' | 'both'>('both')
 const coarseChangePercent = ref('2')
 const coarseSampleSeconds = ref(2)
@@ -805,7 +805,7 @@ async function deleteHistory(entry: HistoryEntry) {
 }
 
 async function retryAnalysis() {
-  if (!failedJobId.value || isAnalysisPending.value) return
+  if (!failedJobId.value || isAnalysisPending.value || generatingMindMap.value) return
   const request = analysisRequests.begin()
   isAnalysisPending.value = true
   error.value = ''
@@ -815,7 +815,7 @@ async function retryAnalysis() {
   try {
     const id = failedJobId.value
     const response = await fetch(`${apiBase}/transcriptions/${id}/retry`, { method: 'POST', signal: request.signal })
-    if (!response.ok) throw new Error(`重试失败：HTTP ${response.status}`)
+    if (!response.ok) throw new Error(response.status === 410 ? '保留的视频文件已不可用，请重新选择原视频并开始分析。' : `重试失败：HTTP ${response.status}`)
     if (!request.current()) return
     readSubtitleJob(id)
     await waitForAnalysis(id, request)
@@ -830,7 +830,7 @@ async function retryAnalysis() {
 }
 
 async function generateExistingMindMap(refresh = false) {
-  if (!existingJobId.value || generatingMindMap.value) return
+  if (!existingJobId.value || generatingMindMap.value || isAnalysisPending.value) return
   const id = existingJobId.value
   const request = mindMapRequests.begin()
   generatingMindMap.value = true
@@ -993,7 +993,10 @@ onUnmounted(() => {
           <div class="mind-map-heading"><div><span class="eyebrow">KNOWLEDGE MAP</span><h2>知识导图</h2><p>图上看核心知识，点击查看公式条件与讲解细节</p></div>
             <div class="mind-map-heading-actions"><button v-if="mindMap.root.children.length" type="button" class="expand-map-button" @click="expandedMap = true">放大查看</button><span class="mind-map-badge">{{ mindMap.root.children.length }} 个主题</span></div></div>
           <p v-if="mindMap.status === 'empty'" class="status">{{ exampleTimeline.length ? '本段课程未提取到核心知识，可通过下方例题节点回看。' : '没有可用的核心知识依据，暂时无法生成导图。' }}</p>
-          <p v-else-if="mindMap.status === 'failed'" class="status">{{ mindMap.root.children.length ? '部分导图内容未生成；已显示的节点仍可查看原文和回放。' : '导图尚未生成；原转写和页面分析仍可查看，可以重试。' }}</p>
+          <div v-else-if="mindMap.status === 'failed'" class="analysis-retry-card" role="status">
+            <div><strong>导图分析未完成</strong><p>{{ generatingMindMap ? '正在使用已保存的课程资料重新生成导图，请稍候。' : mindMap.root.children.length ? '已生成的节点仍可查看，重新分析可尝试补全导图。' : '原转写和课件图片已保留，可以直接重新分析导图。' }}</p></div>
+            <button type="button" aria-label="重新分析导图" :disabled="generatingMindMap || isAnalysisPending || !existingJobId" @click="generateExistingMindMap(false)"><span v-if="generatingMindMap" class="activity-spinner" aria-hidden="true"></span>{{ generatingMindMap ? '重新分析中…' : '重新分析' }}</button>
+          </div>
           <MindMapCanvas v-if="mindMap.root.children.length" :root="mindMap.root" @select="selectMindMapNode" />
           <div v-if="selectedMindNode && (selectedMindNode.evidenceRefs.length || selectedMindNode.details?.length)" class="mind-source">
             <strong>{{ selectedMindNode.title }} · 课程依据</strong>
@@ -1010,6 +1013,7 @@ onUnmounted(() => {
           </section>
         </div>
         <div v-else class="sidebar-empty">
+          <div v-if="failedJobId" class="analysis-retry-card" role="status"><div><strong>课程分析未完成</strong><p>{{ isAnalysisPending ? '正在重新分析，请稍候。' : '可以使用保留的任务文件重新分析，无需再次上传。' }}</p></div><button type="button" aria-label="重新分析课程" :disabled="isAnalysisPending || generatingMindMap" @click="retryAnalysis">{{ isAnalysisPending ? '重新分析中…' : '重新分析' }}</button></div>
           <div class="map-preview" aria-hidden="true"><span class="preview-root"><StudyIcon name="play" />课程</span><i></i><div><span><StudyIcon name="map" />知识脉络</span><span><StudyIcon name="transcript" />原文依据</span><span><StudyIcon name="notes" />学习笔记</span></div></div>
           <span class="eyebrow">KNOWLEDGE MAP</span><h3>让知识点回到原视频</h3>
           <p>分析完成后，这里会生成可展开的课程导图。点击任一节点，就能回看老师讲解它的片段和原句。</p>
@@ -1114,7 +1118,7 @@ onUnmounted(() => {
         <details class="analysis-settings" :open="!transcript.length">
           <summary>分析与任务设置</summary>
           <div class="analysis-settings-content">
-        <label class="mode-picker">画面分析方式 <select v-model="visualAnalysisMode" :disabled="mindMapMode !== 'legacy' || isAnalysisPending"><option value="both">语音文字＋每页代表图</option><option value="ocr_only">语音文字＋OCR 文字</option></select></label>
+        <label class="mode-picker">画面分析方式 <select v-model="visualAnalysisMode" disabled><option value="both">语音文字＋每页代表图</option><option value="ocr_only">语音文字＋OCR 文字</option></select></label>
         <div class="advanced-options">
           <button type="button" class="advanced-toggle" :aria-expanded="advancedOpen" aria-controls="advanced-settings" @click="advancedOpen = !advancedOpen">{{ advancedOpen ? '收起高级选项' : '高级选项' }}</button>
           <div v-if="advancedOpen" id="advanced-settings" class="advanced-fields">
@@ -1126,7 +1130,6 @@ onUnmounted(() => {
           </div>
           <p class="advanced-help" v-if="mindMapMode === 'direct'">保留覆盖检查与缺失截图补采，等全部代表图和语音转写就绪后，将代表图与有效转写一起交给思维导图模型，跳过逐组内容解读。图片较多时，请求可能达到模型上限；不会自动删图或改成分批。</p>
           <p class="advanced-help" v-else-if="mindMapMode === 'grouped'">先按组并行解读图文，再统一汇总整课导图；增加模型请求。</p>
-          <p class="advanced-help" v-else>沿用原有页面理解与转写导图流程。</p>
           <p class="advanced-help">选择用于新分析和手动生成导图；重试整次分析沿用原任务设置。图文模式会将课件图片发送到已配置的模型服务。</p>
           <div class="advanced-row">
             <span id="coarse-sample-label">粗选采样间隔</span>
@@ -1148,7 +1151,7 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="restore"><label for="analysis-id">已有分析编号</label><div class="actions"><input id="analysis-id" v-model="existingJobId" placeholder="粘贴任务编号" /><button class="secondary" :disabled="!existingJobId.trim() || isAnalysisPending" @click="loadExistingAnalysis">读取结果</button></div><small>已分析过的视频可直接读取结果；播放原片段时仍需选择本地视频。</small></div>
-        <button v-if="failedJobId" class="secondary" :disabled="isAnalysisPending" @click="retryAnalysis">重试这次分析</button>
+        <button v-if="failedJobId" class="secondary" :disabled="isAnalysisPending || generatingMindMap" @click="retryAnalysis">{{ isAnalysisPending ? '重新分析中…' : '重新分析' }}</button>
         <button v-if="transcript.length && existingJobId && (!mindMap || mindMap.status === 'failed')"
           class="secondary" :disabled="generatingMindMap" @click="generateExistingMindMap(false)">
           {{ generatingMindMap ? '正在生成导图…' : mindMap ? '重试生成导图' : '从已有转写生成导图' }}

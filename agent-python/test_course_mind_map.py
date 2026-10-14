@@ -260,6 +260,8 @@ class CourseMindMapTest(unittest.TestCase):
             def read(self):return json.dumps({'choices':[{'finish_reason':'stop','message':{'content':json.dumps(answer())}}]}).encode()
         def transport(request,timeout):
             body=json.loads(request.data)
+            self.assertEqual(body['max_tokens'],393216)
+            self.assertEqual(timeout,300)
             for item in body['messages'][1]['content']:
                 if item.get('type')=='image_url':
                     data=base64.b64decode(item['image_url']['url'].split(',')[1])

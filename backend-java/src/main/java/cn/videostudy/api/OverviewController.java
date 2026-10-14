@@ -20,6 +20,7 @@ import java.util.concurrent.*;
 @RequestMapping("/api/transcriptions/{id}/overview")
 @CrossOrigin(origins={"http://localhost:5173","http://127.0.0.1:5173"})
 public class OverviewController {
+    private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(OverviewController.class);
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
     private final TranscriptionJobStore main;
@@ -71,16 +72,28 @@ public class OverviewController {
     private void process(String id) {
         var token=UUID.randomUUID().toString();
         if (jdbc.update("UPDATE overview_jobs SET status='processing',run_token=?,attempt_count=attempt_count+1 WHERE transcription_id=? AND status='queued' AND attempt_count<3",token,id)!=1) return;
+        long started=System.nanoTime();
+        int attempt=jdbc.queryForObject("SELECT attempt_count FROM overview_jobs WHERE transcription_id=?",Integer.class,id);
+        String stage="load_course";
+        log.info("Overview start task={} run={} attempt={}",id,token,attempt);
         try {
             var parent=main.find(id).orElseThrow();var source=parent.result();
-            var result=agent.generateOverview(source);
+            stage="agent_request";
+            var result=agent.generateOverview(id,source);
+            stage="summary_validation";
             validate(result,source.segments());
+            stage="notes_validation";
             validateNotes(result,source);
+            stage="save_result";
             jdbc.update("UPDATE overview_jobs SET status='completed',run_token=NULL,result_json=?,error_code=NULL WHERE transcription_id=? AND status='processing' AND run_token=?",json.writeValueAsString(result),id,token);
+            log.info("Overview completed task={} run={} attempt={} elapsed_ms={}",id,token,attempt,TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-started));
         } catch (Exception e) {
             boolean temporary=e instanceof ResourceAccessException || e instanceof RestClientResponseException r && (r.getStatusCode().value()==429 || r.getStatusCode().is5xxServerError());
             String code=e instanceof RestClientResponseException r && r.getStatusCode().value()==424
                 && r.getResponseBodyAsString().contains("overview_provider_payment_required")?"overview_provider_payment_required":"overview_failed";
+            int http=e instanceof RestClientResponseException r?r.getStatusCode().value():0;
+            String reason=e instanceof IllegalArgumentException && Set.of("Missing overview","Incomplete overview","Missing section","Missing citation","Invalid citation","Ungrounded citation","Invalid notes","Invalid note citation","Ungrounded note citation","Invalid note tree","Unrelated anchor","Unrelated image","Invalid note point").contains(e.getMessage())?e.getMessage():e.getClass().getSimpleName();
+            log.warn("Overview failed task={} run={} attempt={} stage={} type={} reason={} http_status={} elapsed_ms={} retry={} error_code={}",id,token,attempt,stage,e.getClass().getSimpleName(),reason,http,TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-started),temporary&&attempt<3,code);
             jdbc.update("UPDATE overview_jobs SET status=CASE WHEN ? AND attempt_count<3 THEN 'queued' ELSE 'failed' END,run_token=NULL,error_code=? WHERE transcription_id=? AND status='processing' AND run_token=?",temporary,code,id,token);
         }
     }

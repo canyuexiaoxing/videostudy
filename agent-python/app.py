@@ -1,10 +1,11 @@
 """Day-one contract service. No media or AI analysis is performed here."""
 
 from fastapi import FastAPI
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from ignored_region import normalize_setting as normalize_region
 from fastapi import HTTPException
 from typing import Literal
+from json import JSONDecodeError
 from concurrent.futures import CancelledError
 
 from transcription import transcribe_file
@@ -41,6 +42,15 @@ class PracticeRequest(BaseModel):
     pages: list[dict] = []
     count: int = 5
     difficulty: str = 'basic'
+    mode: Literal['legacy','map_context','related_materials'] = 'legacy'
+    courseId: str | None = None
+    practiceHistory: list[dict] = Field(default_factory=list,max_length=50)
+    scopeNodeId: str | None = None
+    mindMap: dict | None = None
+    sourceSegments: list[dict] = []
+    pageGroups: list[dict] = []
+    visualEvidence: list[dict] = []
+    ignoredRegion: dict | None = None
 
 
 @app.post('/practice')
@@ -48,10 +58,26 @@ def practice(request: PracticeRequest):
     from practice import generate_practice
     from urllib.error import HTTPError
     try:
-        return generate_practice(request.nodes, request.pages, request.count, request.difficulty)
+        if request.mode=='legacy':return generate_practice(request.nodes, request.pages, request.count, request.difficulty,history=request.practiceHistory)
+        if not request.courseId or not request.mindMap:raise ValueError('practice_evidence_missing')
+        root=_analysis_directory(request.courseId).parent
+        if request.mode=='map_context':
+            from map_conversation import load_map_conversation
+            context=load_map_conversation(root,request.mindMap)
+        else:
+            from practice_materials import related_materials
+            context=related_materials(request.nodes,request.pageGroups,request.mindMap,request.sourceSegments,
+                request.visualEvidence,root,request.scopeNodeId,request.ignoredRegion)
+        context['_diagnosticTaskId']=request.courseId
+        return generate_practice(request.nodes,request.pages,request.count,request.difficulty,mode=request.mode,context=context,
+            whole_course=request.scopeNodeId==request.mindMap.get('root',{}).get('id'),history=request.practiceHistory)
     except HTTPError as error:
+        if error.code==413:raise HTTPException(422,'practice_context_too_large') from error
+        if error.code in (400,422):raise HTTPException(422,'practice_provider_rejected') from error
         raise HTTPException(424 if error.code == 402 else 502,
                             'practice_provider_payment_required' if error.code == 402 else 'practice_provider_failed') from error
+    except JSONDecodeError as error:
+        raise HTTPException(422,'practice_provider_invalid_json') from error
     except (ValueError, RuntimeError) as error:
         raise HTTPException(422, str(error)) from error
 
@@ -187,7 +213,7 @@ def generate_overview(request: MindMapRequest) -> dict:
     from overview import build_overview
     from urllib.error import HTTPError
     try:
-        return build_overview(request.segments,request.pageGroups,mind_map=request.mindMap,visuals=request.visualEvidence)
+        return build_overview(request.segments,request.pageGroups,mind_map=request.mindMap,visuals=request.visualEvidence,course_id=request.courseId)
     except HTTPError as error:
         if error.code==402:
             raise HTTPException(status_code=424,detail='overview_provider_payment_required') from error

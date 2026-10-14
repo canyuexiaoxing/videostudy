@@ -69,4 +69,27 @@ class PracticeStoreTest {
         assertEquals("failed",store.find(set.id()).orElseThrow().status());
         assertTrue(store.claim(set.id()).isEmpty());
     }
+
+    @Test void generationHistoryIncludesOnlyCompletedSameCourseAndMap() {
+        String previous=completed();
+        var current=store.request(course,"hash","next","新范围",Map.of(),false);
+        var foreign=store.request(course,"other-map","foreign","另版导图",Map.of(),false);
+        store.complete(store.claim(foreign.id()).orElseThrow(),Map.of("questions",List.of(Map.of("prompt","PRIVATE_OTHER_MAP"))));
+        String anotherCourse=UUID.randomUUID().toString();
+        jdbc.update("INSERT INTO transcription_jobs(id,status) VALUES (?,'completed')",anotherCourse);
+        var other=store.request(anotherCourse,"hash","other-course","另一课程",Map.of(),false);
+        store.complete(store.claim(other.id()).orElseThrow(),Map.of("questions",List.of(Map.of("prompt","PRIVATE_OTHER_COURSE"))));
+        var history=store.generationHistory(current.id());
+        assertEquals(1,history.size());assertEquals(previous,history.getFirst().get("id"));
+        assertFalse(new ObjectMapper().valueToTree(history).toString().contains("PRIVATE_OTHER_MAP"));
+        assertFalse(new ObjectMapper().valueToTree(history).toString().contains("PRIVATE_OTHER_COURSE"));
+    }
+    @Test void conversationRevisionChangesOnlyAfterCompletion() {
+        assertEquals(0,store.conversationRevision(course,"hash"));
+        var set=store.request(course,"hash","queued","范围",Map.of(),false);
+        assertEquals(0,store.conversationRevision(course,"hash"));
+        store.complete(store.claim(set.id()).orElseThrow(),Map.of("questions",List.of()));
+        assertEquals(1,store.conversationRevision(course,"hash"));
+        assertEquals(0,store.conversationRevision(UUID.randomUUID().toString(),"hash"));
+    }
 }

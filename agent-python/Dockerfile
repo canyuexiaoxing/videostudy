@@ -4,6 +4,6 @@ WORKDIR /app
 RUN apt-get -o Acquire::Retries=3 update && apt-get -o Acquire::Retries=3 install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py transcription.py analysis.py analysis_progress.py visual_evidence.py ignored_region.py agent_review.py image_understanding.py slide_grouping.py page_understanding.py mind_map.py evidence_payload.py checkpoints.py subtitle_calibration.py subtitle_delivery.py chapters.py overview.py compatible_playback.py practice.py question_chat.py auto_region.py example_timeline.py knowledge_outline.py group_scheduler.py group_understanding.py grouped_analysis.py course_mind_map.py direct_analysis.py direct_course_map.py ./
+COPY app.py transcription.py analysis.py analysis_progress.py visual_evidence.py ignored_region.py agent_review.py image_understanding.py slide_grouping.py page_understanding.py mind_map.py evidence_payload.py checkpoints.py subtitle_calibration.py subtitle_delivery.py chapters.py overview.py compatible_playback.py practice.py question_chat.py auto_region.py example_timeline.py knowledge_outline.py group_scheduler.py group_understanding.py grouped_analysis.py course_mind_map.py course_outline.py model_diagnostics.py direct_analysis.py direct_course_map.py map_conversation.py practice_materials.py ./
 EXPOSE 8000
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -17,8 +17,12 @@ import os
 from pathlib import Path
 import re
 from urllib.request import Request, urlopen
+from model_diagnostics import request_model_json, record_event
 
-PROMPT_VERSION = 'whole-course-group-evidence-v3'
+PROMPT_VERSION = 'whole-course-group-evidence-v6'
+# Explicit API ceiling: omission would silently restore the default 8K output budget.
+COURSE_MAP_OUTPUT_TOKENS = 393216
+COURSE_MAP_REQUEST_TIMEOUT = 300
 MAX_NODES = 4096
 MAX_DEPTH = 12
 INSTRUCTIONS = '''Build the final WHOLE COURSE knowledge map from all supplied group results.
@@ -65,6 +69,9 @@ lists. Keep below 4096 nodes and 12 levels. Never invent IDs/timestamps/quotes.
 Do not pad with source-free generic claims or categories.'''
 
 
+from course_outline import STRUCTURE_INSTRUCTIONS, normalize_reply, outline_hints, audit_outline
+INSTRUCTIONS += STRUCTURE_INSTRUCTIONS
+
 def _cancelled(signal):
     if signal is None:
         return False
@@ -103,15 +110,14 @@ def _deepseek_course_json(payload, images):
     body = {'model': os.environ.get('DEEPSEEK_MODEL', 'deepseek-flash'),
             'messages': [{'role': 'system', 'content': INSTRUCTIONS},
                          {'role': 'user', 'content': content}],
-            'response_format': {'type': 'json_object'}, 'thinking': {'type': 'disabled'}, 'stream': False}
+            'response_format': {'type': 'json_object'}, 'thinking': {'type': 'disabled'}, 'stream': False,
+            'max_tokens': COURSE_MAP_OUTPUT_TOKENS}
     request = Request(os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com').rstrip('/') +
                       '/chat/completions', data=json.dumps(body, ensure_ascii=False).encode('utf-8'),
                       headers={'Authorization': f'Bearer {key}', 'Content-Type': 'application/json'}, method='POST')
-    with urlopen(request, timeout=120) as response:
-        choice = json.load(response)['choices'][0]
-    if choice.get('finish_reason') != 'stop':
-        raise ValueError('Incomplete course-map response')
-    return json.loads(choice['message']['content'])
+    return request_model_json(request,COURSE_MAP_REQUEST_TIMEOUT,payload.get('_diagnosticTaskId'),'course_map',transport=urlopen,
+        output_limit=COURSE_MAP_OUTPUT_TOKENS,image_count=len(images),input_characters=len(json.dumps(data,ensure_ascii=False)),model=body['model'],
+        error_prefix='Incomplete course-map response')
 
 
 def _id_lists(item):
@@ -244,6 +250,10 @@ def _prepare(segments, pages, visuals, root):
                 recovery_speech |= scopes[index] & set(speech)
             else:
                 errors.append('待核对原图缺失或属于其他组')
+    hint_times = {ms for page in valid_pages for ms in page.get('representativeFrameTimesMs', [])} | forwarded
+    hint_frames = visuals.values() if isinstance(visuals, dict) else visuals
+    hints = outline_hints([f for f in hint_frames if isinstance(f, dict) and f.get('frameTimeMs') in hint_times], root, regions)
+    forwarded |= {int(h['imageId'].split('_')[1]) for h in hints}
     items = concepts + examples + connections + [d for c in concepts for d in c.get('details', [])]
     allowed_ids = set().union(*(_ids(item) for item in items)) if items else set()
     allowed_ids |= {f'frame_{ms}' for ms in forwarded} | recovery_speech
@@ -251,8 +261,8 @@ def _prepare(segments, pages, visuals, root):
                        for sid,item in speech.items() if sid in allowed_ids]
     image_evidence = [dict(sourceType='image',sourceId=f'frame_{ms}',startMs=ms,endMs=ms,quote='课件截图')
                       for ms in sorted(frame_times) if f'frame_{ms}' in allowed_ids]
-    payload = {'promptVersion':PROMPT_VERSION,'instructions':INSTRUCTIONS,'concepts':concepts,'examples':examples,
-               'connections':connections,'sourceEvidence':source_evidence,'imageEvidence':image_evidence,
+    payload = {'_diagnosticTaskId':root.name,'promptVersion':PROMPT_VERSION,'instructions':INSTRUCTIONS,'concepts':concepts,'examples':examples,
+               'outlineHints':hints,'connections':connections,'sourceEvidence':source_evidence,'imageEvidence':image_evidence,
                'uncertainties':list(dict.fromkeys(uncertainties + errors)), '_visualRegionsByFrame':regions,
                'firstHandImageIds':[f'frame_{ms}' for ms in sorted(forwarded)],
                'firstHandSourceIds':sorted(recovery_speech)}
@@ -475,6 +485,37 @@ def _result(title,children,examples,uncertainties,failed):
             'uncertainties':list(dict.fromkeys(uncertainties))}
 
 
+def finalize_course_reply(raw,payload,prompt_version,input_errors=()):
+    raw=normalize_reply(raw)
+    effective_payload,decision_errors=_apply_candidate_decisions(payload,raw)
+    builder=_Builder(effective_payload)
+    children=[]
+    for item in raw['children']:
+        node=builder.knowledge(item)
+        if node:children.append(node)
+        if builder.count>=MAX_NODES:break
+    examples=[]
+    for item in raw['examples']:
+        node=builder.example(item)
+        if node:examples.append(node)
+        if builder.count>=MAX_NODES:break
+    for kind,key,target in [('knowledge','concepts',children),('example','examples',examples)]:
+        for candidate in effective_payload[key]:
+            if candidate['id'] not in builder.used[kind]:
+                node=builder.candidate(candidate,kind)
+                if node:target.append(node)
+                builder.error('最终回复遗漏已验证候选，保留原候选供回溯')
+    unresolved=[item.strip() for item in raw.get('uncertainties',[]) if isinstance(item,str) and item.strip()]
+    if len(unresolved)!=len(raw.get('uncertainties',[])):builder.error('最终不确定项格式无效')
+    if len(raw['children'])+len(raw['examples'])>MAX_NODES:builder.error('导图节点超过4096限制，已截断')
+    errors=list(input_errors)+decision_errors+builder.errors+audit_outline(raw,payload.get('outlineHints',[]))
+    result=_result(raw['topic'].strip()[:240],children,examples,
+                   payload['uncertainties']+effective_payload.get('classificationNotes',[])+unresolved+errors,bool(errors))
+    result['promptVersion']=prompt_version
+    record_event('stage_completed',payload.get('_diagnosticTaskId'),operation='course_map',stage='validation',status=result['status'],topics=len(children),examples=len(examples))
+    return result
+
+
 def build_course_mind_map(segments,page_groups,visuals,keyframe_dir,*,ask_json=None,checkpoint=None,signal=None):
     """Synthesize once; validate actual references, preserve question identities.
 
@@ -499,39 +540,27 @@ def build_course_mind_map(segments,page_groups,visuals,keyframe_dir,*,ask_json=N
 
     def generate():
         if _cancelled(signal):return preserved('整课导图已取消')
+        stage='provider'
         try:
             raw=provider(deepcopy(payload),list(images))
             if _cancelled(signal):return preserved('整课导图已取消，未发布晚到结果')
+            stage='validation'
             if isinstance(raw,str):raw=json.loads(raw)
             if (not isinstance(raw,dict) or not isinstance(raw.get('topic'),str) or not raw['topic'].strip() or
                     not isinstance(raw.get('children'),list) or not isinstance(raw.get('examples'),list) or
                     not isinstance(raw.get('uncertainties',[]),list)):
                 raise ValueError('Malformed final course-map response')
-            effective_payload,decision_errors=_apply_candidate_decisions(payload,raw)
-            builder=_Builder(effective_payload)
-            children=[]
-            for item in raw['children']:
-                node=builder.knowledge(item)
-                if node:children.append(node)
-                if builder.count>=MAX_NODES:break
-            examples=[]
-            for item in raw['examples']:
-                node=builder.example(item)
-                if node:examples.append(node)
-                if builder.count>=MAX_NODES:break
-            for kind,key,target in [('knowledge','concepts',children),('example','examples',examples)]:
-                for candidate in effective_payload[key]:
-                    if candidate['id'] not in builder.used[kind]:
-                        node=builder.candidate(candidate,kind)
-                        if node:target.append(node)
-                        builder.error('最终回复遗漏已验证候选，保留原候选供回溯')
-            unresolved=[item.strip() for item in raw.get('uncertainties',[]) if isinstance(item,str) and item.strip()]
-            if len(unresolved)!=len(raw.get('uncertainties',[])):builder.error('最终不确定项格式无效')
-            if len(raw['children'])+len(raw['examples'])>MAX_NODES:builder.error('导图节点超过4096限制，已截断')
-            errors=input_errors+decision_errors+builder.errors
-            return _result(raw['topic'].strip()[:240],children,examples,
-                           payload['uncertainties']+effective_payload.get('classificationNotes',[])+unresolved+errors,bool(errors))
+            result=finalize_course_reply(raw,payload,PROMPT_VERSION,input_errors)
+            if ask_json is None and result['status']=='completed':
+                try:
+                    from map_conversation import save_map_conversation
+                    save_map_conversation(root,payload,images,raw,result,INSTRUCTIONS,expected_hashes=hashes)
+                except (OSError,ValueError):
+                    import logging
+                    logging.getLogger(__name__).warning('Map context snapshot unavailable; map itself remains usable')
+            return result
         except Exception as error:
+            record_event('stage_failed',root.name,operation='grouped_map',stage=stage,error_type=type(error).__name__)
             return preserved(f'整课导图请求或回复失败：{type(error).__name__}')
 
     inputs={'promptVersion':PROMPT_VERSION,'modelId':os.environ.get('DEEPSEEK_MODEL','deepseek-flash'),

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import StudyIcon from './StudyIcon.vue'
 import { latestRequests } from './mediaBinding'
 import type { ReviewCitation } from './practiceReview'
 type Message={role:'user'|'assistant';content:string;citations?:ReviewCitation[]}
@@ -48,10 +49,10 @@ onBeforeUnmount(()=>requests.invalidate())
 </script>
 <template>
  <section class="question-chat" aria-label="本题答疑">
-  <p class="chat-intro">围绕这道题提问，或写下你的解题思路。答疑会参考本题知识点和已保存的相关课程分析。</p>
+  <header class="chat-heading"><div><h4>和 AI 助教聊这道题</h4><p class="chat-intro">结合本题知识点与已保存的课程资料，帮你理清思路。</p></div><span class="chat-context">本题专属对话</span></header>
   <p v-if="loading" role="status">正在读取本题对话…</p>
   <div ref="transcript" class="chat-messages" role="log" aria-label="本题对话记录" aria-live="polite">
-   <p v-if="!loading&&!messages.length" class="chat-empty">本题还没有对话。可以问“为什么我的选项不对？”或解释你是怎么计算的。</p>
+   <div v-if="!loading&&!messages.length" class="chat-empty"><span class="chat-empty-icon"><StudyIcon name="chat"/></span><strong>哪里没想明白？从这里开始</strong><p>可以问“为什么我的选项不对？”，也可以写下你的计算过程。</p></div>
    <article v-for="(message,i) in messages" :key="i" :class="['chat-message',message.role]">
     <strong>{{ message.role==='user'?'你':'本题助教' }}</strong><p>{{ message.content }}</p>
     <div v-if="message.citations?.length" class="chat-citations"><button v-for="citation in message.citations" :key="citation.sourceId" type="button" :disabled="!playbackReady" @click="emit('seek',citation.startMs,citation.sourceId)">回看 {{ time(citation.startMs) }} · {{ citation.quote }}</button></div>
@@ -60,10 +61,16 @@ onBeforeUnmount(()=>requests.invalidate())
   <p v-if="!playbackReady&&messages.some(m=>m.citations?.length)" class="chat-note">选择指纹匹配的本地原视频后，可以回放引用。</p>
   <p v-if="sending" role="status">正在结合本题与课程依据回答…</p>
   <p v-if="error" class="chat-error" role="alert">{{ error }} <button v-if="!sending" type="button" @click="load">重新读取</button></p>
-  <form @submit.prevent="send"><label :for="`chat-${questionId}`">你的问题或解题思路</label><textarea :id="`chat-${questionId}`" v-model="draft" rows="3" maxlength="2000" :disabled="loading||sending" placeholder="例如：我用了现期作分母，这一步为什么不对？"/><div class="chat-actions"><span>{{ draft.length }}/2000</span><button type="submit" :disabled="loading||sending||!historyReady||!draft.trim()">{{ sending?'正在回答…':'发送' }}</button></div></form>
+  <form @submit.prevent="send"><label :for="`chat-${questionId}`">你的问题或解题思路</label><textarea :id="`chat-${questionId}`" v-model="draft" rows="3" maxlength="2000" :disabled="loading||sending" placeholder="例如：我用了现期作分母，这一步为什么不对？"/><div class="chat-actions"><span>{{ draft.length }}/2000</span><button type="submit" :disabled="loading||sending||!historyReady||!draft.trim()">{{ sending?'正在回答…':'发送问题 →' }}</button></div></form>
   <p class="chat-note">每道题单独保存对话，重做同题保留记录。发送会调用 AI；引用可追溯不等于回答一定正确，请结合原课核实。</p>
  </section>
 </template>
 <style scoped>
-.question-chat{margin-top:12px;font-size:13px;color:#33486d}.chat-intro,.chat-note,.chat-empty{font-size:12px;line-height:1.7;color:#6b7c99}.chat-messages{display:grid;gap:12px;max-height:420px;overflow:auto;margin:14px 0;padding:2px}.chat-message{padding:12px;border-radius:10px;border:1px solid #e0e7f5;background:#f5f8ff;min-width:0}.chat-message.user{background:#f2edff;border-color:#e4dbf8;margin-left:18px}.chat-message strong{font-size:11px;color:#61779c}.chat-message p{margin:7px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.8}.chat-citations{display:grid;gap:6px;margin-top:10px}.chat-citations button{text-align:left;font-size:12px;line-height:1.7;padding:8px;border:1px solid #d7e2f9;background:white;border-radius:7px;color:#4166cc;overflow-wrap:anywhere}.question-chat form{display:grid;gap:7px}.question-chat textarea{box-sizing:border-box;width:100%;min-width:0;resize:vertical;border:1px solid #d9e2f4;border-radius:9px;padding:10px;background:white;font:inherit;color:inherit}.chat-actions{display:flex;align-items:center;justify-content:space-between}.chat-actions span{font-size:11px;color:#8795ad}.chat-actions button{padding:9px 20px;border:0;border-radius:8px;background:#4166ed;color:white}.chat-note{margin-top:12px}.chat-error{color:#a44555;font-size:12px;line-height:1.7}button:disabled{opacity:.5;cursor:default}
+ .question-chat{padding:20px;margin:0;border-top:1px solid #dce5fb;background:white;font-size:14px;color:#33486d}
+.chat-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.chat-heading h4{margin:0;font-size:17px;color:#20345b}.chat-intro{margin:6px 0 0;font-size:12px;line-height:1.7;color:#667b9d}.chat-context{flex:none;padding:5px 8px;border-radius:6px;background:#f0f4ff;font-size:11px;color:#536fb4}
+.chat-messages{display:grid;gap:14px;max-height:420px;overflow:auto;margin:20px 0;padding:2px}.chat-empty{display:grid;justify-items:center;text-align:center;gap:8px;padding:24px 16px;border:1px dashed #cfdbf8;border-radius:12px;background:#f8faff}.chat-empty-icon{display:grid;place-items:center;width:40px;height:40px;background:#eaf0ff;border-radius:12px;color:#4166ed}.chat-empty strong{color:#354f7e;font-size:14px}.chat-empty p{margin:0;line-height:1.8;font-size:12px;color:#6b7c99}
+.chat-message{padding:14px;border-radius:12px;border:1px solid #e0e7f5;background:#f5f8ff;min-width:0;margin-right:20px}.chat-message.user{background:#f2edff;border-color:#e4dbf8;margin-left:20px;margin-right:0}.chat-message strong{font-size:12px;color:#526fa5}.chat-message p{margin:8px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9}.chat-citations{display:grid;gap:6px;margin-top:10px}.chat-citations button{text-align:left;font-size:12px;line-height:1.7;padding:8px;border:1px solid #d7e2f9;background:white;border-radius:7px;color:#4166cc;overflow-wrap:anywhere}
+.question-chat form{display:grid;gap:10px}.question-chat label{font-weight:650;color:#304a79;font-size:13px}.question-chat textarea{box-sizing:border-box;width:100%;min-width:0;min-height:116px;resize:vertical;border:1px solid #c8d6f8;border-radius:12px;padding:14px;background:#fcfdff;font:inherit;color:inherit;line-height:1.7}.question-chat textarea:focus{outline:2px solid #91a9ff;outline-offset:2px;border-color:#4166ed}.question-chat textarea::placeholder{color:#8493ab}
+.chat-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.chat-actions span{font-size:11px;color:#7a8ba7}.chat-actions button{padding:11px 18px;border:0;border-radius:10px;background:#4166ed;color:white;font:inherit;font-size:13px;font-weight:650;cursor:pointer}.chat-actions button:hover:not(:disabled){background:#3054d5}.chat-actions button:focus-visible{outline:3px solid #91a9ff;outline-offset:2px}.chat-note{margin:14px 0 0;font-size:11px;line-height:1.8;color:#7283a0}.chat-error{color:#a44555;font-size:12px;line-height:1.7}button:disabled{opacity:.5;cursor:default}
+@media(max-width:600px){.question-chat{padding:16px}.chat-heading{flex-wrap:wrap}.chat-heading h4{font-size:16px}.chat-message{margin-right:10px}.chat-message.user{margin-left:10px}.chat-empty{padding:20px 12px}}
 </style>

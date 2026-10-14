@@ -1,6 +1,7 @@
 <script setup lang="ts">
 defineProps<{ name: string }>()
 const paths: Record<string, string> = {
+  chat: 'M4 4h16v12H9l-5 4V4Zm4 4h8m-8 4h5',
   play: 'M9 5l11 7-11 7V5Z',
   upload: 'M12 16V3m-5 5 5-5 5 5M4 15v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5',
   map: 'M4 12h6m0 0V5h8m-8 7v7h8M2 10h4v4H2zm16-7h4v4h-4zm0 14h4v4h-4z',

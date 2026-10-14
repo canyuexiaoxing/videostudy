@@ -29,7 +29,8 @@ try{
  });
  await page.goto('http://127.0.0.1:5173/');
  await page.getByRole('button',{name:'高级选项',exact:true}).click();
- assert.equal(await page.getByRole('button',{name:'原流程',exact:true}).getAttribute('aria-pressed'),'true');
+ assert.equal(await page.getByRole('button',{name:'原流程',exact:true}).count(),0);
+ assert.equal(await page.getByRole('button',{name:'整课图文直生成（默认）',exact:true}).getAttribute('aria-pressed'),'true');
  await page.getByRole('button',{name:'分组后汇总',exact:true}).click();
  assert.equal(await page.locator('.mode-picker select').inputValue(),'both');assert(await page.locator('.mode-picker select').isDisabled());
  await page.getByRole('tab',{name:'历史记录',exact:true}).click();
@@ -68,5 +69,5 @@ try{
  await page.screenshot({path:fileURLToPath(new URL('../../../.local/qa/course-notes-mobile.png',import.meta.url)),fullPage:true});
  assert.deepEqual(errors,[]);assert.deepEqual(mutations,[]);
  const after=await (await fetch(url)).json();assert.deepEqual(after,before);
- console.log(JSON.stringify({notesHierarchy:true,oneTimestampPerHeading:true,mainMapUsableWhileNotesProcessing:true,...metrics,defaultOptInFalse:true,realImageDisplayed:true,expandedMap:true,mobilePassed:true,historyUnchanged:true,paidModelCalls:0}));
+ console.log(JSON.stringify({notesHierarchy:true,oneTimestampPerHeading:true,mainMapUsableWhileNotesProcessing:true,...metrics,defaultDirect:true,realImageDisplayed:true,expandedMap:true,mobilePassed:true,historyUnchanged:true,paidModelCalls:0}));
 }finally{await browser.close()}

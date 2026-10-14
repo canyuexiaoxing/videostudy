@@ -28,3 +28,14 @@ export function resolvePracticeScope(root?: ScopeNode | null, selectedId?: strin
   }
   return ''
 }
+
+/** Keep module hierarchy, skipping detail-only and ineligible singleton branches. */
+export function practiceScopeTree(root?: ScopeNode | null): ScopeNode[] {
+  const selectable = new Set(practiceScopes(root).map(node => node.id))
+  root?.children?.forEach(node => selectable.add(node.id))
+  function branches(node: ScopeNode): ScopeNode[] {
+    const children = (node.children ?? []).flatMap(branches)
+    return selectable.has(node.id) ? [{ ...node, children, details: undefined }] : children
+  }
+  return (root?.children ?? []).flatMap(branches)
+}

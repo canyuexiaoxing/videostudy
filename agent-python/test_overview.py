@@ -8,7 +8,8 @@ class OverviewTests(unittest.TestCase):
         def ask(payload):
             self.assertEqual(payload['pages'][0]['understanding']['content'],'公式解释')
             return {'headline':'增长量课','summary':[{'text':'讲增长量','sourceIds':['s1'],'startMs':999}],
-                    'objectives':[],'keyPoints':[],'pitfalls':[],'highlights':[]}
+                    'objectives':[],'keyPoints':[],'pitfalls':[],'highlights':[],
+                    'notes':[dict(title='增长量',sourceIds=['s1'],points=[dict(label='内容',text='讲增长量',sourceIds=['s1'])],children=[])]}
         result=build_overview([{'id':'s1','startMs':1000,'endMs':5000,'text':'讲增长量'}],
             [{'pageIndex':1,'imageAnalysis':{'content':'公式解释'}}],ask)
         self.assertEqual(result['summary'][0]['citations'][0]['startMs'],1000)
@@ -45,3 +46,20 @@ class OverviewTests(unittest.TestCase):
         sources={'s1':dict(id='s1',startMs=0,endMs=1,text='介绍')}
         with self.assertRaises(ValueError):_notes([dict(title='课',sourceIds=['s1'],imageIds=['frame_999'],children=[])],sources,{})
         with self.assertRaises(ValueError):_notes([dict(title='课',sourceIds=['s1'],anchorSourceId='made_up',children=[])],sources,{})
+
+    def test_validation_logs_stage_attempt_task_without_course_text(self):
+        task='12345678-1234-1234-1234-123456789abc'
+        def ask(payload):return dict(headline='课',summary=[dict(text='错误摘要',sourceIds=['missing'])],objectives=[],keyPoints=[],pitfalls=[],highlights=[])
+        with self.assertLogs('uvicorn.error.overview',level='INFO') as captured:
+            with self.assertRaises(ValueError):build_overview([dict(id='s',startMs=0,endMs=1,text='PRIVATE_COURSE_TEXT')],[],ask,course_id=task)
+        output='\n'.join(captured.output)
+        self.assertIn('task='+task,output);self.assertIn('stage=section_summary',output)
+        self.assertIn('reason=Unknown evidence',output);self.assertIn('attempt=3',output)
+        self.assertNotIn('PRIVATE_COURSE_TEXT',output)
+    def test_unexpected_provider_error_does_not_log_sensitive_message(self):
+        def ask(payload):raise RuntimeError('SECRET_KEY_PRIVATE_BODY')
+        with self.assertLogs('uvicorn.error.overview',level='INFO') as captured:
+            with self.assertRaises(RuntimeError):build_overview([dict(id='s',startMs=0,endMs=1,text='课')],[],ask)
+        output='\n'.join(captured.output)
+        self.assertIn('stage=provider_request',output);self.assertIn('retry=False',output)
+        self.assertNotIn('SECRET_KEY_PRIVATE_BODY',output)
