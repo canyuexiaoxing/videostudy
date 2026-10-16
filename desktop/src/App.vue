@@ -8,6 +8,8 @@ import ChapterPlayer from './ChapterPlayer.vue'
 import AnalysisProgressBar from './AnalysisProgress.vue'
 import type { AnalysisProgress } from './analysisProgress'
 import VideoWorkspace from './VideoWorkspace.vue'
+import {loadPersonSelection,savePersonSelection} from './personSelection'
+import type {PersonSelectionMode} from './personSelection'
 import { normalizeIgnoreSetting } from './videoRegionTimeline'
 import type { IgnoreSetting } from './videoRegionTimeline'
 import SubtitleSettings from './SubtitleSettings.vue'
@@ -115,9 +117,15 @@ onUnmounted(()=>{++historyGeneration;historyController?.abort();clearInterval(hi
 const selectedFile = ref<File | null>(null)
 const selectedFingerprint = ref('')
 const workspaceOpen = ref(false)
+const personSelectionMode = ref<PersonSelectionMode>('off')
+function updatePersonSelection(mode:PersonSelectionMode) {
+ personSelectionMode.value=mode
+ savePersonSelection(localStorage,selectedFingerprint.value,mode)
+}
 const ignoredRegion = ref<IgnoreSetting|null>(null)
 const analysisRegion = ref<IgnoreSetting|null>(null)
 watch(selectedFingerprint, fingerprint => {
+  personSelectionMode.value=loadPersonSelection(localStorage,fingerprint)
   try { ignoredRegion.value = fingerprint ? normalizeIgnoreSetting(JSON.parse(localStorage.getItem(`videoIgnoreRegion:v1:${fingerprint}`) ?? 'null')) : null }
   catch { ignoredRegion.value = null }
   try { analysisRegion.value=fingerprint?normalizeIgnoreSetting(JSON.parse(localStorage.getItem(`videoAnalysisRegion:v1:${fingerprint}`)??'null'),true):null }catch {analysisRegion.value=null}
@@ -257,6 +265,11 @@ const visualEvidence = ref<VisualEvidence[]>([])
 const pageGroups = ref<PageGroup[]>([])
 const rawMindMap = ref<MindMapResult | null>(null)
 const mindMap = computed(()=>rawMindMap.value?{...rawMindMap.value,root:compactKnowledgeMap(rawMindMap.value.root)}:null)
+const mindMapFailureReasons = computed(() => mindMap.value?.status === 'failed'
+  ? [...new Set((mindMap.value.uncertainties ?? []).filter(reason => /节点来源校验失败|已拒绝|导图失败|导图请求或回复失败/.test(reason)))].slice(0, 3)
+  : [])
+// Keep citation data for playback, but temporarily hide the panel below the map.
+const showMindMapEvidence = false
 const selectedMindNode = ref<MindNode | null>(null)
 const expandedMap = ref(false)
 const activeSegmentId = ref('')
@@ -662,6 +675,7 @@ async function runTranscription() {
     form.append('visualAnalysisMode', visualAnalysisMode.value)
     form.append('coarseChangePercent', coarseChangePercent.value)
     form.append('coarseSampleSeconds', String(coarseSampleSeconds.value))
+    form.append('personSelectionMode',personSelectionMode.value)
     form.append('groupedAnalysis', String(groupedAnalysis.value))
     form.append('mindMapMode', mindMapMode.value)
     if (analysisRegion.value||ignoredRegion.value) form.append('ignoredRegion',JSON.stringify(analysisRegion.value?{analysisRegion:analysisRegion.value,ignoredRegion:ignoredRegion.value}:ignoredRegion.value))
@@ -991,14 +1005,14 @@ onUnmounted(() => {
       <section v-show="rightTab === 'map'" id="tab-map" class="sidebar-pane" role="tabpanel" aria-label="思维导图">
         <div v-if="mindMap" class="mind-map-panel">
           <div class="mind-map-heading"><div><span class="eyebrow">KNOWLEDGE MAP</span><h2>知识导图</h2><p>图上看核心知识，点击查看公式条件与讲解细节</p></div>
-            <div class="mind-map-heading-actions"><button v-if="mindMap.root.children.length" type="button" class="expand-map-button" @click="expandedMap = true">放大查看</button><span class="mind-map-badge">{{ mindMap.root.children.length }} 个主题</span></div></div>
+            <div class="mind-map-heading-actions"><button type="button" class="expand-map-button regenerate-map-button" aria-label="重新生成导图" :disabled="generatingMindMap || isAnalysisPending || !existingJobId" title="使用已保存的课程图片和转写重新生成导图，会调用模型" @click="generateExistingMindMap(true)"><span v-if="generatingMindMap" class="activity-spinner" aria-hidden="true"></span>{{ generatingMindMap ? '正在重新生成…' : '重新生成导图' }}</button><button v-if="mindMap.root.children.length" type="button" class="expand-map-button" @click="expandedMap = true">放大查看</button><span class="mind-map-badge">{{ mindMap.root.children.length }} 个主题</span></div></div>
           <p v-if="mindMap.status === 'empty'" class="status">{{ exampleTimeline.length ? '本段课程未提取到核心知识，可通过下方例题节点回看。' : '没有可用的核心知识依据，暂时无法生成导图。' }}</p>
           <div v-else-if="mindMap.status === 'failed'" class="analysis-retry-card" role="status">
-            <div><strong>导图分析未完成</strong><p>{{ generatingMindMap ? '正在使用已保存的课程资料重新生成导图，请稍候。' : mindMap.root.children.length ? '已生成的节点仍可查看，重新分析可尝试补全导图。' : '原转写和课件图片已保留，可以直接重新分析导图。' }}</p></div>
+            <div><strong>{{ mindMap.root.children.length ? '导图部分生成' : '导图分析未完成' }}</strong><p>{{ generatingMindMap ? '正在使用已保存的课程资料重新生成导图，请稍候。' : mindMap.root.children.length ? '已有节点可用；其余内容未通过校验或尚未生成，可重新分析补全。' : '原转写和课件图片已保留，可以直接重新分析导图。' }}</p><details v-if="mindMapFailureReasons.length" class="map-failure-details"><summary>查看未完成原因</summary><p v-for="reason in mindMapFailureReasons" :key="reason">{{ reason }}</p></details></div>
             <button type="button" aria-label="重新分析导图" :disabled="generatingMindMap || isAnalysisPending || !existingJobId" @click="generateExistingMindMap(false)"><span v-if="generatingMindMap" class="activity-spinner" aria-hidden="true"></span>{{ generatingMindMap ? '重新分析中…' : '重新分析' }}</button>
           </div>
           <MindMapCanvas v-if="mindMap.root.children.length" :root="mindMap.root" @select="selectMindMapNode" />
-          <div v-if="selectedMindNode && (selectedMindNode.evidenceRefs.length || selectedMindNode.details?.length)" class="mind-source">
+          <div v-if="showMindMapEvidence && selectedMindNode && (selectedMindNode.evidenceRefs.length || selectedMindNode.details?.length)" class="mind-source">
             <strong>{{ selectedMindNode.title }} · 课程依据</strong>
             <MindMapEvidenceDetails v-if="selectedMindNode.details?.length" :nodes="selectedMindNode.details" :api-base="apiBase" :course-id="existingJobId" :frame-times="visualEvidence.map(frame => frame.frameTimeMs)" @seek="seekTo" />
             <button v-for="source in selectedMindNode.evidenceRefs" :key="source.sourceId" type="button" class="mind-source-link" @click="seekTo(source.startMs, source.sourceId)">
@@ -1085,7 +1099,7 @@ onUnmounted(() => {
     </aside>
     <section class="workspace">
       <div class="panel player-panel">
-        <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button type="button" class="subtitle-toggle workspace-entry" @click="openVideoWorkspace"><StudyIcon name="slides" />视频工作台<span v-if="ignoredRegion||analysisRegion" class="workspace-entry-dot" aria-label="已保存画面区域"></span></button><button v-if="selectedFile" type="button" class="subtitle-toggle" :disabled="compatibilityBusy" title="使用后台显卡生成 H.264 播放副本，需要上传原视频，不重新分析课程" @click="generateCompatibility">{{ compatibilityBusy ? '转换中…' : compatibilityActive ? '返回原视频' : compatibilityId ? '使用兼容副本' : '显卡兼容播放' }}</button><button v-if="compatibilityBusy" type="button" class="subtitle-toggle" @click="clearCompatibility">取消转码</button><button v-if="transcript.length && videoUrl" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>{{ compatibilityActive ? '兼容播放' : '本地播放' }} · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
+        <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button type="button" class="subtitle-toggle workspace-entry" @click="openVideoWorkspace"><StudyIcon name="slides" />视频工作台<span v-if="ignoredRegion||analysisRegion||personSelectionMode==='adjacent'" class="workspace-entry-dot" aria-label="已保存视频处理设置"></span></button><button v-if="selectedFile" type="button" class="subtitle-toggle" :disabled="compatibilityBusy" title="使用后台显卡生成 H.264 播放副本，需要上传原视频，不重新分析课程" @click="generateCompatibility">{{ compatibilityBusy ? '转换中…' : compatibilityActive ? '返回原视频' : compatibilityId ? '使用兼容副本' : '显卡兼容播放' }}</button><button v-if="compatibilityBusy" type="button" class="subtitle-toggle" @click="clearCompatibility">取消转码</button><button v-if="transcript.length && videoUrl" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>{{ compatibilityActive ? '兼容播放' : '本地播放' }} · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
         <p v-if="compatibilityMessage" class="empty-hint" role="status" aria-live="polite">{{ compatibilityMessage }}</p>
         <div v-if="transcript.length" class="subtitle-controls">
           <SubtitleSettings v-model="subtitleAppearance" />
@@ -1206,6 +1220,6 @@ onUnmounted(() => {
       </div>
     </section>
     <MindMapDialog v-if="expandedMap && mindMap?.root.children.length" :root="mindMap.root" @close="expandedMap = false" @select="selectExpandedMindNode" />
-    <VideoWorkspace v-if="workspaceOpen" :src="videoUrl" :filename="filename" :model-value="ignoredRegion" :analysis-region="analysisRegion" @update:analysis-region="saveAnalysisRegion" :time-ms="currentPlaybackMs" :checking="checkingMedia" @close="workspaceOpen=false" @select-file="chooseVideo" @update:model-value="saveIgnoredRegion" />
+    <VideoWorkspace v-if="workspaceOpen" :src="videoUrl" :filename="filename" :model-value="ignoredRegion" :analysis-region="analysisRegion" :person-selection-mode="personSelectionMode" :analysis-pending="isAnalysisPending" @update:person-selection-mode="updatePersonSelection" @update:analysis-region="saveAnalysisRegion" :time-ms="currentPlaybackMs" :checking="checkingMedia" @close="workspaceOpen=false" @select-file="chooseVideo" @update:model-value="saveIgnoredRegion" />
   </main>
 </template>

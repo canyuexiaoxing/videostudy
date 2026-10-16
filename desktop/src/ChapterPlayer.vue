@@ -17,7 +17,7 @@ const hovered=computed(()=>hoverTime.value===null?undefined:chapterAt(chapters.v
 const sections=computed(()=>chapters.value.length?chapters.value:duration.value>0?[{id:'whole',title:'课程视频',startMs:0,endMs:duration.value*1000}]:[])
 function stamp(seconds:number){const s=Math.max(0,Math.floor(seconds));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
 function sync(event?:Event){if(!media.value)return;frameReady.value=media.value.readyState>=2;time.value=media.value.currentTime;duration.value=Number.isFinite(media.value.duration)?media.value.duration:0;paused.value=media.value.paused;muted.value=media.value.muted;volume.value=media.value.volume;if(event?.type==='timeupdate')emit('timeupdate',event)}
-function failed(){mediaError.value=media.value?.error?.code===4?'当前浏览器无法播放此视频的编码，请尝试用 Chrome 打开，或转换为 H.264 MP4。':'视频读取或解码失败，请重新选择本地文件。'}
+function failed(){mediaError.value=media.value?.error?.code===4?'当前视频的实际封装格式或编码无法直接播放，请使用上方的“显卡兼容播放”生成兼容副本。':'视频读取或解码失败，请重新选择本地文件。'}
 watch(()=>props.src,()=>{frameReady.value=false;mediaError.value='';time.value=0;duration.value=0;paused.value=true;directory.value=false;hoverTime.value=null;reveal()})
 function reveal(){visible.value=true;clearTimeout(timer);if(!paused.value)timer=setTimeout(()=>{visible.value=false},2800)}
 function leave(){hoverTime.value=null;if(!paused.value)visible.value=false}

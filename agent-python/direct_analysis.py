@@ -7,8 +7,10 @@ import logging
 
 
 def analyze_direct_file(file_id, media_path, keyframe_dir, *, coarse_change_percent=2.0,
-                        coarse_sample_seconds=2, subtitle_callback_token=None, ignore_region=None):
+                        coarse_sample_seconds=2, subtitle_callback_token=None, ignore_region=None, person_selection_mode=None):
     import analysis as legacy
+    person_context = legacy.person_selection_context(person_selection_mode) if person_selection_mode is not None else legacy.person_selection_context()
+    person_options = {"person_selection_mode":person_selection_mode} if person_selection_mode is not None else {}
     from group_scheduler import RunSignal
     from direct_course_map import build_direct_course_map, PROMPT_VERSION
     root = Path(keyframe_dir)
@@ -27,6 +29,9 @@ def analyze_direct_file(file_id, media_path, keyframe_dir, *, coarse_change_perc
         'endpoint': os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
         'prompts': [legacy.MAP_VERSION, legacy.PAGE_PROMPT_VERSION, legacy.REVIEW_VERSION, legacy.GROUPING_VERSION]})
     def cached(stage, inputs, function, accept=None):
+        if stage != 'transcription':
+            from frame_stream import FRAME_PIPELINE_VERSION
+            inputs={'framePipeline':FRAME_PIPELINE_VERSION,'value':inputs}
         signal.check()
         before = perf_counter()
         def checked():
@@ -43,9 +48,9 @@ def analyze_direct_file(file_id, media_path, keyframe_dir, *, coarse_change_perc
         progress.unit_done('transcription', 'media')
         return value
     with legacy.VisualOcrWorker(media_path, root, page_change_fraction=coarse_change_percent / 100,
-            sample_seconds=coarse_sample_seconds, **({'ignore_region': ignore_region} if ignore_region else {})) as worker:
+            sample_seconds=coarse_sample_seconds, **({'ignore_region': ignore_region} if ignore_region else {}), **person_options) as worker:
         def recognize():
-            value = cached('visualOcr', {}, worker.analyze)
+            value = cached('visualOcr', person_context, worker.analyze)
             progress.unit_done('visualOcr', 'media')
             return value
         with ThreadPoolExecutor(max_workers=2) as pool:

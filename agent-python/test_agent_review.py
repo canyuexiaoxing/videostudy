@@ -179,3 +179,14 @@ class AgentReviewTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ActualCaptureTimeTests(unittest.TestCase):
+ def test_batch_matching_uses_requested_time_but_publishes_actual_frame(self):
+  answers=iter([{'resampleRequests':[gap(2500,2000,2900)],'concerns':[]},{'resampleRequests':[],'concerns':[]}])
+  visuals,report=review_visual_coverage(duration_ms=4000,segments=[],visuals=[{'frameTimeMs':0,'ocrBlocks':[]}],ask_json=lambda _:next(answers),capture=lambda _:[],capture_batch=lambda requested:[{'requestedTimeMs':requested[0],'frameTimeMs':2400,'ocrBlocks':[{'text':'actual'}]}])
+  self.assertEqual([v['frameTimeMs'] for v in visuals],[0,2400]);self.assertEqual(report['resampledTimesMs'],[2400]);self.assertNotIn('requestedTimeMs',visuals[1])
+ def test_vfr_multiple_requests_for_same_displayed_frame_do_not_duplicate_sources(self):
+  answers=iter([{'resampleRequests':[gap(1500,1400,1600),gap(2500,2400,2600)],'concerns':[]},{'resampleRequests':[],'concerns':[]}])
+  visuals,report=review_visual_coverage(duration_ms=4000,segments=[],visuals=[{'frameTimeMs':0,'ocrBlocks':[]}],ask_json=lambda _:next(answers),capture=lambda _:[],capture_batch=lambda requested:[{'requestedTimeMs':t,'frameTimeMs':1000,'ocrBlocks':[]} for t in requested])
+  self.assertEqual([v['frameTimeMs'] for v in visuals],[0,1000]);self.assertEqual(report['resampledTimesMs'],[1000])

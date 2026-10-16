@@ -10,7 +10,7 @@ import re
 import course_mind_map as course
 from ignored_region import normalize_setting, filter_frame
 
-PROMPT_VERSION = 'whole-course-group-evidence-direct-v5'
+PROMPT_VERSION = 'whole-course-group-evidence-direct-v12'
 INSTRUCTIONS = course.INSTRUCTIONS + '''
 DIRECT MODE: There are no prior candidates or group analyses. Read ALL attached
 final representative original images, page context/OCR and the full effective
@@ -108,16 +108,17 @@ def build_direct_course_map(segments, pages, visuals, keyframe_dir, *, ask_json=
         check()
         stage='provider'
         try:
-            raw = (ask_json or course._deepseek_course_json)(deepcopy(payload), list(images))
+            raw = (ask_json(deepcopy(payload), list(images)) if ask_json is not None else course._deepseek_course_json(deepcopy(payload), list(images),signal=signal))
             check()
             stage='validation'
             if isinstance(raw, str):
-                raw = json.loads(raw)
+                from course_json import parse_course_json
+                raw = parse_course_json(raw,task=Path(keyframe_dir).name)
             if (not isinstance(raw, dict) or not isinstance(raw.get('topic'), str) or not raw['topic'].strip()
                 or not isinstance(raw.get('children'), list) or not isinstance(raw.get('examples'), list)
                 or not isinstance(raw.get('uncertainties', []), list)):
                 raise ValueError('malformed direct whole-course reply')
-            value=course.finalize_course_reply(raw,payload,PROMPT_VERSION)
+            value=course.finalize_course_reply(raw,payload,PROMPT_VERSION,diagnostic_root=Path(keyframe_dir))
             value['mindMapMode']='direct'
             if ask_json is None and value['status']=='completed':
                 try:
@@ -143,9 +144,8 @@ def build_direct_course_map(segments, pages, visuals, keyframe_dir, *, ask_json=
 
 def build_saved_direct_map(segments, pages, visuals, *, keyframe_dir, ignore_region=None):
     from group_scheduler import RunSignal
-    from checkpoints import Checkpoints
     root = Path(keyframe_dir)
     signal = RunSignal(root / '.analysis')
-    checkpoint = Checkpoints(root / '.analysis', {'directRefresh': PROMPT_VERSION})
-    return build_direct_course_map(segments, pages, visuals, root, checkpoint=checkpoint,
+    # Explicit user regeneration always synthesizes anew; original media is reused.
+    return build_direct_course_map(segments, pages, visuals, root, checkpoint=None,
                                    signal=signal, ignore_region=ignore_region)

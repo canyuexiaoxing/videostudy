@@ -15,6 +15,7 @@ from transcription import transcribe_file, speech_checkpoint_key
 from visual_evidence import OCR_MODEL_ID, VisualOcrWorker
 from checkpoints import Checkpoints
 from analysis_progress import AnalysisProgress
+from person_selection import selection_context as person_selection_context
 from ignored_region import normalize_setting as normalize_region
 from mind_map import CACHE_CONTEXT_PROMPT_VERSION as MAP_VERSION
 from page_understanding import PAGE_PROMPT_VERSION
@@ -36,10 +37,12 @@ def media_duration_ms(path: Path) -> int:
 def analyze_file(file_id: str, visual_analysis_mode: str = "both",
                  coarse_change_percent: float = 2.0,
                  subtitle_callback_token: str | None = None, coarse_sample_seconds: int = 2,
-                 ignore_region: dict | None = None, grouped_analysis: bool = False, mind_map_mode: str | None = None) -> dict:
+                 ignore_region: dict | None = None, grouped_analysis: bool = False, mind_map_mode: str | None = None, person_selection_mode: str | None = None) -> dict:
     if mind_map_mode is not None:
         if mind_map_mode not in ('legacy','grouped','direct'):raise ValueError('invalid mindMapMode')
         grouped_analysis = mind_map_mode == 'grouped'
+    person_context = person_selection_context(person_selection_mode) if person_selection_mode is not None else person_selection_context()
+    person_options = {"person_selection_mode": person_selection_mode} if person_selection_mode is not None else {}
     ignore_region = normalize_region(ignore_region)
     if coarse_sample_seconds not in (2, 3, 4):
         raise ValueError("coarseSampleSeconds must be 2, 3 or 4")
@@ -59,14 +62,14 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
         from direct_analysis import analyze_direct_file
         return analyze_direct_file(file_id, media_path, keyframe_dir,
             coarse_change_percent=coarse_change_percent, coarse_sample_seconds=coarse_sample_seconds,
-            subtitle_callback_token=subtitle_callback_token, ignore_region=ignore_region)
+            subtitle_callback_token=subtitle_callback_token, ignore_region=ignore_region, **person_options)
     if grouped_analysis:
         if visual_analysis_mode != 'both':
             raise ValueError('groupedAnalysis requires visualAnalysisMode both')
         from grouped_analysis import analyze_grouped_file
         return analyze_grouped_file(file_id, media_path, keyframe_dir,
             coarse_change_percent=coarse_change_percent, coarse_sample_seconds=coarse_sample_seconds,
-            subtitle_callback_token=subtitle_callback_token, ignore_region=ignore_region)
+            subtitle_callback_token=subtitle_callback_token, ignore_region=ignore_region, **person_options)
     progress = AnalysisProgress(keyframe_dir / ".analysis")
     progress.enter("media", 0, 2)
     started = perf_counter()
@@ -82,6 +85,9 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
         'prompts': [MAP_VERSION, PAGE_PROMPT_VERSION, REVIEW_VERSION, GROUPING_VERSION],
     })
     def cached(stage, inputs, function, accept=lambda value: True):
+        if stage != 'transcription':
+            from frame_stream import FRAME_PIPELINE_VERSION
+            inputs={'framePipeline':FRAME_PIPELINE_VERSION,'value':inputs}
         return checkpoint.run(stage, inputs, function, accept)
     def timed(name, function, *args):
         before = perf_counter()
@@ -95,16 +101,16 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
     try:
         with VisualOcrWorker(media_path, keyframe_dir,
                              page_change_fraction=coarse_change_percent / 100,
-                             sample_seconds=coarse_sample_seconds, **({"ignore_region": ignore_region} if ignore_region else {})) as visual_worker:
+                             sample_seconds=coarse_sample_seconds, **({"ignore_region": ignore_region} if ignore_region else {}), **person_options) as visual_worker:
             if os.environ.get("MEDIA_PARALLEL", "1") == "1":
                 with ThreadPoolExecutor(max_workers=2) as pool:
                     speech_job = pool.submit(timed, "transcription", cached, 'transcription', {},
                                              lambda: transcribe_file(file_id))
-                    visual_job = pool.submit(timed, "visualOcr", cached, 'visualOcr', {}, visual_worker.analyze)
+                    visual_job = pool.submit(timed, "visualOcr", cached, 'visualOcr', person_context, visual_worker.analyze)
                     transcript, visuals = speech_job.result(), visual_job.result()
             else:
                 transcript = timed("transcription", cached, 'transcription', {}, lambda: transcribe_file(file_id))
-                visuals = timed("visualOcr", cached, 'visualOcr', {}, visual_worker.analyze)
+                visuals = timed("visualOcr", cached, 'visualOcr', person_context, visual_worker.analyze)
             progress.enter("coverage", 1)
             before = perf_counter()
             def coverage():

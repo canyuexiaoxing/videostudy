@@ -92,6 +92,7 @@ class TranscribeRequest(BaseModel):
     coarseChangePercent: float = 2.0
     coarseSampleSeconds: Literal[2, 3, 4] = 2
     subtitleCallbackToken: str | None = None
+    personSelectionMode: Literal['off', 'adjacent'] | None = None
     ignoredRegion: dict | None = None
     groupedAnalysis: bool = False
     mindMapMode: Literal['legacy', 'grouped', 'direct'] | None = None
@@ -159,11 +160,13 @@ def analyze(request: TranscribeRequest) -> dict:
             return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent,
                                 request.subtitleCallbackToken, coarse_sample_seconds=request.coarseSampleSeconds, **({"ignore_region": request.ignoredRegion} if request.ignoredRegion else {}),
                                 **({"grouped_analysis": True} if request.groupedAnalysis else {}),
-                                **({"mind_map_mode": request.mindMapMode} if request.mindMapMode is not None else {}))
+                                **({"mind_map_mode": request.mindMapMode} if request.mindMapMode is not None else {}),
+                                **({"person_selection_mode": request.personSelectionMode} if request.personSelectionMode is not None else {}))
         return analyze_file(request.fileId, request.visualAnalysisMode, request.coarseChangePercent,
                             coarse_sample_seconds=request.coarseSampleSeconds, **({"ignore_region": request.ignoredRegion} if request.ignoredRegion else {}),
                                 **({"grouped_analysis": True} if request.groupedAnalysis else {}),
-                                **({"mind_map_mode": request.mindMapMode} if request.mindMapMode is not None else {}))
+                                **({"mind_map_mode": request.mindMapMode} if request.mindMapMode is not None else {}),
+                                **({"person_selection_mode": request.personSelectionMode} if request.personSelectionMode is not None else {}))
     except (FileNotFoundError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except CancelledError as error:

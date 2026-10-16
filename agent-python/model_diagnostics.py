@@ -11,11 +11,11 @@ log.setLevel(logging.INFO)
 _lock=threading.RLock()
 _file=None
 _folder=None
-_NUMBERS={'json_line','json_column','json_position','history_rounds','history_questions','history_summarized','history_characters','note_nodes','batch_size','segments','characters','audio_duration_ms','image_count','input_characters','request_bytes','response_bytes','response_characters','elapsed_ms','http_status','prompt_tokens','completion_tokens','total_tokens','prompt_cache_hit_tokens','prompt_cache_miss_tokens','reasoning_tokens','topics','examples','attempt','accepted_count','rejected_count','requested_count','max_output_tokens','timeout_seconds'}
+_NUMBERS={'duplicate_key_count','missing_ref_count','json_document_count','requested_time_ms','actual_time_ms','queue_peak','promoted_count','deferred_count','shortened_count','invalid_ref_count','repaired_ref_count','person_frames','uncertain_frames','reveal_frames','inference_ms','json_line','json_column','json_position','history_rounds','history_questions','history_summarized','history_characters','note_nodes','batch_size','segments','characters','audio_duration_ms','image_count','input_characters','request_bytes','response_bytes','response_characters','elapsed_ms','http_status','prompt_tokens','completion_tokens','total_tokens','prompt_cache_hit_tokens','prompt_cache_miss_tokens','reasoning_tokens','topics','examples','attempt','accepted_count','rejected_count','requested_count','max_output_tokens','timeout_seconds'}
 _FINISH={'stop','length','tool_calls','function_call','content_filter','insufficient_system_resource','insufficient_balance','unknown','missing'}
-_OPERATIONS={'transcription','course_map','grouped_map','direct_map','overview','practice'}
-_STAGES={'history','config','probe','audio_decode','model_load','recognition','request','response_json','response_structure','finish_check','model_json','provider','validation','completed','cancelled','provider_request','response_schema','notes_validation','section_summary','section_objectives','section_keyPoints','section_pitfalls','section_highlights'}
-_SAFE_REASONS={'out_of_memory','timeout','invalid_json','Missing headline','Missing section','Missing evidence','Unknown evidence','Invalid note sources','Unknown note evidence','Invalid note tree','Invalid note node','Invalid note point','Unsourced note point','Unsourced note title','Invalid note anchor','Invalid notes','Missing course notes','Missing note content','Duplicate source IDs','Incomplete overview','Overview provider is not configured'}
+_OPERATIONS={'frame_pipeline','person_selection','transcription','course_map','grouped_map','direct_map','overview','practice'}
+_STAGES={'json_recovery','json_repair','decode','citation_repair','capture','normalization','selection','fallback','history','config','probe','audio_decode','model_load','recognition','request','response_json','response_structure','finish_check','model_json','provider','validation','completed','cancelled','provider_request','response_schema','notes_validation','section_summary','section_objectives','section_keyPoints','section_pitfalls','section_highlights'}
+_SAFE_REASONS={'json_identical_key','reference_missing','json_duplicate_key','json_nonfinite','json_trailing_content','json_root_invalid','json_multiple_fragments','json_invalid_syntax','json_ambiguous_documents','json_many_documents','json_empty','json_identical_repeat','json_wrapper_removed','json_content_changed','json_repair_failed','repair_budget_exhausted','video_frame_sampling_failed','video_input_unavailable','video_input_invalid','video_decode_failed','video_filter_or_encoder_failed','video_output_unavailable','video_output_io_failed','reference_repair_rejected','reference_repair_failed','video_display_rotation_unsupported','video_frame_timestamp_missing','video_frame_timestamp_regressed','frame_time_outside_video','analysis_cancelled','reference_unknown','reference_wrong_type','reference_disallowed','reference_format_invalid','reference_repaired','citation_report_unavailable','person_model_invalid','person_cuda_unavailable','person_model_load_failed','person_runtime_unavailable','person_inference_failed','out_of_memory','timeout','invalid_json','Missing headline','Missing section','Missing evidence','Unknown evidence','Invalid note sources','Unknown note evidence','Invalid note tree','Invalid note node','Invalid note point','Unsourced note point','Unsourced note title','Invalid note anchor','Invalid notes','Missing course notes','Missing note content','Duplicate source IDs','Incomplete overview','Overview provider is not configured'}
 _EVENTS={'stage_started','request_started','response_received','request_completed','request_failed','stage_completed','stage_failed','diagnostic_check'}
 
 def close_logs():
@@ -31,8 +31,14 @@ def record_event(event,task='unbound',**fields):
     item={'timestamp':datetime.now(timezone.utc).isoformat(),'event':event,'task':task}
     for key,value in fields.items():
         if key in _NUMBERS and type(value) is int and value>=0:item[key]=value
+        elif key=='exit_code' and type(value) is int and -255<=value<=255:item[key]=value
         elif key=='notes_present' and type(value) is bool:item[key]=value
         elif key=='device' and value in {'cpu','cuda'}:item[key]=value
+        elif key=='strategy' and value in {'history','adjacent'}:item[key]=value
+        elif key=='node_path' and isinstance(value,str) and len(value)<=256 and re.fullmatch(r'root|(?:children|examples|candidateDecisions)\[\d+\](?:\.(?:(?:children|details|examples|candidateDecisions)\[\d+\]|mergeEvidence))*',value):item[key]=value
+        elif key=='json_path' and isinstance(value,str) and len(value)<=256 and re.fullmatch(r'root(?:\.(?:topic|children|details|examples|uncertainties|title|sourceIds|imageIds|mergeEvidence|candidateDecisions|reason|startMs|endMs|id|type|quote|field)|\[\d+\])*',value):item[key]=value
+        elif key=='reference_field' and value in {'sourceIds','imageIds'}:item[key]=value
+        elif key=='reference_id' and isinstance(value,str) and len(value)<=80 and re.fullmatch(r'(?:t_\d+|frame_\d+|page_\d+_(?:knowledge|example)_\d+)',value):item[key]=value
         elif key=='compute_type' and value in {'int8','float16','float32','int8_float16'}:item[key]=value
         elif key=='engine' and value in {'standard','batch'}:item[key]=value
         elif key=='operation' and value in _OPERATIONS:item[key]=value
@@ -58,7 +64,7 @@ def record_event(event,task='unbound',**fields):
             log.warning('model_diagnostics_file_unavailable')
     log.info(text)
 
-def request_model_json(request,timeout,task,operation,*,transport=urlopen,image_count=0,input_characters=0,model=None,output_limit=None,error_prefix='Incomplete model response'):
+def request_model_json(request,timeout,task,operation,*,transport=urlopen,image_count=0,input_characters=0,model=None,output_limit=None,error_prefix='Incomplete model response',content_parser=None):
     started=time.monotonic();request_id=str(uuid.uuid4());stage='request'
     common={'request_id':request_id,'operation':operation,'model':model}
     record_event('request_started',task,**common,image_count=image_count,input_characters=input_characters,request_bytes=len(request.data or b''),max_output_tokens=output_limit,timeout_seconds=timeout)
@@ -80,7 +86,7 @@ def request_model_json(request,timeout,task,operation,*,transport=urlopen,image_
         if reason!='stop':raise ValueError(f'{error_prefix} (finish_reason={reason})')
         stage='model_json'
         if not isinstance(content,str):raise ValueError('Invalid model content')
-        result=json.loads(content)
+        result=content_parser(content) if content_parser is not None else json.loads(content)
         record_event('request_completed',task,**common,stage='completed',elapsed_ms=int((time.monotonic()-started)*1000))
         return result
     except Exception as error:

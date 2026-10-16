@@ -12,13 +12,13 @@ from visual_evidence import _candidate_times, analyze_visuals
 
 
 class VisualEvidenceTest(unittest.TestCase):
-    def test_coarse_frames_use_batch_extraction_and_preserve_ocr_and_files(self):
+    def test_coarse_frames_save_same_original_without_second_extraction(self):
         frames = [(1000, np.full((20, 30, 3), 20, np.uint8)),
                   (2500, np.full((20, 30, 3), 80, np.uint8))]
         with tempfile.TemporaryDirectory() as d, \
              patch('visual_evidence._has_video', return_value=True), \
-             patch('visual_evidence._candidate_times', return_value=[1000, 2500]), \
-             patch('visual_evidence._frames_at', return_value=iter(frames)), \
+             patch('frame_stream.sample_frames', return_value=iter(frames)), \
+             patch('visual_evidence._frames_at', side_effect=AssertionError('second extraction used')), \
              patch('visual_evidence._frame_at', side_effect=AssertionError('serial extraction used')):
             root = Path(d)
             path = root / 'lesson.mp4'

@@ -1,0 +1,8 @@
+# Optional YOLO support; combine with compose.gpu.yaml for CUDA.
+services:
+  agent-python:
+    build:
+      args:
+        INSTALL_YOLO: "1"
+    environment:
+      PERSON_SEGMENTATION: ${PERSON_SEGMENTATION:-auto}

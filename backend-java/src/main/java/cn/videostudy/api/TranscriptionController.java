@@ -69,8 +69,11 @@ public class TranscriptionController {
                                     @RequestParam(value = "groupedAnalysis", defaultValue = "false") boolean groupedAnalysis,
                                     @RequestParam(value = "aiSubtitles", defaultValue = "false") boolean aiSubtitles,
                                     @RequestParam(value = "subtitleTargetLanguage", defaultValue = "source") String subtitleTargetLanguage,
-                                    @RequestParam(value = "mindMapMode", required = false) String requestedMapMode)
+                                    @RequestParam(value = "mindMapMode", required = false) String requestedMapMode,
+                                    @RequestParam(value = "personSelectionMode", required = false) String personSelectionMode)
                                     throws IOException {
+        if (personSelectionMode != null && !List.of("off","adjacent").contains(personSelectionMode))
+            return ResponseEntity.badRequest().body(Map.of("error","invalid_person_selection_mode"));
         final String mindMapMode=requestedMapMode==null?(groupedAnalysis?"grouped":"legacy"):requestedMapMode;
         if (!List.of("legacy","grouped","direct").contains(mindMapMode))
             return ResponseEntity.badRequest().body(Map.of("error","invalid_mind_map_mode"));
@@ -104,6 +107,7 @@ public class TranscriptionController {
             else store.createQueued(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion);
             store.saveGroupedAnalysis(id, groupedAnalysis);
             store.saveMindMapMode(id,mindMapMode);
+            if (personSelectionMode != null) store.savePersonSelectionMode(id,personSelectionMode);
             store.saveOriginalFilename(id, file.getOriginalFilename());
             if (aiSubtitles && subtitles != null) subtitles.createUploadRequest(id, subtitleTargetLanguage);
         } catch (RuntimeException error) {
@@ -112,7 +116,7 @@ public class TranscriptionController {
             throw error;
         }
         try {
-            queueAnalysis(id, path, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion, groupedAnalysis, mindMapMode);
+            queueAnalysis(id, path, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion, groupedAnalysis, mindMapMode, personSelectionMode);
         } catch (RejectedExecutionException error) {
             store.delete(id);
             Files.deleteIfExists(path);
@@ -121,6 +125,9 @@ public class TranscriptionController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(job);
     }
 
+    public ResponseEntity<?> upload(MultipartFile file, String visualMode, double threshold, int seconds, String ignoredRegion, boolean groupedAnalysis, boolean aiSubtitles, String targetLanguage, String mindMapMode) throws IOException {
+        return upload(file,visualMode,threshold,seconds,ignoredRegion,groupedAnalysis,aiSubtitles,targetLanguage,mindMapMode,null);
+    }
     public ResponseEntity<?> upload(MultipartFile file, String visualMode, double threshold, int seconds, String ignoredRegion, boolean groupedAnalysis, boolean aiSubtitles, String targetLanguage) throws IOException {
         return upload(file,visualMode,threshold,seconds,ignoredRegion,groupedAnalysis,aiSubtitles,targetLanguage,null);
     }
@@ -167,9 +174,10 @@ public class TranscriptionController {
             var ignoredRegion = store.findIgnoredRegion(id);
             var groupedAnalysis = store.findGroupedAnalysis(id);
             var mindMapMode=store.findMindMapMode(id);
+            var personSelectionMode=store.findPersonSelectionMode(id);
             if (mindMapMode==null) mindMapMode=groupedAnalysis?"grouped":"legacy";
             queueAnalysis(id, path, visualAnalysisMode == null ? "both" : visualAnalysisMode,
-                                          coarseChangePercent, coarseSampleSeconds, ignoredRegion, groupedAnalysis, mindMapMode);
+                                          coarseChangePercent, coarseSampleSeconds, ignoredRegion, groupedAnalysis, mindMapMode, personSelectionMode);
         } catch (RejectedExecutionException error) {
             store.markFailed(id, "analysis_queue_full");
             return ResponseEntity.status(429).body(Map.of("error", "analysis_queue_full"));
@@ -215,20 +223,21 @@ public class TranscriptionController {
         if (count > 0) log.info("Marked {} interrupted analysis jobs as retryable", count);
     }
 
-    private void queueAnalysis(String id, Path path, String visualMode, double threshold, int seconds, IgnoreRegion region, boolean groupedAnalysis, String mindMapMode) {
+    private void queueAnalysis(String id, Path path, String visualMode, double threshold, int seconds, IgnoreRegion region, boolean groupedAnalysis, String mindMapMode, String personSelectionMode) {
         var token = new Object();
         activeRuns.put(id, token);
-        try { worker.execute(() -> process(id, path, visualMode, threshold, seconds, region, groupedAnalysis, mindMapMode, token)); }
+        try { worker.execute(() -> process(id, path, visualMode, threshold, seconds, region, groupedAnalysis, mindMapMode, personSelectionMode, token)); }
         catch (RejectedExecutionException error) { activeRuns.remove(id, token); throw error; }
     }
-    private void process(String id, Path path, String visualAnalysisMode, double coarseChangePercent, int coarseSampleSeconds, IgnoreRegion ignoredRegion, boolean groupedAnalysis, String mindMapMode, Object token) {
+    private void process(String id, Path path, String visualAnalysisMode, double coarseChangePercent, int coarseSampleSeconds, IgnoreRegion ignoredRegion, boolean groupedAnalysis, String mindMapMode, String personSelectionMode, Object token) {
         boolean saved = false;
         try {
             synchronized (runLock) {
                 if (activeRuns.get(id) != token) return;
                 store.markProcessing(id);
+                if (personSelectionMode != null) log.info("Analysis {} person filtering {}", id, personSelectionMode);
             }
-            var result = analyzeWithResume(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion, groupedAnalysis, mindMapMode, token);
+            var result = analyzeWithResume(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds, ignoredRegion, groupedAnalysis, mindMapMode, personSelectionMode, token);
             if (result == null) throw new IllegalStateException("Agent returned no transcription result");
             if (result.mindMap() != null && !MindMapValidator.isGrounded(result.mindMap(), result.segments(), result.visualEvidence()))
                 throw new IllegalStateException("Agent returned an ungrounded mind map");
@@ -268,7 +277,7 @@ public class TranscriptionController {
         } finally { activeRuns.remove(id, token); }
     }
 
-    private TranscriptResult analyzeWithResume(String id, String visualMode, double threshold, int sampleSeconds, IgnoreRegion ignoredRegion, boolean groupedAnalysis, String mindMapMode, Object token) throws Exception {
+    private TranscriptResult analyzeWithResume(String id, String visualMode, double threshold, int sampleSeconds, IgnoreRegion ignoredRegion, boolean groupedAnalysis, String mindMapMode, String personSelectionMode, Object token) throws Exception {
         String callbackToken = null;
         if (subtitles != null) {
             try { callbackToken = subtitles.callbackToken(id); }
@@ -278,7 +287,8 @@ public class TranscriptionController {
             try {
                 clearProgress(id);
                 if (activeRuns.get(id) != token) throw new IllegalStateException("Analysis cancelled");
-                var result = "direct".equals(mindMapMode) ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken, ignoredRegion, false, "direct")
+                var result = personSelectionMode != null ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken, ignoredRegion, groupedAnalysis, mindMapMode, personSelectionMode)
+                    : "direct".equals(mindMapMode) ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken, ignoredRegion, false, "direct")
                     : groupedAnalysis ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken, ignoredRegion, true)
                     : ignoredRegion == null ? agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken)
                     : agent.analyze(id, analysisMode, visualMode, threshold, sampleSeconds, callbackToken, ignoredRegion);

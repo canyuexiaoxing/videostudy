@@ -1,0 +1,3 @@
+# Installed inside /opt/person, not in the Paddle/OCR interpreter.
+ultralytics==8.4.4
+opencv-python==4.10.0.84

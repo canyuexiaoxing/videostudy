@@ -37,6 +37,10 @@ services:
       MINDMAP_CONCURRENCY: ${MINDMAP_CONCURRENCY:-3}
       OCR_DEVICE: ${OCR_DEVICE:-cpu}
       WHISPER_BATCH_SIZE: ${WHISPER_BATCH_SIZE:-0}
+      PERSON_SEGMENTATION: ${PERSON_SEGMENTATION:-off}
+      PERSON_PYTHON: /opt/person/bin/python
+      PERSON_MODEL_PATH: /models/yolo26/yolo26n-seg.pt
+      YOLO_CONFIG_DIR: /models/yolo26/config
       MEDIA_PARALLEL: ${MEDIA_PARALLEL:-1}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]

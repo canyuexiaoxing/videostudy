@@ -462,3 +462,10 @@ body { background: radial-gradient(ellipse at 10% 0%, #eaf0ff, transparent 55%),
 .analysis-retry-card{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:18px;margin:14px 0;border:1px solid #e7cdca;border-radius:13px;background:#fff8f6;color:#394b70;text-align:left;width:100%;box-sizing:border-box}
 .analysis-retry-card>div{min-width:0}.analysis-retry-card strong{display:block;font-size:15px;color:#934f48}.analysis-retry-card p{margin:7px 0 0;font-size:12px;line-height:1.8;color:#6b7892}.analysis-retry-card button{display:flex;align-items:center;justify-content:center;gap:8px;flex:none;padding:11px 17px;border:1px solid #4166ed;border-radius:9px;background:#4166ed;color:white;font:inherit;font-size:13px;font-weight:650;cursor:pointer}.analysis-retry-card button:hover:not(:disabled){background:#3054d5}.analysis-retry-card button:disabled{opacity:.6;cursor:default}.analysis-retry-card button:focus-visible{outline:3px solid #91a9ff;outline-offset:3px}
 @media(max-width:600px){.analysis-retry-card{align-items:stretch;flex-direction:column;gap:12px;padding:15px}.analysis-retry-card button{width:100%}}
+
+.regenerate-map-button { display: inline-flex; align-items: center; gap: 6px; }
+.regenerate-map-button:disabled { opacity: .55; cursor: not-allowed; }
+
+.map-failure-details{margin-top:8px;min-width:0;overflow-wrap:anywhere}
+.map-failure-details summary{cursor:pointer;font-size:13px;color:#8b493e}
+.analysis-retry-card>div{min-width:0}

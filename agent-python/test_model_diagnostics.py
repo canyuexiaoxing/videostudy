@@ -43,3 +43,8 @@ class DiagnosticsTests(unittest.TestCase):
   failure=self.rows()[-1]
   self.assertEqual(failure['reason'],'invalid_json');self.assertGreater(failure['json_column'],0)
   self.assertEqual(failure['stage'],'model_json');self.assertNotIn('PRIVATE_REPLY',json.dumps(self.rows()))
+
+ def test_person_events_keep_stage_counts_and_failure_type_without_masks(self):
+  from model_diagnostics import record_event
+  record_event('stage_failed','unbound',operation='person_selection',stage='fallback',reason='person_model_invalid',error_type='ValueError',image_count=12,inference_ms=54,person_frames=9,raw_mask='PRIVATE_MASK')
+  row=self.rows()[-1];self.assertEqual(row['reason'],'person_model_invalid');self.assertEqual(row['person_frames'],9);self.assertNotIn('PRIVATE_MASK',json.dumps(row))

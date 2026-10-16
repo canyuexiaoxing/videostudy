@@ -9,9 +9,11 @@ from time import perf_counter
 
 
 def analyze_grouped_file(file_id, media_path, keyframe_dir, *, coarse_change_percent=2.0,
-                         coarse_sample_seconds=2, subtitle_callback_token=None, ignore_region=None):
+                         coarse_sample_seconds=2, subtitle_callback_token=None, ignore_region=None, person_selection_mode=None):
     # These imports are lazy: the default pipeline never instantiates the coordinator.
     import analysis as legacy
+    person_context = legacy.person_selection_context(person_selection_mode) if person_selection_mode is not None else legacy.person_selection_context()
+    person_options = {"person_selection_mode":person_selection_mode} if person_selection_mode is not None else {}
     from group_scheduler import ReadyGroupScheduler, RunSignal
     from group_understanding import analyze_group
     from course_mind_map import build_course_mind_map
@@ -76,6 +78,9 @@ def analyze_grouped_file(file_id, media_path, keyframe_dir, *, coarse_change_per
             snapshot()
 
     def cached(stage, inputs, function, accept=lambda value: True):
+        if stage != 'transcription':
+            from frame_stream import FRAME_PIPELINE_VERSION
+            inputs={'framePipeline':FRAME_PIPELINE_VERSION,'value':inputs}
         signal.check()
         value = checkpoint.run(stage, inputs, function, accept)
         signal.check()
@@ -102,7 +107,7 @@ def analyze_grouped_file(file_id, media_path, keyframe_dir, *, coarse_change_per
 
     def recognize(worker):
         nonlocal grouping_complete
-        evidence = timed('visualOcr', lambda: cached('visualOcr', {}, lambda: worker.analyze(on_frame=on_frame)))
+        evidence = timed('visualOcr', lambda: cached('visualOcr', person_context, lambda: worker.analyze(on_frame=on_frame)))
         for item in sorted(evidence, key=lambda f: f['frameTimeMs']):
             on_frame(item)
         with lock:
@@ -123,7 +128,7 @@ def analyze_grouped_file(file_id, media_path, keyframe_dir, *, coarse_change_per
     try:
         with legacy.VisualOcrWorker(media_path, root, page_change_fraction=coarse_change_percent / 100,
                                    sample_seconds=coarse_sample_seconds,
-                                   **({'ignore_region': ignore_region} if ignore_region else {})) as worker:
+                                   **({'ignore_region': ignore_region} if ignore_region else {}), **person_options) as worker:
             # Grouped mode always retains concurrent media extraction.
             with ThreadPoolExecutor(max_workers=2) as pool:
                 speech_job = pool.submit(transcribe)
@@ -251,8 +256,9 @@ def build_saved_group_map(segments, pages, visuals, *, keyframe_dir=None, ignore
         checkpoint = None
     if signal:
         signal.check()
+    # Reuse any group work above, but never replay the final map on explicit regeneration.
     value = build_course_mind_map(segments, ready_pages, list(by_time.values()), root,
-                                 checkpoint=checkpoint, signal=signal)
+                                 checkpoint=None, signal=signal)
     if signal:
         signal.check()
     return value

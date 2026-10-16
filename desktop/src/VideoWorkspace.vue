@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {ref,computed,watch,onMounted,onBeforeUnmount} from 'vue'
 import StudyIcon from './StudyIcon.vue'
+import type {PersonSelectionMode} from './personSelection'
 import {containedFrame,regionFromPoints} from './videoRegion'
 import type {VideoRegion} from './videoRegion'
 import {validateRegionCombination,regionAt,regionNodes,upsertRegionNode,removeRegionNode} from './videoRegionTimeline'
@@ -8,8 +9,8 @@ import type {IgnoreSetting} from './videoRegionTimeline'
 import {scanRegions,currentRegionCandidate} from './autoRegionScan'
 import type {ScanResult} from './autoRegionScan'
 import {createRegionCapture} from './regionCapture'
-const props=defineProps<{src:string;filename:string;modelValue:IgnoreSetting|null;analysisRegion:IgnoreSetting|null;timeMs:number;checking?:boolean}>()
-const emit=defineEmits<{close:[];selectFile:[event:Event];'update:modelValue':[region:IgnoreSetting|null];'update:analysisRegion':[region:IgnoreSetting|null]}>()
+const props=defineProps<{src:string;filename:string;modelValue:IgnoreSetting|null;analysisRegion:IgnoreSetting|null;timeMs:number;checking?:boolean;personSelectionMode?:PersonSelectionMode;analysisPending?:boolean}>()
+const emit=defineEmits<{close:[];selectFile:[event:Event];'update:modelValue':[region:IgnoreSetting|null];'update:analysisRegion':[region:IgnoreSetting|null];'update:personSelectionMode':[mode:PersonSelectionMode]}>()
 const dialog=ref<HTMLDialogElement|null>(null),media=ref<HTMLVideoElement|null>(null),stage=ref<HTMLElement|null>(null)
 const surface=ref<HTMLElement|null>(null),width=ref(0),height=ref(0),videoWidth=ref(0),videoHeight=ref(0)
 const time=ref(0),duration=ref(0),paused=ref(true),editing=ref(false),dragging=ref(false)
@@ -20,12 +21,15 @@ let observer:ResizeObserver|undefined,anchor:Anchor|null=null
 const scanMode=ref<'full'|'current'>('full')
 const scanBusy=ref(false),scanCount=ref(0),candidate=ref<ScanResult|null>(null),editingCandidate=ref(false)
 let scanController:AbortController|null=null
-const areaMode=ref<'ignore'|'analysis'>('ignore')
+const areaMode=ref<'ignore'|'analysis'|'person'>('ignore')
 const selectedSetting=computed(()=>areaMode.value==='analysis'?props.analysisRegion:props.modelValue)
 const displaySetting=computed(()=>candidate.value?.setting??selectedSetting.value)
 const nodes=computed(()=>regionNodes(displaySetting.value))
 const frame=computed(()=>containedFrame(width.value,height.value,videoWidth.value,videoHeight.value))
 const frameStyle=computed(()=>({left:`${frame.value.left}px`,top:`${frame.value.top}px`,width:`${frame.value.width}px`,height:`${frame.value.height}px`}))
+const personAnalysisRegion=computed(()=>regionAt(props.analysisRegion,Math.round(time.value*1000)))
+const personIgnoredRegion=computed(()=>regionAt(props.modelValue,Math.round(time.value*1000)))
+function savedRegionStyle(region:VideoRegion){return {left:`${region.x*100}%`,top:`${region.y*100}%`,width:`${region.width*100}%`,height:`${region.height*100}%`}}
 const otherRegion=computed(()=>regionAt(areaMode.value==='analysis'?props.modelValue:props.analysisRegion,Math.round(time.value*1000)))
 const otherStyle=computed(()=>otherRegion.value?{left:`${otherRegion.value.x*100}%`,top:`${otherRegion.value.y*100}%`,width:`${otherRegion.value.width*100}%`,height:`${otherRegion.value.height*100}%`}:{})
 const overlapNote=computed(()=>{
@@ -41,9 +45,9 @@ function commitRegion(value:IgnoreSetting|null){
  if(areaMode.value==='analysis')emit('update:analysisRegion',value);else emit('update:modelValue',value)
  return true
 }
-function selectMode(mode:'ignore'|'analysis'){if(scanBusy.value||candidate.value)return;cancelDrawing();areaMode.value=mode;refresh()}
+function selectMode(mode:'ignore'|'analysis'|'person'){if(scanBusy.value||candidate.value)return;cancelDrawing();areaMode.value=mode;refresh()}
 const regionStyle=computed(()=>draft.value?{left:`${draft.value.x*100}%`,top:`${draft.value.y*100}%`,width:`${draft.value.width*100}%`,height:`${draft.value.height*100}%`}:{})
-const canDraw=computed(()=>ready.value&&videoWidth.value>0&&!props.checking&&!scanBusy.value)
+const canDraw=computed(()=>areaMode.value!=='person'&&ready.value&&videoWidth.value>0&&!props.checking&&!scanBusy.value)
 const clock=(seconds:number)=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`
 const nodeClock=(ms:number)=>clock(ms/1000)+(ms%1000?`.${String(ms%1000).padStart(3,'0')}`:'')
 const activeTime=computed(()=>nodes.value.filter(n=>n.timeMs<=Math.round(time.value*1000)).at(-1)?.timeMs)
@@ -142,7 +146,7 @@ onBeforeUnmount(()=>{stopScan();observer?.disconnect();media.value?.pause();dial
  <dialog ref="dialog" class="video-workspace" aria-labelledby="workspace-title" @cancel.prevent="close">
   <header class="workspace-header"><div><h2 id="workspace-title">视频工作台</h2><p>{{ filename||'选择视频后，设置画面处理工具' }}</p></div><button type="button" class="workspace-close" aria-label="关闭视频工作台" @click="close">关闭 <span aria-hidden="true">×</span></button></header>
   <div class="workspace-layout">
-   <nav class="workspace-nav" aria-label="视频工具"><span>视频工具</span><button type="button" :aria-current="areaMode==='analysis'?'page':undefined" :disabled="scanBusy||!!candidate" @click="selectMode('analysis')"><StudyIcon name="slides"/>分析区域</button><button type="button" :aria-current="areaMode==='ignore'?'page':undefined" :disabled="scanBusy||!!candidate" @click="selectMode('ignore')"><StudyIcon name="slides"/>忽略区域</button><p>绿色框限定分析范围，蓝色框排除干扰，两种区域可以叠加。</p></nav>
+   <nav class="workspace-nav" aria-label="视频工具"><span>视频工具</span><button type="button" :aria-current="areaMode==='analysis'?'page':undefined" :disabled="scanBusy||!!candidate" @click="selectMode('analysis')"><StudyIcon name="slides"/>分析区域</button><button type="button" :aria-current="areaMode==='ignore'?'page':undefined" :disabled="scanBusy||!!candidate" @click="selectMode('ignore')"><StudyIcon name="slides"/>忽略区域</button><button type="button" :aria-current="areaMode==='person'?'page':undefined" :disabled="scanBusy||!!candidate" @click="selectMode('person')"><StudyIcon name="slides"/>人物过滤<span v-if="personSelectionMode==='adjacent'" class="person-nav-dot" aria-hidden="true"></span></button><p>区域框选与人物过滤可以配合使用。</p></nav>
    <section class="workspace-preview" aria-label="视频预览">
     <div ref="stage" class="workspace-stage">
      <video v-if="src" ref="media" :src="src" preload="metadata" playsinline @loadedmetadata="loaded" @timeupdate="sync" @seeked="sync" @play="sync" @pause="sync" @ended="sync" @error="error='无法读取视频画面，请在主页面尝试兼容播放。'"/>
@@ -152,11 +156,26 @@ onBeforeUnmount(()=>{stopScan();observer?.disconnect();media.value?.pause();dial
       <div v-if="otherRegion" :class="['workspace-region','workspace-other',{analysis:areaMode==='ignore'}]" :style="otherStyle"><span>{{ areaMode==='ignore'?'分析区域':'忽略区域' }}</span></div>
       <div v-if="draft" :class="['workspace-region',{analysis:areaMode==='analysis'}]" :style="regionStyle"><span>{{ areaMode==='analysis'?'分析区域':'忽略区域' }} · 当前时段</span><button type="button" class="workspace-resize" data-resize tabindex="-1" aria-label="拖动调整区域大小"/></div>
      </div>
+     <div v-if="areaMode==='person'&&ready&&videoWidth>0" class="workspace-region-overlays" :style="frameStyle" aria-label="已保存的画面区域">
+      <div v-if="personAnalysisRegion" class="workspace-region workspace-other analysis" data-readonly-region="analysis" :style="savedRegionStyle(personAnalysisRegion)"><span>分析区域 · 已保存</span></div>
+      <div v-if="personIgnoredRegion" class="workspace-region workspace-other" data-readonly-region="ignore" :style="savedRegionStyle(personIgnoredRegion)"><span>忽略区域 · 已保存</span></div>
+     </div>
     </div>
     <div class="workspace-playback"><button type="button" :disabled="!ready||editing||dragging" :aria-label="paused?'播放预览':'暂停预览'" @click="toggle">{{ paused?'播放':'暂停' }}</button><input aria-label="预览进度" type="range" min="0" :max="duration||0" step="0.1" :value="time" :disabled="!ready||editing||dragging" @input="seek(Number(($event.target as HTMLInputElement).value))"/><span>{{ clock(time) }} / {{ clock(duration) }}</span></div>
-    <p class="workspace-preview-note">拖动区域可移动位置，拖动右下角可调整大小，松开后自动保存当前时间节点。</p>
+    <p class="workspace-preview-note">{{ areaMode==='person'?'绿色框为分析区域，蓝色框为忽略区域，随时间节点更新。此处仅预览，请切换对应工具调整；人物过滤在开始分析后执行。':'拖动区域可移动位置，拖动右下角可调整大小，松开后自动保存当前时间节点。' }}</p>
    </section>
-   <aside class="workspace-settings" aria-labelledby="ignore-title"><span class="workspace-kicker">画面设置</span><h3 id="ignore-title">{{ areaMode==='analysis'?'只分析框内内容':'忽略画面区域' }}</h3><p>首次框选默认应用于整段视频。后续在其他时间框选、移动或缩放，会自动新增节点，之后沿用新位置。</p>
+   <aside v-if="areaMode==='person'" class="workspace-settings workspace-person" aria-labelledby="person-title">
+    <span class="workspace-kicker">自动画面处理</span><h3 id="person-title">人物干扰过滤</h3>
+    <p>适合老师在黑板前走动的课程，减少人物动作造成的重复截图。</p>
+    <div class="person-filter-card" :class="{enabled:personSelectionMode==='adjacent'}">
+     <div class="person-filter-heading"><div><strong>排除人物动作</strong><span>GPU 处理</span></div><button type="button" class="person-switch" role="switch" :aria-checked="personSelectionMode==='adjacent'" aria-label="排除人物动作" :disabled="!src||checking" @click="emit('update:personSelectionMode',personSelectionMode==='adjacent'?'off':'adjacent')"><span></span></button></div>
+     <p class="person-filter-status" role="status">{{ personSelectionMode==='adjacent'?'已开启 · 应用于下一次新分析':'已关闭 · 使用普通画面筛选' }}</p>
+    </div>
+    <ul class="person-filter-facts"><li>只比较前后画面中，都没有被人物挡住的区域。</li><li>原始截图完整保留，后续照常识别文字、检查覆盖与补录。</li><li>教鞭、笔和字幕等非人物变化仍可能保留。</li></ul>
+    <p class="workspace-person-device">需要本机 GPU 与人物模型就绪；不可用时回退普通筛选并记录原因。</p>
+    <div class="workspace-scope"><strong>按视频保存，仅影响新分析</strong><p>{{ analysisPending?'当前任务继续沿用启动时的设置。此次修改在下一次新分析时使用。':'设置自动保存。已有任务和失败重试沿用各自原设置。' }}</p></div>
+   </aside>
+   <aside v-else class="workspace-settings" aria-labelledby="ignore-title"><span class="workspace-kicker">画面设置</span><h3 id="ignore-title">{{ areaMode==='analysis'?'只分析框内内容':'忽略画面区域' }}</h3><p>首次框选默认应用于整段视频。后续在其他时间框选、移动或缩放，会自动新增节点，之后沿用新位置。</p>
     <div class="workspace-state">{{ scanBusy?(scanMode==='current'?'正在识别当前画面…':`正在扫描 · 已识别 ${scanCount} 张`):candidate?'自动识别结果 · 尚未应用':checking?'正在确认当前文件…':editing||dragging?'正在调整区域':nodes.length?`已设置 ${nodes.length} 个时间节点`:'未设置忽略区域' }}</div>
     <button v-if="!scanBusy&&areaMode==='ignore'" class="workspace-primary" type="button" :disabled="!canDraw||dragging||!!candidate" @click="autoScan('full')">AI 扫描全片</button>
     <button v-else-if="scanBusy" class="workspace-secondary" type="button" @click="stopScan">{{ scanMode==='current'?'取消识别':'取消扫描' }}</button>
@@ -177,6 +196,9 @@ onBeforeUnmount(()=>{stopScan();observer?.disconnect();media.value?.pause();dial
 .video-workspace{box-sizing:border-box;width:min(1400px,96vw);max-width:none;max-height:94dvh;margin:auto;padding:0;border:1px solid #e1e8f6;border-radius:18px;background:#f7f9fd;color:#273754;box-shadow:0 28px 100px #0b1b4540;overflow:auto}.video-workspace::backdrop{background:#142342a6;backdrop-filter:blur(4px)}.workspace-header{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:22px 26px;background:#fff;border-bottom:1px solid #e4eaf4}.workspace-header h2{margin:0;font-size:21px}.workspace-header p{margin:7px 0 0;color:#7182a0;font-size:12px;overflow-wrap:anywhere}.workspace-close{border:1px solid #dce4f2;background:#fff;border-radius:8px;padding:9px 14px;color:#536582;white-space:nowrap}.workspace-close span{margin-left:8px;font-size:19px}.workspace-layout{display:grid;grid-template-columns:165px minmax(0,1fr) 250px;min-height:500px}.workspace-nav{padding:22px 14px;border-right:1px solid #e4eaf4;background:#fff}.workspace-nav>span,.workspace-kicker{font-size:11px;letter-spacing:.08em;color:#8290aa}.workspace-nav button{display:flex;align-items:center;gap:9px;width:100%;margin-top:15px;padding:12px 10px;border:1px solid #cbd9ff;border-radius:9px;color:#315dec;background:#eef3ff;text-align:left;font-weight:600}.workspace-nav svg{width:17px;height:17px}.workspace-nav p{margin:17px 4px;color:#8190a8;font-size:11px;line-height:1.9}.workspace-preview{min-width:0;padding:24px 20px}.workspace-stage{position:relative;aspect-ratio:16/9;background:#10192b;border-radius:12px;overflow:hidden}.workspace-stage video{display:block;width:100%;height:100%;object-fit:contain}.workspace-surface{position:absolute;touch-action:none;pointer-events:auto}.workspace-surface.drawing{pointer-events:auto;touch-action:none;cursor:crosshair}.workspace-region{position:absolute;box-sizing:border-box;border:2px solid #84a8ff;background:#537dee50;cursor:move;touch-action:none}.workspace-region span{pointer-events:none;position:absolute;top:5px;left:5px;padding:3px 6px;border-radius:4px;background:#20396de6;color:white;font-size:10px;white-space:nowrap}.workspace-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:16px;box-sizing:border-box;color:#dbe5ff;text-align:center}.workspace-empty svg{width:34px;height:34px;color:#a8bfff}.workspace-empty h3{margin:12px 0 0;font-size:17px}.workspace-empty p{font-size:12px;color:#9fafcb;line-height:1.7}.workspace-empty label{margin-top:8px;cursor:pointer}.workspace-empty input{display:none}.workspace-playback{display:flex;align-items:center;gap:12px;margin-top:14px}.workspace-playback button{border:1px solid #d8e2f3;background:#fff;padding:7px 12px;border-radius:7px;color:#3c557a;white-space:nowrap}.workspace-playback input{min-width:0;flex:1;accent-color:#4166ed}.workspace-playback span{font-size:11px;color:#6f809c;white-space:nowrap}.workspace-preview-note{font-size:12px;color:#7283a1;line-height:1.8}.workspace-settings{padding:24px 20px;background:#fff;border-left:1px solid #e4eaf4}.workspace-settings h3{font-size:17px;margin:12px 0}.workspace-settings>p{font-size:12px;color:#73829a;line-height:1.9}.workspace-state{margin:20px 0 12px;padding:11px 12px;border:1px solid #e4eaf4;border-radius:8px;background:#f7f9fd;font-size:12px;color:#5d7396}.workspace-primary,.workspace-secondary{box-sizing:border-box;display:block;width:100%;padding:11px 14px;margin-top:9px;border-radius:8px;font:inherit;font-size:12px;text-align:center}.workspace-primary{border:1px solid #4166ed;color:#fff;background:#4166ed}.workspace-secondary{border:1px solid #dce4f2;color:#5d7293;background:#fff}.workspace-scope{margin-top:26px;padding-top:18px;border-top:1px solid #e8edf5;font-size:11px;color:#8795aa;line-height:1.8}.workspace-scope strong{color:#6f809b}.workspace-scope p{margin:6px 0}.workspace-settings .workspace-note{color:#375dba}.workspace-settings .workspace-error{color:#b24f61}.workspace-audio{position:absolute;inset:40% 10%;color:#c9d6ec;text-align:center;font-size:13px}button,label{cursor:pointer}button:disabled{opacity:.45;cursor:default}button:focus-visible,input:focus-visible,label:focus-within{outline:2px solid #6f99ff;outline-offset:3px}
 .workspace-resize{position:absolute;right:-6px;bottom:-6px;width:15px;height:15px;border:2px solid white;border-radius:3px;background:#4166ed;cursor:nwse-resize;padding:0}.workspace-nodes{grid-column:1/-1;min-width:0;margin-top:20px;font-size:12px}.workspace-nodes>strong{color:#6f809b}.workspace-node{display:flex;margin-top:8px;border:1px solid #e4eaf4;border-radius:7px;overflow:hidden}.workspace-node.active{border-color:#9bb4ff;background:#eef3ff}.workspace-node button{border:0;background:transparent;padding:9px;color:#3f608f}.workspace-node button:first-child{flex:1;text-align:left;min-width:0}.workspace-node span{color:#8493ab;margin-left:6px}.workspace-node button:last-child:not(:first-child){font-size:18px}
 .workspace-auto-hint{grid-column:1/-1;font-size:11px!important}.workspace-candidate{grid-column:1/-1;margin-top:15px;padding:12px;border:1px solid #b8caff;border-radius:9px;background:#f3f6ff;font-size:12px;overflow-wrap:anywhere}.workspace-candidate p{font-size:11px;line-height:1.8;color:#6f809b}
+.workspace-region-overlays{position:absolute;pointer-events:none;z-index:3}.workspace-region-overlays .workspace-region{pointer-events:none;cursor:default}
 .workspace-region{z-index:2}.workspace-other{z-index:1;pointer-events:none}.workspace-region.analysis{border-color:#26a77d;background:#20a87824}.workspace-region.analysis span{background:#16775de6}.workspace-nav button:not([aria-current]){background:#fff;border-color:#e4eaf4;color:#6b7e9b}
+.person-nav-dot{width:7px;height:7px;border-radius:50%;background:#27a97e;margin-left:auto;flex-shrink:0}.person-filter-card{grid-column:1/-1;border:1px solid #dce5f4;border-radius:12px;padding:16px 13px;margin:20px 0;background:#f8faff}.person-filter-card.enabled{background:#eef7f3;border-color:#a8d7c3}.person-filter-heading{display:flex;gap:12px;align-items:center;justify-content:space-between}.person-filter-heading strong{display:block;font-size:14px}.person-filter-heading div>span{display:block;font-size:11px;color:#7183a0;margin-top:6px}.person-switch{flex-shrink:0;width:44px;height:25px;border:0;border-radius:20px;background:#bbc6da;padding:3px}.person-switch>span{display:block;width:19px;height:19px;border-radius:50%;background:white;box-shadow:0 1px 3px #15264b33;transition:transform .15s}.person-switch[aria-checked=true]{background:#278466}.person-switch[aria-checked=true]>span{transform:translateX(19px)}.person-filter-status{font-size:11px;color:#5b7291;margin:14px 0 0;line-height:1.7}.person-filter-facts{grid-column:1/-1;padding-left:18px;font-size:12px;line-height:1.9;color:#647a99}.person-filter-facts li+li{margin-top:12px}.workspace-person-device{font-size:11px!important;color:#7c8ba4!important}.workspace-person .workspace-scope{margin-top:20px}
+@media(prefers-reduced-motion:reduce){.person-switch>span{transition:none}}
 @media(max-width:1000px){.workspace-layout{grid-template-columns:140px minmax(0,1fr)}.workspace-settings{grid-column:1/-1;border-left:0;border-top:1px solid #e4eaf4;display:grid;grid-template-columns:1fr 1fr;gap:0 14px}.workspace-settings>h3,.workspace-settings>.workspace-kicker,.workspace-settings>p,.workspace-scope,.workspace-state{grid-column:1/-1}}@media(max-width:600px){.video-workspace{width:96vw;border-radius:12px}.workspace-header{padding:16px}.workspace-header h2{font-size:18px}.workspace-layout{display:block;min-height:0}.workspace-nav{padding:12px 16px;border-right:0;border-bottom:1px solid #e4eaf4}.workspace-nav>span,.workspace-nav>p{display:none}.workspace-nav button{width:auto;margin:0}.workspace-preview{padding:16px 12px}.workspace-settings{padding:18px 16px}.workspace-empty h3{font-size:14px}.workspace-empty p{display:none}.workspace-playback{gap:7px}.workspace-playback span{font-size:10px}}
 </style>

@@ -139,10 +139,15 @@ def review_visual_coverage(
                     captured = [{"frameTimeMs": t, "ocrBlocks": capture(t)} for t in requested]
                 else:
                     captured = capture_batch(requested)
-                if sorted(item["frameTimeMs"] for item in captured) != sorted(requested):
+                if sorted(item.get("requestedTimeMs",item["frameTimeMs"]) for item in captured) != sorted(requested):
                     raise RuntimeError("Batch capture did not return all requested timestamps")
-                visuals.extend(captured)
-                added.extend(requested)
+                actual_known={item['frameTimeMs'] for item in visuals}
+                for item in captured:
+                    actual=item['frameTimeMs']
+                    if actual not in actual_known:
+                        visuals.append({'frameTimeMs':actual,'ocrBlocks':item['ocrBlocks']})
+                        added.append(actual);actual_known.add(actual)
+                    known.add(actual)
             active_windows = next_windows
 
     visuals.sort(key=lambda item: item["frameTimeMs"])

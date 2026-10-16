@@ -48,6 +48,6 @@ class AnalysisRegionTest(unittest.TestCase):
   from unittest.mock import patch
   from visual_evidence import analyze_visuals
   frame=np.zeros((100,100,3),dtype=np.uint8);inputs=[]
-  with patch('visual_evidence._has_video',return_value=True),patch('visual_evidence._candidate_times',return_value=[0]),patch('visual_evidence._frames_at',return_value=[(0,frame)]):
+  with patch('visual_evidence._has_video',return_value=True),patch('frame_stream.sample_frames',return_value=iter([(0,frame)])):
    analyze_visuals(Path('unused'),recognize=lambda image:inputs.append(image.copy()) or [],ignore_region=self.setting())
   self.assertEqual(inputs[0][5,5,0],255);self.assertEqual(inputs[0][30,30,0],0);self.assertFalse(frame.any())

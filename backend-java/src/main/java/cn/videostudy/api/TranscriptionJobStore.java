@@ -62,6 +62,14 @@ public class TranscriptionJobStore {
         var saved=modes.isEmpty()?null:modes.getFirst();
         return saved!=null?saved:findGroupedAnalysis(id)?"grouped":"legacy";
     }
+    public void savePersonSelectionMode(String id, String mode) {
+        if (!List.of("off","adjacent").contains(mode)) throw new IllegalArgumentException("Invalid person selection mode");
+        requireOne(jdbc.update("UPDATE transcription_jobs SET person_selection_mode = ? WHERE id = ?",mode,id));
+    }
+    public String findPersonSelectionMode(String id) {
+        var modes=jdbc.query("SELECT person_selection_mode FROM transcription_jobs WHERE id = ?",(row,n)->row.getString(1),id);
+        return modes.isEmpty()?null:modes.getFirst();
+    }
     public boolean cancel(String id) {
         return jdbc.update("UPDATE transcription_jobs SET status = 'failed', error_code = 'analysis_cancelled' WHERE id = ? AND status IN ('queued', 'processing')", id) == 1;
     }

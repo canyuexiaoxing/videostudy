@@ -54,6 +54,11 @@ public interface MediaAnalyzer {
         if ("direct".equals(mindMapMode)) throw new UnsupportedOperationException("Direct mind map unavailable");
         return analyze(fileId, mode, visualMode, threshold, seconds, token, region, "grouped".equals(mindMapMode));
     }
+    default TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualMode,
+            double threshold, int seconds, String token, IgnoreRegion region, boolean groupedAnalysis, String mindMapMode, String personSelectionMode) {
+        if ("adjacent".equals(personSelectionMode)) throw new UnsupportedOperationException("Person filtering unavailable");
+        return analyze(fileId,mode,visualMode,threshold,seconds,token,region,groupedAnalysis,mindMapMode);
+    }
     default TranscriptionController.MindMapResult generateMindMap(String courseId, boolean groupedAnalysis,
             List<TranscriptionController.TranscriptSegment> segments, List<TranscriptionController.PageGroup> pages,
             List<TranscriptionController.VisualEvidence> visuals, IgnoreRegion region, String mindMapMode) {

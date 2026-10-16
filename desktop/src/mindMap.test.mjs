@@ -87,3 +87,17 @@ test('numbered method classifications remain nested canvas nodes',()=>{
  const root=compactKnowledgeMap({...node,id:'course',children:[{...node,id:'chapter',children:[{...node,id:'growth',title:'增长量计算',children:methods}]}]})
  assert.equal(root.children[0].children[0].children.length,3)
 })
+
+
+test('reference map keeps its hierarchy without projecting extra detail leaves',()=>{
+ const point=(id,title,children=[],details=[])=>({...node,id,title,children,details});
+ const raw=point('course','增长量计算与比较',[
+  point('formulas','增长量的基本公式',[point('f1','增长量=现期-基期'),point('f2','增长量=基期×增长率'),point('f3','增长量=现期/(1+r)×r')]),
+  point('compare','增长量比较的易错点',[point('signed','增长量比较带符号',[point('positive','正一定大于负：10>-10'),point('negative','下降越多，增长量越小：-5>-10')]),point('absolute','变化量比较带绝对值')]),
+  point('methods','增长量计算',[point('base','1.给基期、增长率'),point('current','2.给现期、基期',[point('sum','考法一：主体为多个数加和',[point('a','方法一：先减再加'),point('b','方法二：先加再减')])]),point('rate','3.给现期、增长率')]),
+ ],[point('extra','方法：重复说明'),point('extra-formula','公式：增长量=现期-基期')]);
+ const before=JSON.stringify(raw),value=compactKnowledgeMap(raw);
+ const structure=n=>({id:n.id,title:n.title,children:n.children.map(structure)});
+ assert.deepEqual(structure(value),structure(raw));assert.equal(JSON.stringify(raw),before);
+ assert.equal(value.details.length,2);assert.equal(value.children[2].children[1].children[0].children[0].title,'方法一：先减再加');
+});

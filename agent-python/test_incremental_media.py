@@ -40,19 +40,18 @@ class IncrementalMediaTest(unittest.TestCase):
                 self.assertEqual(transcribe_file(file_id,on_segment=seen.append), {'language':'und','segments':[]})
             self.assertEqual(seen, [])
 
-    def test_frames_are_published_after_saved_jpg_and_ocr_before_next_frame(self):
+    def test_frames_are_published_after_atomic_saved_jpg_and_ocr(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); path = root/'media'; path.write_bytes(b'fixture')
             seen = []
-            def frames(*_):
+            def frames(*_,**kwargs):
                 yield 1000, np.full((20, 30, 3), 20, np.uint8)
-                self.assertEqual([f['frameTimeMs'] for f in seen], [1000])
                 yield 2000, np.full((20, 30, 3), 40, np.uint8)
             def ready(frame):
                 self.assertIsNotNone(cv2.imread(str(root/f"{frame['frameTimeMs']}.jpg")))
                 self.assertEqual(frame['ocrBlocks'][0]['text'], 'ready')
                 seen.append(frame)
-            with patch('visual_evidence._has_video', return_value=True), patch('visual_evidence._candidate_times', return_value=[1000,2000]), patch('visual_evidence._frames_at', side_effect=frames):
+            with patch('visual_evidence._has_video', return_value=True), patch('frame_stream.sample_frames', side_effect=frames):
                 result = analyze_visuals(path, recognize=lambda image:[{'text':'ready'}], keyframe_dir=root, on_frame=ready)
             self.assertEqual(result, seen)
 
@@ -149,7 +148,7 @@ class IncrementalMediaTest(unittest.TestCase):
         def analysis(*args, **kwargs):
             kwargs['on_frame'](frame)
             raise ValueError('decode failed after first frame')
-        with patch('visual_evidence._frame_checkpoint', return_value=None), patch('visual_evidence.analyze_visuals', side_effect=analysis), patch('visual_evidence._frame_at', return_value=np.zeros((10,10,3),np.uint8)), patch('visual_evidence._recognize', return_value=[{'text':'capture'}]):
+        with patch('visual_evidence._frame_checkpoint', return_value=None), patch('visual_evidence.analyze_visuals', side_effect=analysis), patch('visual_evidence._frame_at', return_value=(2000,np.zeros((10,10,3),np.uint8))), patch('visual_evidence._recognize', return_value=[{'text':'capture'}]):
             thread = threading.Thread(target=_serve_visual_requests,args=(child,),daemon=True)
             thread.start()
             try:

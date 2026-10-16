@@ -89,12 +89,17 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
     }
     @Override public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode,
             double coarseChangePercent, int coarseSampleSeconds, String subtitleCallbackToken, IgnoreRegion region, boolean groupedAnalysis, String mindMapMode) {
+        return analyze(fileId,mode,visualAnalysisMode,coarseChangePercent,coarseSampleSeconds,subtitleCallbackToken,region,groupedAnalysis,mindMapMode,null);
+    }
+    @Override public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode,
+            double coarseChangePercent, int coarseSampleSeconds, String subtitleCallbackToken, IgnoreRegion region, boolean groupedAnalysis, String mindMapMode, String personSelectionMode) {
         if (mindMapMode != null) groupedAnalysis="grouped".equals(mindMapMode);
         var endpoint = "full".equals(mode) ? "/analyze" : "/transcribe";
         var body = new LinkedHashMap<String,Object>();
         body.put("fileId", fileId); body.put("visualAnalysisMode", visualAnalysisMode);
         body.put("coarseChangePercent", coarseChangePercent);
         body.put("coarseSampleSeconds", coarseSampleSeconds);
+        if (personSelectionMode != null) body.put("personSelectionMode",personSelectionMode);
         body.put("groupedAnalysis", groupedAnalysis);
         if (mindMapMode != null) body.put("mindMapMode", mindMapMode);
         if (region != null) body.put("ignoredRegion", region);
