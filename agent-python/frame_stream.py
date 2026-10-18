@@ -11,25 +11,7 @@ from model_diagnostics import record_event
 FRAME_PIPELINE_VERSION='sampled-ffmpeg-pts-v2'
 QUEUE_CAPACITY=2
 
-class FrameRunGuard:
- def __init__(self,root):
-  self.root=Path(root) if root is not None else None
-  p=self.root/'active-run.json' if self.root else None
-  self.initial=p.read_bytes() if p and p.is_file() else None
-  self.lock=threading.Lock();self.last_poll=None
- def poll(self):
-  self.check(force=False)
- def check(self,*,force=True):
-  if self.root is None:return
-  with self.lock:
-   now=time.monotonic()
-   if not force and self.last_poll is not None and now-self.last_poll<.2:return
-   if (self.root/'cancel.json').exists():raise CancelledError('analysis_cancelled')
-   try:current=(self.root/'active-run.json').read_bytes()
-   except FileNotFoundError:current=None
-   except OSError:raise CancelledError('analysis_cancelled')
-   if current!=self.initial:raise CancelledError('analysis_cancelled')
-   self.last_poll=now
+from frame_run_guard import FrameRunGuard
 
 
 def _origin(container,stream):
@@ -197,6 +179,8 @@ class SavedFramePipeline:
   self.raw=queue.Queue(capacity);self.ready=queue.Queue(capacity);self.stop=threading.Event()
   self.guard=FrameRunGuard(self.root/'.analysis' if self.root else None)
   self.error=None;self.lock=threading.Lock();self.end=object();self.saved=0;self.queue_peak=0;self.started=time.monotonic();self.threads=[]
+  from person_visibility import enabled
+  self.persist_masks=enabled(person_mode);self.person_masks={};self.mask_saved=0;self.mask_failed=0;self.mask_elapsed=0
  def check(self,*,force=False):
   if self.error is not None:raise self.error
   if self.stop.is_set():raise CancelledError('analysis_cancelled')
@@ -215,12 +199,15 @@ class SavedFramePipeline:
   with self.lock:
    if self.error is None:self.error=error
   self.stop.set()
+ def _mask_selected(self,ms,mask):
+  with self.lock:self.person_masks[ms]=mask
  def _select(self):
   from visual_evidence import _candidate_times
   source=sample_frames(self.path,self.sample_seconds,check=self.check)
   try:
    _candidate_times(self.path,self.threshold,self.sample_seconds,self.regions,self.person_mode,
-     _sample_source=source,_selected=lambda ms,frame:self._put(self.raw,(ms,frame)),_check=self.check)
+     _sample_source=source,_selected=lambda ms,frame:self._put(self.raw,(ms,frame)),_check=self.check,
+     **({"_mask_selected":self._mask_selected} if self.persist_masks else {}))
    self._put(self.raw,self.end)
   except BaseException as error:
    if not self.stop.is_set():self._fail(error)
@@ -232,6 +219,17 @@ class SavedFramePipeline:
     if item is self.end:self._put(self.ready,self.end);return
     ms,frame=item;self.check()
     if self.root is not None:self.save(frame,self.root,ms,_check=lambda:self.check(force=True))
+    if self.persist_masks:
+     with self.lock:mask=self.person_masks.pop(ms,None)
+     if self.root is not None:
+      before=time.monotonic()
+      try:
+       from person_visibility import save_visibility
+       save_visibility(self.root,ms,mask,(int(frame.shape[1]),int(frame.shape[0])),_check=lambda:self.check(force=True));self.mask_saved+=int(mask is not None)
+      except (OSError,ValueError,TypeError) as error:
+       self.mask_failed+=1
+       record_event('stage_failed',self.root.name,operation='person_grouping',stage='mask_persistence',reason='person_mask_write_failed',actual_time_ms=ms,error_type=type(error).__name__)
+      self.mask_elapsed+=round((time.monotonic()-before)*1000)
     self.check();self.saved+=1;self._put(self.ready,item)
   except BaseException as error:
    if not self.stop.is_set():self._fail(error)
@@ -255,4 +253,7 @@ class SavedFramePipeline:
     try:q.get_nowait()
     except queue.Empty:break
   record_event('stage_completed' if kind is None else 'stage_failed',self.root.name if self.root else 'unbound',operation='frame_pipeline',stage='selection',status='completed' if kind is None else 'cancelled' if kind is CancelledError else 'failed',image_count=self.saved,queue_peak=self.queue_peak,elapsed_ms=round((time.monotonic()-self.started)*1000),error_type=kind.__name__ if kind else None,reason=str(error) if kind is not None else None)
+  if self.persist_masks:
+   self.person_masks.clear()
+   record_event('stage_completed',self.root.name if self.root else 'unbound',operation='person_grouping',stage='mask_persistence',image_count=self.saved,accepted_count=self.mask_saved,rejected_count=self.mask_failed,elapsed_ms=self.mask_elapsed)
   return False

@@ -63,7 +63,7 @@ public class TranscriptionController {
     @PostMapping
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file,
                                     @RequestParam(value = "visualAnalysisMode", defaultValue = "both") String visualAnalysisMode,
-                                    @RequestParam(value = "coarseChangePercent", defaultValue = "2") double coarseChangePercent,
+                                    @RequestParam(value = "coarseChangePercent", defaultValue = "3") double coarseChangePercent,
                                     @RequestParam(value = "coarseSampleSeconds", defaultValue = "2") int coarseSampleSeconds,
                                     @RequestParam(value = "ignoredRegion", required = false) String ignoredRegionJson,
                                     @RequestParam(value = "groupedAnalysis", defaultValue = "false") boolean groupedAnalysis,
@@ -87,7 +87,8 @@ public class TranscriptionController {
         if (groupedAnalysis && !"both".equals(visualAnalysisMode))
             return ResponseEntity.badRequest().body(Map.of("error", "grouped_analysis_requires_images"));
         if (coarseChangePercent != 0.5 && coarseChangePercent != 1.0 &&
-            coarseChangePercent != 2.0 && coarseChangePercent != 3.0)
+            coarseChangePercent != 2.0 && coarseChangePercent != 3.0 &&
+            coarseChangePercent != 4.0 && coarseChangePercent != 5.0)
             return ResponseEntity.badRequest().body(Map.of("error", "invalid_coarse_change_percent"));
         if (!List.of(2, 3, 4).contains(coarseSampleSeconds))
             return ResponseEntity.badRequest().body(Map.of("error", "invalid_coarse_sample_seconds"));
@@ -143,7 +144,7 @@ public class TranscriptionController {
     public ResponseEntity<?> upload(MultipartFile file, String visualMode, double threshold) throws IOException {
         return upload(file, visualMode, threshold, true, "source");
     }
-    public ResponseEntity<?> upload(MultipartFile file) throws IOException { return upload(file, "both", 2.0); }
+    public ResponseEntity<?> upload(MultipartFile file) throws IOException { return upload(file, "both", 3.0); }
 
     @GetMapping
     public List<TranscriptionJobStore.HistoryItem> history() { return store.listHistory(); }

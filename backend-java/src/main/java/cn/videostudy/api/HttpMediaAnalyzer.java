@@ -60,7 +60,7 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
 
     @Override
     public TranscriptionController.TranscriptResult analyze(String fileId, String mode, String visualAnalysisMode) {
-        return analyze(fileId, mode, visualAnalysisMode, 2.0);
+        return analyze(fileId, mode, visualAnalysisMode, 3.0);
     }
 
     @Override

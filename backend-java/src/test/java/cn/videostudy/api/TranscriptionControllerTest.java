@@ -73,7 +73,7 @@ class TranscriptionControllerTest {
                 .andExpect(status().isAccepted());
             org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000))
                 .createQueued(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("ocr_only"),
-                    org.mockito.ArgumentMatchers.eq(2.0), org.mockito.ArgumentMatchers.eq(2));
+                    org.mockito.ArgumentMatchers.eq(3.0), org.mockito.ArgumentMatchers.eq(2));
         } finally {
             controller.close();
         }
@@ -94,8 +94,9 @@ class TranscriptionControllerTest {
         }
     }
 
-    @Test
-    void selectedCoarseThresholdIsPersistedAndSentToAnalyzer() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(doubles = {0.5, 1, 2, 3, 4, 5})
+    void selectedCoarseThresholdIsPersistedAndSentToAnalyzer(double percent) throws Exception {
         var store = mock(TranscriptionJobStore.class);
         var actual = new java.util.concurrent.atomic.AtomicReference<Double>();
         MediaAnalyzer analyzer = new MediaAnalyzer() {
@@ -111,14 +112,14 @@ class TranscriptionControllerTest {
         try {
             MockMvcBuilders.standaloneSetup(controller).build().perform(multipart("/api/transcriptions")
                     .file(new MockMultipartFile("file", "lesson.mp4", "video/mp4", new byte[] {1}))
-                    .param("coarseChangePercent", "3"))
+                    .param("coarseChangePercent", Double.toString(percent)))
                 .andExpect(status().isAccepted());
             org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000))
                 .createQueued(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq("both"),
-                    org.mockito.ArgumentMatchers.eq(3.0), org.mockito.ArgumentMatchers.eq(2));
+                    org.mockito.ArgumentMatchers.eq(percent), org.mockito.ArgumentMatchers.eq(2));
             org.mockito.Mockito.verify(store, org.mockito.Mockito.timeout(3000))
                 .complete(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.any());
-            org.junit.jupiter.api.Assertions.assertEquals(3.0, actual.get());
+            org.junit.jupiter.api.Assertions.assertEquals(percent, actual.get());
         } finally {
             controller.close();
         }

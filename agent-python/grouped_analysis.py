@@ -1,4 +1,5 @@
 """Opt-in streaming group analysis; legacy analyze_file stays unchanged by default."""
+from person_visibility import grouping_context
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import logging
@@ -8,7 +9,7 @@ import threading
 from time import perf_counter
 
 
-def analyze_grouped_file(file_id, media_path, keyframe_dir, *, coarse_change_percent=2.0,
+def analyze_grouped_file(file_id, media_path, keyframe_dir, *, coarse_change_percent=3.0,
                          coarse_sample_seconds=2, subtitle_callback_token=None, ignore_region=None, person_selection_mode=None):
     # These imports are lazy: the default pipeline never instantiates the coordinator.
     import analysis as legacy
@@ -44,7 +45,7 @@ def analyze_grouped_file(file_id, media_path, keyframe_dir, *, coarse_change_per
     segment_ids, frame_times = set(), set()
     speech_complete = False
     grouping_complete = False
-    grouper = IncrementalPageGrouper(root, **({'ignore_region': ignore_region} if ignore_region else {}))
+    grouper = IncrementalPageGrouper(root, **({'ignore_region': ignore_region} if ignore_region else {}), **person_options)
     coordinator = ReadyGroupScheduler(root, analyze_group, max_workers=min(5, max(1, int(os.environ.get('PAGE_CONCURRENCY', '5')))),
                                      initial_groups=4, checkpoint=checkpoint, progress=progress, signal=signal,
                                      max_supplements=2)
@@ -147,9 +148,9 @@ def analyze_grouped_file(file_id, media_path, keyframe_dir, *, coarse_change_per
         progress.enter('grouping', 2)
         before = perf_counter()
         final_pages, transitions = timed('pageGrouping', lambda: cached('pageGrouping',
-            {'visuals': visuals, 'speech': transcript['segments']},
+            {'visuals': visuals, 'speech': transcript['segments'], **grouping_context(root,visuals,person_selection_mode)},
             lambda: legacy.group_pages(visuals, root, transcript['segments'],
-                **({'ignore_region': ignore_region} if ignore_region else {}))))
+                **({'ignore_region': ignore_region} if ignore_region else {}), **person_options)))
         if ignore_region:
             final_pages = [dict(p, _visualRegions=ignore_region) for p in final_pages]
         progress.enter('pages', 3, len(final_pages))

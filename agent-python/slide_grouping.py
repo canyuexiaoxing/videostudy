@@ -38,10 +38,11 @@ def _retention(before: list[str], after: list[str]) -> float:
     return matched / len(before)
 
 
-def _preview(path: Path) -> np.ndarray:
+def _preview(path: Path, dimensions=None) -> np.ndarray:
     image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     if image is None:
         raise FileNotFoundError(f"Selected screenshot is missing or unreadable: {path.name}")
+    if dimensions is not None:dimensions[int(path.stem)]=(int(image.shape[1]),int(image.shape[0]))
     return cv2.resize(image, (320, 180), interpolation=cv2.INTER_AREA)
 
 
@@ -170,7 +171,8 @@ def _page(members: list[dict], images: dict[int, np.ndarray], decision: str,
 
 def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *,
                 ask_json: Callable[[dict], dict] | None = None, ignore_region: dict | None = None,
-                on_page: Callable[[dict], None] | None = None) -> tuple[list[dict], list[int]]:
+                on_page: Callable[[dict], None] | None = None, person_selection_mode=None,
+                hold_occluded_tail=False, _previews=None) -> tuple[list[dict], list[int]]:
     """Use local image/OCR evidence; review only uncertain text boundaries."""
     if not visuals:
         return [], []
@@ -181,19 +183,41 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
         raise ValueError("Candidate screenshot timestamps must be unique")
     ignore_region = normalize_region(ignore_region)
     masks = {time: effective_mask(320,180,ignore_region,time) for time in times} if ignore_region else None
-    images = {time: _preview(keyframe_dir / f"{time}.jpg") for time in times}
+    from person_visibility import enabled
+    use_person=enabled(person_selection_mode)
     dimensions = {}
+    images = _previews if _previews is not None else {time: (_preview(keyframe_dir / f"{time}.jpg",dimensions) if use_person else _preview(keyframe_dir / f"{time}.jpg")) for time in times}
+    person=None
+    if use_person:
+        from person_grouping import PersonGrouping
+        person=PersonGrouping(Path(keyframe_dir),dimensions,masks)
+
     if ignore_region:
         filtered=[]
         for frame in frames:
-            original=cv2.imread(str(keyframe_dir / f"{frame['frameTimeMs']}.jpg"),cv2.IMREAD_GRAYSCALE)
-            height,width=original.shape
+            if frame['frameTimeMs'] in dimensions:
+                width,height=dimensions[frame['frameTimeMs']]
+            else:
+                original=cv2.imread(str(keyframe_dir / f"{frame['frameTimeMs']}.jpg"),cv2.IMREAD_GRAYSCALE)
+                height,width=original.shape
             dimensions[frame["frameTimeMs"]]=(width,height)
             filtered.append(filter_frame(frame,ignore_region,frame["frameTimeMs"],width,height))
         frames=filtered
     pages: list[dict] = []
+    protected_times=set()
+    baseline_owner={}
+    if use_person:
+        # Preserve the conservative pre-change representatives when correcting
+        # group boundaries. Reuse decoded previews; never repeat provider calls.
+        baseline,_=group_pages(visuals,keyframe_dir,segments,ask_json=lambda _: {'samePage':False},
+                              ignore_region=ignore_region,person_selection_mode='off',_previews=images)
+        protected_times.update(t for p in baseline for t in p['representativeFrameTimesMs'])
+        baseline_owner={t:index for index,p in enumerate(baseline) for t in p['memberFrameTimesMs']}
+    pending=[]
     def publish(members, decision, reason):
         page = _page(members, images, decision, reason, len(pages) + 1, masks)
+        protect=protected_times&set(page['memberFrameTimesMs'])
+        if protect:page['representativeFrameTimesMs']=sorted(set(page['representativeFrameTimesMs'])|protect)
         pages.append(page)
         if on_page is not None:
             from copy import deepcopy
@@ -203,11 +227,29 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
     decision, reason = "first_page", "first visible page"
     reviews = 0
     pending_transition = False
+    def flush_pending(merge):
+        nonlocal members,pending,decision,reason
+        if not pending:return
+        if merge:
+            protected_times.update(_page(members,images,decision,reason,0,masks)['representativeFrameTimesMs'])
+            protected_times.update(f['frameTimeMs'] for f in pending)
+            members.extend(pending)
+        else:
+            # Unresolved visibility is not evidence of a page change. Fall back
+            # to the original conservative boundaries instead of one page/frame.
+            # Keep the last group open so a bounded flush cannot create chunks.
+            for f in pending:
+                if members and baseline_owner.get(f['frameTimeMs'])!=baseline_owner.get(members[-1]['frameTimeMs']):
+                    publish(members,decision,reason);members=[]
+                    decision,reason='auto_new_page','person occlusion unresolved; original conservative boundary'
+                members.append(f)
+        pending=[]
     for current in frames:
         time_ms = current["frameTimeMs"]
         current_image = images[time_ms]
         mask = masks[time_ms] if masks is not None else None
         blank = _blank(current, current_image, mask)
+        if person is not None and person.has_person(time_ms):blank=False
         if blank and members and masks is not None:
             # A moved mask may hide every visible lesson line. Confirm that
             # the page anchor had content in the shared visible area before
@@ -220,6 +262,7 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
             if not shared.any() or _blank(common_anchor,images[anchor_frame["frameTimeMs"]],shared):
                 blank = False
         if blank:
+            flush_pending(False)
             transitions.append(time_ms)
             pending_transition = True
             continue
@@ -245,6 +288,21 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
             boundary = _boundary(compare_anchor, compare_previous, compare_current, images[anchor["frameTimeMs"]],
                                  images[previous["frameTimeMs"]], current_image, comparison_mask)
             boundary_reason = "local OCR and frame comparison"
+            masked=None
+            if person is not None:
+                masked=person.decide(compare_anchor,compare_previous,compare_current,images,comparison_mask,boundary,_boundary,_texts,_retention,_normalized)
+                if masked is not None:boundary=masked['boundary'];boundary_reason=masked['reason']
+            if boundary=='defer':
+                pending.append(current)
+                from person_grouping import MAX_PENDING_FRAMES
+                if len(pending)>MAX_PENDING_FRAMES:flush_pending(False)
+                continue
+            if boundary=='same' and pending:flush_pending(True)
+            elif pending:
+                flush_pending(False)
+            if masked is not None and boundary=='same':
+                if members:protected_times.update(_page(members,images,decision,reason,0,masks)['representativeFrameTimesMs'])
+                protected_times.add(time_ms)
             if boundary == "uncertain":
                 boundary = "new"
                 boundary_reason = "uncertain boundary; conservatively split"
@@ -267,13 +325,19 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
                     except (ValueError, KeyError, OSError, TimeoutError):
                         pass
             if boundary == "new":
-                publish(members, decision, reason)
+                if members:publish(members, decision, reason)
                 members = []
                 decision = "agent_new_page" if boundary_reason.startswith("text Agent") else "auto_new_page"
                 reason = boundary_reason
         members.append(current)
+    if pending:
+        if hold_occluded_tail:
+            publish([*members,*pending],decision,'person occlusion pending; provisional tail')
+            members=[];pending=[]
+        else:flush_pending(False)
     if members:
         publish(members, decision, reason)
+    if person is not None:person.finish(pages)
     return pages, transitions
 
 
@@ -284,19 +348,22 @@ class IncrementalPageGrouper:
     later revise these provisional pages with transcript and boundary reviews.
     """
 
-    def __init__(self, keyframe_dir: Path, ignore_region=None):
+    def __init__(self, keyframe_dir: Path, ignore_region=None, person_selection_mode=None):
         self.keyframe_dir = Path(keyframe_dir)
         self.ignore_region = normalize_region(ignore_region)
+        self.person_selection_mode=person_selection_mode
         self._pending = []
         self._last_time = None
         self._page_count = 0
         self._finished = False
 
-    def _groups(self):
+    def _groups(self,final=False):
+        from person_visibility import enabled
+        options={"person_selection_mode":self.person_selection_mode,"hold_occluded_tail":not final} if enabled(self.person_selection_mode) else ({"person_selection_mode":"off"} if self.person_selection_mode=="off" else {})
         return group_pages(self._pending, self.keyframe_dir, [],
                            ask_json=lambda _: {"samePage": False,
                                                "reason": "local incremental boundary"},
-                           ignore_region=self.ignore_region)
+                           ignore_region=self.ignore_region,**options)
 
     def _number(self, pages):
         for page in pages:
@@ -334,7 +401,7 @@ class IncrementalPageGrouper:
     def finish(self):
         if self._finished:
             return []
-        pages, _ = self._groups()
+        pages, _ = self._groups(final=True)
         for page in pages:
             page["_closedAtMs"] = None
         self._finished = True

@@ -89,7 +89,7 @@ class AnalyzeRequest(BaseModel):
 class TranscribeRequest(BaseModel):
     fileId: str
     visualAnalysisMode: str = "both"
-    coarseChangePercent: float = 2.0
+    coarseChangePercent: float = 3.0
     coarseSampleSeconds: Literal[2, 3, 4] = 2
     subtitleCallbackToken: str | None = None
     personSelectionMode: Literal['off', 'adjacent'] | None = None

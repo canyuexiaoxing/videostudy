@@ -28,7 +28,7 @@ PREVIEW_WIDTH = 320
 PREVIEW_HEIGHT = 180
 FRAME_BYTES = PREVIEW_WIDTH * PREVIEW_HEIGHT
 OCR_MODEL_ID = "PP-OCRv6_medium"
-PAGE_CHANGE_FRACTION = 0.02
+PAGE_CHANGE_FRACTION = 0.03
 PROGRESS_FRACTION = 0.001
 MAX_PROGRESS_INTERVAL_MS = 30_000
 
@@ -43,7 +43,7 @@ def _has_video(path: Path) -> bool:
 
 def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACTION,
                      sample_seconds: int = SAMPLE_SECONDS, ignore_region: dict | None = None,
-                     person_selection_mode: str | None = None, *, _sample_source=None, _selected=None, _check=None) -> list[int]:
+                     person_selection_mode: str | None = None, *, _sample_source=None, _selected=None, _check=None, _mask_selected=None) -> list[int]:
     if sample_seconds not in (2, 3, 4):
         raise ValueError("sample_seconds must be 2, 3 or 4")
     person_config = person_settings(person_selection_mode)
@@ -100,8 +100,10 @@ def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACT
     previous_ms = 0
     chosen: list[int] = []
     originals = {}
+    selected_masks = {}
     def choose(ms):
         if chosen and ms<=chosen[-1]:return
+        if _mask_selected is not None:_mask_selected(ms, selected_masks.get(ms))
         if _selected is not None:_selected(ms, originals[ms])
         chosen.append(ms)
     last_chosen_frame = None
@@ -169,6 +171,7 @@ def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACT
             if original is not None:
                 keep_times={previous_ms, selector.pending_time if selector is not None else None}
                 originals={t:f for t,f in originals.items() if t in keep_times}
+                selected_masks={t:m for t,m in selected_masks.items() if t in keep_times}
                 originals[time_ms]=original
             check_cancel()
             if person_worker is not None:
@@ -177,6 +180,7 @@ def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACT
                     person_mask = person_worker.predict(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR))
                     model_elapsed += round((perf_counter()-before)*1000)
                     person_frames += int(person_mask.any())
+                    if _mask_selected is not None:selected_masks[time_ms]=person_mask.copy()
                     keep = selector.observe(frame, mask if mask is not None else np.ones_like(frame,dtype=bool), person_mask, time_ms)
                     if keep:
                         if selector.preserve_time is not None and (not chosen or selector.preserve_time>chosen[-1]):choose(selector.preserve_time)

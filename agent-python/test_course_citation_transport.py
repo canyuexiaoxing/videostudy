@@ -135,14 +135,11 @@ class CitationTransportTests(unittest.TestCase):
   calls,mock=self.duplicate_wire([text,json.dumps(correction)])
   with mock:result=course._deepseek_course_json(self.payload,self.images)
   self.assertEqual(result,self.raw('frame_2274021'));self.assertEqual(len(calls),2)
- def test_conflicting_duplicate_does_not_request_model_rewrite(self):
-  from course_json import CourseJsonFormatError
-  text=json.dumps(self.raw('img_1')).replace('"imageIds": ["img_1"]','"imageIds": ["img_1"], "imageIds": []')
-  calls,mock=self.duplicate_wire([text])
-  with mock:
-   with self.assertRaisesRegex(CourseJsonFormatError,'root.children'):
-    course._deepseek_course_json(self.payload,self.images)
-  self.assertEqual(len(calls),1)
+ def test_conflicting_duplicate_gets_one_lossless_same_conversation_repair(self):
+  raw=self.raw('img_1');text=json.dumps(raw).replace('"imageIds": ["img_1"]','"imageIds": ["img_1"], "imageIds": []')
+  calls,mock=self.duplicate_wire([text,json.dumps(raw)])
+  with mock:result=course._deepseek_course_json(self.payload,self.images)
+  self.assertEqual(result,self.raw('frame_2274021'));self.assertEqual(len(calls),2)
  def test_duplicate_recovery_never_salvages_truncated_finish_reason(self):
   calls,mock=self.duplicate_wire(['{"children":[],"children":[]}'],finish='length')
   with mock:
@@ -158,7 +155,7 @@ class CitationTransportTests(unittest.TestCase):
   def transport(*a,**kw):value=Response(contents[len(calls)]);calls.append(1);return value
   with patch('course_mind_map.urlopen',side_effect=transport):result=course._deepseek_course_json(self.payload,self.images)
   self.assertEqual(result,self.raw('frame_2274021'));self.assertEqual(len(calls),2)
-  text=(self.root/'logs/model-events.jsonl').read_text();self.assertIn('json_repair',text);self.assertNotIn('PRIVATE_METHOD',text);self.assertNotIn('PRIVATE_COURSE',text)
+  text=(self.root/'logs/model-events.jsonl').read_text();self.assertIn('reply_repair',text);self.assertNotIn('PRIVATE_METHOD',text);self.assertNotIn('PRIVATE_COURSE',text)
  def test_missing_leaf_citation_is_added_without_modifying_tree(self):
   raw=self.raw('img_1');raw['children'][0].update(sourceIds=[],imageIds=[])
   patch_reply={'corrections':[],'additions':[{'path':'children[0]','sourceIds':['t_1'],'imageIds':['img_1']}]}

@@ -25,7 +25,7 @@ public class TranscriptionJobStore {
     }
 
     public void createQueued(String id, String visualAnalysisMode) {
-        createQueued(id, visualAnalysisMode, 2.0);
+        createQueued(id, visualAnalysisMode, 3.0);
     }
 
     public void createQueued(String id, String visualAnalysisMode, double coarseChangePercent) {
@@ -111,7 +111,7 @@ public class TranscriptionJobStore {
 
     public double findCoarseChangePercent(String id) {
         return jdbc.query("SELECT coarse_change_percent FROM transcription_jobs WHERE id = ?",
-            (row, number) -> row.getDouble(1), id).stream().findFirst().orElse(2.0);
+            (row, number) -> row.getDouble(1), id).stream().findFirst().orElse(3.0);
     }
 
     public void markProcessing(String id) {

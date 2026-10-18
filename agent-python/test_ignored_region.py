@@ -126,5 +126,5 @@ class IgnoredRegionTests(unittest.TestCase):
             cache.run('transcription',{},lambda:{'language':'zh','segments':[]})
             with patch.dict(os.environ,{'MEDIA_TEMP_DIR':directory,'KEYFRAME_DIR':str(Path(directory)/'frames')}), patch('analysis.transcribe_file',side_effect=AssertionError('legacy checkpoint must be reused')), patch('analysis.VisualOcrWorker') as worker, patch('analysis.media_duration_ms',return_value=10000), patch('analysis.review_visual_coverage',return_value=([],{'status':'not_applicable'})), patch('analysis.group_pages',return_value=([],[])), patch('analysis.safe_overview',return_value={'status':'empty'}), patch('analysis.build_mind_map',return_value={'status':'empty'}):
                 worker.return_value.__enter__.return_value.analyze.return_value=[]
-                result=analysis.analyze_file(file_id)
+                result=analysis.analyze_file(file_id,coarse_change_percent=2.0)
                 self.assertEqual(result['reusedCheckpoints']['transcription'],1)

@@ -133,7 +133,7 @@ def build_direct_course_map(segments, pages, visuals, keyframe_dir, *, ask_json=
         except Exception as error:
             course.record_event('stage_failed',Path(keyframe_dir).name,operation='direct_map',stage=stage,error_type=type(error).__name__)
             # A limit/provider failure is explicit. Never retry using an image subset.
-            return result('课程知识导图', [], [], [f'整课直接导图失败（全部代表图单次请求，未分批或裁减）：{type(error).__name__}: {error}'], True)
+            return result('课程知识导图', [], [], [f'整课直接导图失败（整课材料完整提交，未分批或裁减）：{type(error).__name__}: {error}'], True)
     inputs = dict(promptVersion=PROMPT_VERSION, payload=payload, imageSha256=hashes,
                   model=os.environ.get('DEEPSEEK_MODEL', 'deepseek-flash'),
                   endpoint=os.environ.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com'))

@@ -123,22 +123,23 @@ class AnalysisTest(unittest.TestCase):
             self.assertIsNone(result["imageModelId"])
             self.assertEqual(result["visualAnalysisMode"], "ocr_only")
             worker.assert_called_once()
-            self.assertEqual(worker.call_args.kwargs["page_change_fraction"], 0.02)
+            self.assertEqual(worker.call_args.kwargs["page_change_fraction"], 0.03)
 
     def test_selected_threshold_reaches_visual_worker(self):
-        with tempfile.TemporaryDirectory() as directory:
-            file_id = str(uuid4())
-            (Path(directory) / file_id).write_bytes(b"fake media")
-            with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": str(Path(directory) / "keyframes")}), \
-                 patch("analysis.transcribe_file", return_value={"language": "zh", "segments": []}), \
-                 patch("analysis.VisualOcrWorker") as worker, \
-                 patch("analysis.media_duration_ms", return_value=3000), \
-                 patch("analysis.review_visual_coverage", return_value=([], {"status": "not_applicable"})), \
-                 patch("analysis.group_pages", return_value=([], [])):
-                worker.return_value.__enter__.return_value.analyze.return_value = []
-                result = analyze_file(file_id, coarse_change_percent=3)
-            self.assertEqual(worker.call_args.kwargs["page_change_fraction"], 0.03)
-            self.assertEqual(result["coarseChangePercent"], 3)
+        for threshold in (0.5, 1, 2, 3, 4, 5):
+            with tempfile.TemporaryDirectory() as directory:
+                file_id = str(uuid4())
+                (Path(directory) / file_id).write_bytes(b"fake media")
+                with patch.dict(os.environ, {"MEDIA_TEMP_DIR": directory, "KEYFRAME_DIR": str(Path(directory) / "keyframes")}), \
+                     patch("analysis.transcribe_file", return_value={"language": "zh", "segments": []}), \
+                     patch("analysis.VisualOcrWorker") as worker, \
+                     patch("analysis.media_duration_ms", return_value=3000), \
+                     patch("analysis.review_visual_coverage", return_value=([], {"status": "not_applicable"})), \
+                     patch("analysis.group_pages", return_value=([], [])):
+                    worker.return_value.__enter__.return_value.analyze.return_value = []
+                    result = analyze_file(file_id, coarse_change_percent=threshold)
+                self.assertEqual(worker.call_args.kwargs["page_change_fraction"], threshold / 100)
+                self.assertEqual(result["coarseChangePercent"], threshold)
 
     def test_both_sends_only_page_representatives(self):
         with tempfile.TemporaryDirectory() as directory:

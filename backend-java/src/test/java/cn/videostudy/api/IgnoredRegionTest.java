@@ -43,8 +43,8 @@ class IgnoredRegionTest {
   try {
    var mvc=MockMvcBuilders.standaloneSetup(controller).build();
    mvc.perform(multipart("/api/transcriptions").file(new MockMultipartFile("file","lesson.mp4","video/mp4",new byte[]{1})).param("ignoredRegion",REGION)).andExpect(status().isAccepted());
-   verify(store).createQueued(anyString(),eq("both"),eq(2.0),eq(2),eq(region));
-   verify(analyzer,timeout(3000)).analyze(anyString(),eq("full"),eq("both"),eq(2.0),eq(2),isNull(),eq(region));
+   verify(store).createQueued(anyString(),eq("both"),eq(3.0),eq(2),eq(region));
+   verify(analyzer,timeout(3000)).analyze(anyString(),eq("full"),eq("both"),eq(3.0),eq(2),isNull(),eq(region));
    var id=UUID.randomUUID().toString();Files.write(directory.resolve(id),new byte[]{1});
    when(store.find(id)).thenReturn(Optional.of(new TranscriptionController.TranscriptionJob(id,"failed",null,"failed")));
    when(store.markQueuedIfFailed(id)).thenReturn(true);when(store.findVisualAnalysisMode(id)).thenReturn("both");

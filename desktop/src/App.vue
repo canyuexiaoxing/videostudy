@@ -280,7 +280,7 @@ const groupedAnalysis = computed(() => mindMapMode.value === 'grouped')
 const mapModes = [{ value: 'direct', label: '整课图文直生成（默认）' }, { value: 'grouped', label: '分组后汇总' }] as const
 watch(mindMapMode, () => { visualAnalysisMode.value = 'both' })
 const visualAnalysisMode = ref<'ocr_only' | 'both'>('both')
-const coarseChangePercent = ref('2')
+const coarseChangePercent = ref('3')
 const coarseSampleSeconds = ref(2)
 const advancedOpen = ref(false)
 const review = ref<Review | null>(null)
@@ -1155,11 +1155,12 @@ onUnmounted(() => {
           <div class="advanced-row">
             <label for="coarse-change-percent">粗选画面变化阈值</label>
             <span class="help-tooltip" tabindex="0" aria-label="粗选画面变化阈值说明">?
-              <span role="tooltip">按所选采样间隔比较画面。相邻画面变化区域超过所选比例时，保留候选截图；渐进书写另有保留规则。默认 2%。数值越低通常候选图越多，越不容易漏掉小变化；越高则候选图越少，但可能漏掉新画面。此值只影响第一轮粗选。</span>
+              <span role="tooltip">按所选采样间隔比较画面。相邻画面变化区域超过所选比例时，保留候选截图；渐进书写另有保留规则。默认 3%。数值越低通常候选图越多，越不容易漏掉小变化；越高则候选图越少，但可能漏掉新画面。此值只影响第一轮粗选。</span>
             </span>
             <select id="coarse-change-percent" v-model="coarseChangePercent">
               <option value="0.5">0.5%</option><option value="1">1%</option>
-              <option value="2">2%（默认）</option><option value="3">3%</option>
+              <option value="2">2%</option><option value="3">3%（默认）</option>
+              <option value="4">4%</option><option value="5">5%</option>
             </select>
           </div>
           </div>

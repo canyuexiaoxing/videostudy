@@ -1,4 +1,5 @@
 """Local media preparation followed by one direct whole-course synthesis."""
+from person_visibility import grouping_context
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from time import perf_counter
@@ -6,7 +7,7 @@ import os
 import logging
 
 
-def analyze_direct_file(file_id, media_path, keyframe_dir, *, coarse_change_percent=2.0,
+def analyze_direct_file(file_id, media_path, keyframe_dir, *, coarse_change_percent=3.0,
                         coarse_sample_seconds=2, subtitle_callback_token=None, ignore_region=None, person_selection_mode=None):
     import analysis as legacy
     person_context = legacy.person_selection_context(person_selection_mode) if person_selection_mode is not None else legacy.person_selection_context()
@@ -75,9 +76,9 @@ def analyze_direct_file(file_id, media_path, keyframe_dir, *, coarse_change_perc
         raise RuntimeError('Coverage review incomplete; retry before direct synthesis')
     progress.enter('grouping', 2)
     pages, transitions = cached('directPageGrouping', {'visuals': visuals, 'speech': transcript['segments'],
-        'version': legacy.GROUPING_VERSION}, lambda: legacy.group_pages(visuals, root, transcript['segments'],
+        'version': legacy.GROUPING_VERSION, **grouping_context(root,visuals,person_selection_mode)}, lambda: legacy.group_pages(visuals, root, transcript['segments'],
         ask_json=lambda _: {'samePage': False, 'reason': 'local direct boundary; conservatively split'},
-        **({'ignore_region': ignore_region} if ignore_region else {})))
+        **({'ignore_region': ignore_region} if ignore_region else {}), **person_options))
     progress.enter('materials', 4, 1)
     before = perf_counter()
     mind_map = build_direct_course_map(transcript['segments'], pages, visuals, root,

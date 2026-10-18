@@ -23,10 +23,10 @@ class SubtitlePipelineTest(unittest.TestCase):
         fid = str(uuid4())
         with patch('app.analyze_file', return_value={}) as run:
             analyze(TranscribeRequest(fileId=fid, subtitleCallbackToken='private-course-token'))
-        self.assertEqual(run.call_args.args, (fid, 'both', 2.0, 'private-course-token'))
+        self.assertEqual(run.call_args.args, (fid, 'both', 3.0, 'private-course-token'))
         with patch('app.analyze_file', return_value={}) as run:
             analyze(TranscribeRequest(fileId=fid))
-        self.assertEqual(run.call_args.args, (fid, 'both', 2.0))
+        self.assertEqual(run.call_args.args, (fid, 'both', 3.0))
 
     def test_subtitle_source_is_scheduled_after_page_understanding(self):
         with tempfile.TemporaryDirectory() as directory:

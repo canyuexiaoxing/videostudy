@@ -23,13 +23,13 @@ class PersonSelectionTest {
  @Test void uploadAndRetryKeepSelectedMode() throws Exception {
   var store=mock(TranscriptionJobStore.class);var agent=mock(MediaAnalyzer.class);
   var fixture=new GroupedAnalysisTest();var result=fixture.result(fixture.map(fixture.image(1200)));
-  when(agent.analyze(anyString(),eq("full"),eq("both"),eq(2.0),eq(2),isNull(),isNull(),eq(false),eq("legacy"),eq("adjacent"))).thenReturn(result);
+  when(agent.analyze(anyString(),eq("full"),eq("both"),anyDouble(),eq(2),isNull(),isNull(),eq(false),eq("legacy"),eq("adjacent"))).thenReturn(result);
   var controller=new TranscriptionController(directory.toString(),"full",store,agent);
   try {
    var mvc=MockMvcBuilders.standaloneSetup(controller).build();
    mvc.perform(multipart("/api/transcriptions").file(new MockMultipartFile("file","lesson.mp4","video/mp4",new byte[]{1})).param("personSelectionMode","adjacent")).andExpect(status().isAccepted());
    verify(store).savePersonSelectionMode(anyString(),eq("adjacent"));
-   verify(agent,timeout(3000)).analyze(anyString(),eq("full"),eq("both"),eq(2.0),eq(2),isNull(),isNull(),eq(false),eq("legacy"),eq("adjacent"));
+   verify(agent,timeout(3000)).analyze(anyString(),eq("full"),eq("both"),eq(3.0),eq(2),isNull(),isNull(),eq(false),eq("legacy"),eq("adjacent"));
    var id=UUID.randomUUID().toString();Files.write(directory.resolve(id),new byte[]{1});
    when(store.find(id)).thenReturn(Optional.of(new TranscriptionController.TranscriptionJob(id,"failed",null,"failed")));when(store.markQueuedIfFailed(id)).thenReturn(true);
    when(store.findVisualAnalysisMode(id)).thenReturn("both");when(store.findCoarseChangePercent(id)).thenReturn(2.0);when(store.findCoarseSampleSeconds(id)).thenReturn(2);when(store.findPersonSelectionMode(id)).thenReturn("adjacent");

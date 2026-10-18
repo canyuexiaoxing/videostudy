@@ -19,7 +19,8 @@ def selection_context(selection_mode=None):
   try:
    s=Path(path).stat();return [s.st_size,s.st_mtime_ns]
   except OSError:return None
- return {'personSelection':dict(config,modelRevision=revision(config['model']),runtimeRevision=revision(config['python']),libraryRevision=revision(config['libraryRoot']))}
+ from person_visibility import MASK_VERSION
+ return {'personSelection':dict(config,modelRevision=revision(config['model']),runtimeRevision=revision(config['python']),libraryRevision=revision(config['libraryRoot']),groupingMaskVersion=MASK_VERSION)}
 
 class VisibilitySelector:
  """Per-pixel comparison memory, never a synthesized screenshot or OCR source."""

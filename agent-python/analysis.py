@@ -1,4 +1,5 @@
 """Run all media-analysis stages while the uploaded file is still available."""
+from person_visibility import grouping_context
 
 import os
 from pathlib import Path
@@ -35,7 +36,7 @@ def media_duration_ms(path: Path) -> int:
 
 
 def analyze_file(file_id: str, visual_analysis_mode: str = "both",
-                 coarse_change_percent: float = 2.0,
+                 coarse_change_percent: float = 3.0,
                  subtitle_callback_token: str | None = None, coarse_sample_seconds: int = 2,
                  ignore_region: dict | None = None, grouped_analysis: bool = False, mind_map_mode: str | None = None, person_selection_mode: str | None = None) -> dict:
     if mind_map_mode is not None:
@@ -49,8 +50,8 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
     UUID(file_id)
     if visual_analysis_mode not in ("ocr_only", "both"):
         raise ValueError("visualAnalysisMode must be ocr_only or both")
-    if coarse_change_percent not in (0.5, 1.0, 2.0, 3.0):
-        raise ValueError("coarseChangePercent must be 0.5, 1, 2 or 3")
+    if coarse_change_percent not in (0.5, 1.0, 2.0, 3.0, 4.0, 5.0):
+        raise ValueError("coarseChangePercent must be 0.5, 1, 2, 3, 4 or 5")
     media_root = Path(os.environ.get("MEDIA_TEMP_DIR", "../.local/uploads")).resolve()
     media_path = media_root / file_id
     if not media_path.is_file():
@@ -126,8 +127,8 @@ def analyze_file(file_id: str, visual_analysis_mode: str = "both",
             timings["coverageReview"] = round((perf_counter() - before) * 1000)
         progress.enter("grouping", 2)
         page_groups, transition_times = timed("pageGrouping", cached, 'pageGrouping',
-            {'visuals': visuals, 'speech': transcript['segments']},
-            lambda: group_pages(visuals, keyframe_dir, transcript['segments'], **({'ignore_region': ignore_region} if ignore_region else {})))
+            {'visuals': visuals, 'speech': transcript['segments'], **grouping_context(keyframe_dir,visuals,person_selection_mode)},
+            lambda: group_pages(visuals, keyframe_dir, transcript['segments'], **({'ignore_region': ignore_region} if ignore_region else {}), **person_options))
         before = perf_counter()
         progress.enter("pages", 3, len(page_groups))
         if page_groups:

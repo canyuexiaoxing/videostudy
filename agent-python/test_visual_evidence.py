@@ -58,7 +58,7 @@ class VisualEvidenceTest(unittest.TestCase):
                 writer.write(image)
             writer.release()
 
-            evidence = analyze_visuals(path, recognize=lambda image: [{"text": "slide", "score": 1.0, "polygon": []}])
+            evidence = analyze_visuals(path, page_change_fraction=0.02, recognize=lambda image: [{"text": "slide", "score": 1.0, "polygon": []}])
 
             self.assertEqual(len(evidence), 3)
             self.assertEqual([item["frameTimeMs"] for item in evidence], [2000, 6000, 10000])
