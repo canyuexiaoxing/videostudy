@@ -5,7 +5,7 @@ from uuid import uuid4
 import cv2,numpy as np
 from person_selection import MODEL_SHA256
 MASK_VERSION='selected-person-mask-v1'
-GROUPING_VERSION='person-page-group-v2'
+GROUPING_VERSION='person-page-group-v3'
 
 def enabled(mode=None):
  from person_selection import settings

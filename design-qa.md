@@ -1,29 +1,32 @@
-# 学习工具侧栏设计验收
+# Framewise approved ambient background QA — 2026-10-18
 
-- 用户截图：`C:\Users\ADMINI~1\AppData\Local\Temp\codex-clipboard-07dea9a4-5a93-4b8d-b6e9-9e7c57a47861.png`（2559 × 1196，初始状态右侧整块留白）。
-- 当前实现：`E:\workp\videostudy\.local\previews\sidebar-empty-2559.png`（相同视口，未选视频）；`E:\workp\videostudy\.local\previews\mind-map-preview-2559.png`（读取已有分析并关联本地视频）；`E:\workp\videostudy\.local\previews\mind-map-preview-390.png`（窄屏）。
+Scope: exterior background only; retain existing application layout and functionality.
 
-## 关键问题与处理
+Source: selected generated image exec-996cb081-8125-4b9f-96e3-9e98cdcbab21.png (1505×1045).
+Implementation: .local/qa/ambient-motion/start.png (1440×1000); same empty-course state and near-identical aspect ratio. Both images inspected together, accounting for source scaling.
 
-原页面只有分析完成后才挂载右侧导图，初次打开时播放器右边是一大片空白。现在右侧学习工具始终显示，含“思维导图、字幕原文、课件画面、随手笔记”四个选项；点击即可切换。同一时刻只显示所选内容，左侧视频持续播放。没有分析结果时，各页显示对应的使用说明，不留空白页。
+- Typography: existing native fonts, weights and content retained. Header helper text darkened to #304466 for readability on blue.
+- Layout: original columns, spacing, cards, radii and tabs retained. No layout motion; verified player bounding box stable between animation positions.
+- Colors: clearly visible cornflower blue upper left, lavender right/lower edges, pale diagonal light match the selected direction. Opaque white cards retain readable foreground contrast.
+- Asset fidelity: generated standalone background in desktop/public/framewise-ambient.png, applied directly as an image; no UI baked into asset. Existing logo and player preserved.
+- Copy: existing copy retained without generated text artifacts.
+- Interaction: tabs clickable; no page errors; hidden pauses; reduced-motion static; 390px no overflow.
+- Expected difference: moving background cloud positions vary by keyframe; original application typography/layout intentionally retained instead of reproducing raster mockup distortions.
 
-- 思维导图：保留展开、聚焦、节点出处及点击回放；切换至其他选项再返回时画布保持可用。
-- 字幕原文：按关键词搜索，点击转写句子跳转本地视频。
-- 课件画面：按页或旧任务的候选画面列出时间与文字；点击跳转。旧任务截图已经清理时说明这一情况。
-- 随手笔记：把笔记与当前播放时间关联，保存在本机浏览器；可回放、删除。此功能是手写笔记，没有冒充未实现的 AI 问答或错因诊断。
-- 视频下面保留分析设置及可展开的完整分析记录，避免原始证据与侧栏重复抢占主要视线。
+No outstanding P0/P1/P2 findings in scoped change.
 
-## 视觉与布局
+final result: passed
 
-- 桌面沿用用户选定的左大视频、右学习工具布局；2559px 宽屏利用完整可用宽度，右侧不再悬空。
-- 白色界面、深蓝文字、蓝色交互重点；导图分支保留多色。标题、选项和内容分层明确。
-- 390px 时视频与工具纵向排列，无横向溢出。
-- 真实视频和真实分析结果进入各选项；未把示意课程内容静态写入产品。
 
-## 验证
+## Three appearance switch — 2026-10-18
 
-- `npm run build`：通过。
-- `node --test src/mindMap.test.mjs`：5 项通过。
-- 浏览器实测：四个选项切换、字幕搜索、课件时间跳转、笔记保存/删除、导图节点跳转至约 00:34；2559px 与 390px 均无横向溢出，运行时错误 `[]`。
+References: selected acrylic mockup exec-8860196c-05b2-4f44-a1fa-bbdaaa1a05f0.png; blue screenshot codex-clipboard-522dbcf4-4118-4252-8b45-f99f4bbcd8bd.png; original pale screenshot codex-clipboard-71c297a2-a099-49e3-97d2-903a3927062d.png. Viewports normalized by aspect ratio; preserve existing responsive layout rather than reference window size.
+Rendered comparison: .local/qa/appearance-switch/{acrylic,blue,classic}.png. All three opened and inspected.
+- Typography/copy: existing foreground remains opaque; header control follows existing sizes, no content changes.
+- Layout: appearance control at top beside upload; original columns and cards retained, bounding box unchanged during switching.
+- Colors/material: acrylic large surfaces rgba white .44 with 20px backdrop blur, translucent inner surfaces and white edge. Blue retains opaque white cards over approved generated background. Classic hides colored artwork over pale base.
+- Assets: original logo and player retained, approved background image reused; no text rendered as images.
+- Behavior: clean profile blue by default; three options, remembered across reload, intermediate color checked during 450ms transition, system reduced motion disables transition, mobile390 no horizontal overflow, tab interactions pass, no page errors.
+- Minor intentional variation: native app controls/text are preserved instead of raster mockup artifacts; selected style persists after first use.
 
-结论：用户指出的初始留白和缺少切换选项已解决。旧任务课件原图已经被清理时，只能显示候选图文字和时间，这是历史数据限制。
+final result: passed

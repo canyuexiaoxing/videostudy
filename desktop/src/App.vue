@@ -80,6 +80,25 @@ function readStudyNotes(): StudyNote[] {
 }
 
 const apiBase = 'http://127.0.0.1:18080/api'
+type WorkspaceAppearance = 'acrylic' | 'blue' | 'classic'
+const appearanceOptions: { value: WorkspaceAppearance; label: string }[] = [
+  { value: 'acrylic', label: '亚克力' }, { value: 'blue', label: '蓝紫' }, { value: 'classic', label: '简洁' },
+]
+function loadWorkspaceAppearance(): WorkspaceAppearance {
+  try {
+    const value = localStorage.getItem('framewise:appearance:v1')
+    return value === 'acrylic' || value === 'classic' ? value : 'blue'
+  } catch { return 'blue' }
+}
+const workspaceAppearance = ref<WorkspaceAppearance>(loadWorkspaceAppearance())
+watch(workspaceAppearance, value => {
+  try { localStorage.setItem('framewise:appearance:v1', value) } catch { /* Keep switching available when browser storage is unavailable. */ }
+})
+const ambientHidden = ref(document.hidden)
+function syncAmbientVisibility() { ambientHidden.value = document.hidden }
+onMounted(() => document.addEventListener('visibilitychange', syncAmbientVisibility))
+onUnmounted(() => document.removeEventListener('visibilitychange', syncAmbientVisibility))
+
 const video = ref<HTMLVideoElement | null>(null)
 const transcriptList = ref<HTMLElement | null>(null)
 const sidebarTranscriptList = ref<HTMLElement | null>(null)
@@ -981,11 +1000,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="study-app">
+  <main class="study-app" :data-appearance="workspaceAppearance" :class="{ 'ambient-paused': ambientHidden || isAnalysisPending || generatingMindMap || compatibilityBusy }">
     <header class="app-header">
-      <div class="brand"><span class="brand-symbol"><StudyIcon name="play" /></span><span class="brand-video">Video</span><span>Study</span></div>
+      <div class="brand" aria-label="Framewise"><img class="brand-symbol" src="/framewise.svg" alt="" width="35" height="35" /><span>Framewise</span></div>
       <div class="header-context"><strong>沉浸式学习台</strong><span class="header-divider" aria-hidden="true"></span><span class="header-file">{{ filename || currentHistoryName || '选择一段课程视频，开始建立知识导图' }}</span></div>
       <div class="header-actions">
+        <div class="appearance-switch" role="group" aria-label="界面外观">
+          <button v-for="option in appearanceOptions" :key="option.value" type="button" :aria-pressed="workspaceAppearance === option.value" @click="workspaceAppearance = option.value">{{ option.label }}</button>
+        </div>
         <span v-if="mindMap?.status === 'completed'" class="ready-indicator">已生成 {{ mindMap.root.children.length }} 个主题</span>
         <label class="file-picker"><StudyIcon name="upload" />选择本地视频 <input type="file" accept="video/*,audio/*" @change="chooseVideo" /></label>
         <button v-if="selectedFile && !transcript.length" class="run" type="button" :disabled="isAnalysisPending" @click="runTranscription">{{ isAnalysisPending ? '处理中…' : '开始分析' }}</button>
@@ -1113,7 +1135,7 @@ onUnmounted(() => {
           <button v-if="subtitleCourseId" type="button" class="subtitle-generate" :disabled="!canGenerateSubtitles" @click="generateSubtitles">{{ requestingSubtitles || ['awaiting_source', 'queued', 'processing'].includes(subtitleJob?.status ?? '') ? '生成中…' : subtitleNeedsUpdate ? '更新 AI 字幕' : ['completed', 'partial'].includes(subtitleJob?.status ?? '') ? '重新生成 AI 字幕' : subtitleJob?.status === 'failed' ? '重试生成 AI 字幕' : '生成 AI 字幕' }}</button>
         </div>
         <p v-if="subtitleStatusMessage" class="subtitle-status" :class="{ 'subtitle-status-warning': subtitleRequestError || ['failed', 'partial', 'unsupported'].includes(subtitleJob?.status ?? '') }" role="status" aria-atomic="true">{{ subtitleStatusMessage }}</p>
-        <ChapterPlayer v-if="videoUrl" :src="videoUrl" :chapters="confirmedMedia ? videoChapters : []" :chapter-status="confirmedMedia ? chapterStatus : 'not_requested'" @ready="video = $event" @timeupdate="syncPlayback"><track v-if="subtitleUrl && confirmedMedia" :key="subtitleUrl" :src="subtitleUrl" kind="subtitles" :label="selectedSubtitles.mode === 'ai' ? 'AI 字幕' : '原文字幕'" :srclang="selectedSubtitles.language" default @load="syncSubtitleVisibility" /></ChapterPlayer>
+        <ChapterPlayer v-if="videoUrl" :src="videoUrl" :chapters="confirmedMedia ? videoChapters : []" :chapter-status="confirmedMedia ? chapterStatus : 'not_requested'" :preview-course-id="confirmedMedia && rawMindMap?.status === 'completed' ? existingJobId : undefined" :preview-fingerprint="confirmedMedia ? selectedFingerprint : undefined" :preview-blocked="isAnalysisPending || generatingMindMap || requestingSubtitles || compatibilityBusy" @ready="video = $event" @timeupdate="syncPlayback"><track v-if="subtitleUrl && confirmedMedia" :key="subtitleUrl" :src="subtitleUrl" kind="subtitles" :label="selectedSubtitles.mode === 'ai' ? 'AI 字幕' : '原文字幕'" :srclang="selectedSubtitles.language" default @load="syncSubtitleVisibility" /></ChapterPlayer>
         <div v-else class="empty-player">
           <div class="player-orbit orbit-one" aria-hidden="true"></div><div class="player-orbit orbit-two" aria-hidden="true"></div>
           <div class="player-welcome"><span class="player-play-mark"><StudyIcon name="play" /></span><span class="player-kicker">WATCH. UNDERSTAND. CONNECT.</span><h3>从一节课，连接每个知识点</h3><p>选择本地视频或录音，开启你的学习工作台</p><label class="player-file-picker"><StudyIcon name="upload" />选择课程文件<input type="file" accept="video/*,audio/*" @change="chooseVideo" /></label></div>

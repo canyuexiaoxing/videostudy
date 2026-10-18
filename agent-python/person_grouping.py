@@ -1,4 +1,4 @@
-"""Narrow opt-in grouping correction when real person masks explain lost OCR."""
+"""Primary opt-in page comparison in the common region outside person masks."""
 import re,time
 import cv2,numpy as np
 from person_visibility import load_visibility
@@ -50,26 +50,27 @@ class PersonGrouping:
     if m:values.append((int(next(x for x in m.groups() if x is not None)),box))
    return values
   return any(a!=b and abs((box[1]+box[3]-other[1]-other[3])/2)<180*.06 for a,box in stems(left) for b,other in stems(right))
- def decide(self,anchor,previous,current,images,analysis_mask,baseline,boundary,texts,retention,normalized):
+ def decide(self,anchor,previous,current,images,analysis_mask,boundary,normalized):
+  # A masked comparison is the primary decision whenever all masks are valid.
+  # Unknown/invalid masks return None so the caller can explicitly fall back.
   frames=(anchor,previous,current);times=[f['frameTimeMs'] for f in frames];people=[self.mask(t) for t in times]
   if any(mask is None for mask in people):return None
   allowed=analysis_mask if analysis_mask is not None else np.ones((180,320),bool)
   common=allowed&~(people[0]|people[1]|people[2]);fraction=int(common.sum())/max(1,int(allowed.sum()))
-  if self.question_conflict(self.filtered(anchor,common),self.filtered(current,common)):return {'boundary':'new','reason':'different visible question number'}
-  if not any(self.has_person(t) for t in times):return None
-  def lost_under_person(source):
-   now=texts(current)
-   occluders=people[2]|self.mask(source['frameTimeMs'])
-   return any(retention([normalized(str(b.get('text','')))],now)<.72 and float(occluders[y:v,x:z].mean())>=.1 for b,(x,y,z,v) in self.boxes(source) if b.get('score',1)>=.35 and len(normalized(str(b.get('text',''))))>=2)
-  explained=lost_under_person(anchor) or lost_under_person(previous)
-  if fraction<.35 and explained:
-   self.pending+=1;return {'boundary':'defer','reason':'person occlusion; insufficient common visible content'}
-  if baseline=='same' or not explained:return None
   a,p,c=(self.filtered(f,common) for f in frames)
+  def result(value,reason):return {'boundary':value,'reason':reason,'frames':(a,p,c)}
+  if self.question_conflict(a,c):return result('new','different visible question number')
+  has_person=any(self.has_person(t) for t in times)
+  if not common.any() or (has_person and fraction<.35):
+   self.pending+=1;return result('defer','person occlusion; insufficient common visible content')
+  masked=boundary(a,p,c,images[times[0]],images[times[1]],images[times[2]],common)
+  if not has_person:return result(masked,'local OCR and frame comparison outside person masks')
+  # A clear change in shared visible text is evidence even when shirt OCR
+  # would have made an unmasked comparison report the same page.
+  if masked=='new':return result('new','different text in common visible region')
   sufficient=self.anchors(a,c,normalized) and self.anchors(p,c,normalized)
-  masked=boundary(a,p,c,images[times[0]],images[times[1]],images[times[2]],common) if sufficient else 'uncertain'
-  if sufficient and masked=='same':
-   self.adjusted+=1;return {'boundary':'same','reason':'same visible body text; missing OCR lies under person mask'}
-  self.pending+=1;return {'boundary':'defer','reason':'person occlusion; page identity pending'}
+  if masked=='same' and sufficient:
+   self.adjusted+=1;return result('same','same text in common visible region; person masks excluded first')
+  self.pending+=1;return result('defer','person occlusion; page identity pending')
  def finish(self,pages):
   record_event('stage_completed',self.root.name,operation='person_grouping',stage='page_grouping',image_count=len(self.dimensions),accepted_count=self.accepted,rejected_count=self.missing,promoted_count=self.adjusted,uncertain_frames=self.pending,topics=len(pages),elapsed_ms=round((time.perf_counter()-self.started)*1000))

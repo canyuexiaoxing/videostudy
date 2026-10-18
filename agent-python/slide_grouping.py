@@ -285,13 +285,16 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
                         result = filter_frame(result,ignore_region,region,*dimensions[item["frameTimeMs"]])
                     return result
                 compare_anchor, compare_previous, compare_current = map(common_ocr,(anchor,previous,current))
-            boundary = _boundary(compare_anchor, compare_previous, compare_current, images[anchor["frameTimeMs"]],
-                                 images[previous["frameTimeMs"]], current_image, comparison_mask)
-            boundary_reason = "local OCR and frame comparison"
             masked=None
             if person is not None:
-                masked=person.decide(compare_anchor,compare_previous,compare_current,images,comparison_mask,boundary,_boundary,_texts,_retention,_normalized)
-                if masked is not None:boundary=masked['boundary'];boundary_reason=masked['reason']
+                masked=person.decide(compare_anchor,compare_previous,compare_current,images,comparison_mask,_boundary,_normalized)
+            if masked is not None:
+                boundary=masked['boundary'];boundary_reason=masked['reason']
+                compare_anchor,compare_previous,compare_current=masked['frames']
+            else:
+                boundary = _boundary(compare_anchor, compare_previous, compare_current, images[anchor["frameTimeMs"]],
+                                     images[previous["frameTimeMs"]], current_image, comparison_mask)
+                boundary_reason = "local OCR and frame comparison"
             if boundary=='defer':
                 pending.append(current)
                 from person_grouping import MAX_PENDING_FRAMES
@@ -300,7 +303,7 @@ def group_pages(visuals: list[dict], keyframe_dir: Path, segments: list[dict], *
             if boundary=='same' and pending:flush_pending(True)
             elif pending:
                 flush_pending(False)
-            if masked is not None and boundary=='same':
+            if masked is not None and boundary=='same' and baseline_owner.get(time_ms)!=baseline_owner.get(previous['frameTimeMs']):
                 if members:protected_times.update(_page(members,images,decision,reason,0,masks)['representativeFrameTimesMs'])
                 protected_times.add(time_ms)
             if boundary == "uncertain":

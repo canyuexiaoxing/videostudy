@@ -2,8 +2,7 @@
 body { background: radial-gradient(ellipse at 10% 0%, #eaf0ff, transparent 55%), #f5f7ff; }
 .study-app { display: grid; grid-template-columns: minmax(0, 1.52fr) minmax(440px, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 16px; width: 100%; max-width: 2560px; min-height: 100vh; margin: auto; padding: 0 22px 28px; }
 .app-header { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 22px; row-gap: 10px; min-height: 64px; margin: 0; border-bottom: 1px solid #e6ebf5; }
-.brand { display: flex; flex: none; align-items: baseline; color: #162140; font-size: 23px; font-weight: 850; letter-spacing: -.055em; }
-.brand-video { color: #315df5; }
+.brand { display: flex; flex: none; align-items: center; color: #162140; font-size: 23px; font-weight: 850; letter-spacing: -.055em; }
 .header-context { display: flex; min-width: 0; align-items: center; gap: 18px; color: #647296; font-size: 13px; }
 .header-context strong { color: #233052; font-size: 14px; white-space: nowrap; }
 .header-divider { width: 1px; height: 20px; background: #dce3f3; }
@@ -181,8 +180,7 @@ body { background: radial-gradient(ellipse at 10% 0%, #eaf0ff, transparent 55%),
 /* Interaction and visual language of the learning workspace. */
 .study-app { gap: 22px; padding-bottom: 32px; }
 .app-header { min-height: 82px; border-bottom-color: #dfe6f7; }
-.brand-symbol { display: grid; place-items: center; width: 35px; height: 35px; margin-right: 10px; border-radius: 11px; color: #fff; background: linear-gradient(145deg, #5881ff, #2854e6); box-shadow: 0 4px 12px #315df526; }
-.brand-symbol svg { width: 22px; height: 22px; }
+.brand-symbol { display: block; flex: none; width: 35px; height: 35px; margin-right: 10px; border-radius: 8px; }
 .study-icon { flex: none; vertical-align: middle; }
 .study-app .file-picker, .study-app .run { min-height: 44px; gap: 8px; border-radius: 11px; box-shadow: 0 4px 12px #315df51c; }
 .study-app button, .file-picker, .player-file-picker { transition: background-color .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease; }
@@ -469,3 +467,62 @@ body { background: radial-gradient(ellipse at 10% 0%, #eaf0ff, transparent 55%),
 .map-failure-details{margin-top:8px;min-width:0;overflow-wrap:anywhere}
 .map-failure-details summary{cursor:pointer;font-size:13px;color:#8b493e}
 .analysis-retry-card>div{min-width:0}
+
+/* Timeline previews read persistent local sprite sheets; no seeking on hover. */
+.chapter-tooltip .chapter-preview-image { display:block; width:240px; height:135px; margin:0 auto 5px; flex:none; border-radius:5px; background-repeat:no-repeat; background-size:1200px 540px; background-color:#111; }
+.chapter-tooltip .chapter-preview-hint { font-size:10px; line-height:1.5; font-weight:400; color:#aab9d3; }
+
+/* Approved blue-lilac artwork moves behind opaque cards, without layout work. */
+body { background:#f3f6ff; }
+.study-app .header-context { color:#304466; }
+.study-app { position:relative; isolation:isolate; }
+.study-app::before, .study-app::after {
+  content:""; position:fixed; z-index:-1; pointer-events:none;
+  inset:-12vh -12vw;
+  background:#cbd4ff url('/framewise-ambient.png') center / cover no-repeat;
+  transform:translate3d(0,0,0);
+  transition:opacity .5s ease;
+}
+.study-app::before { opacity:var(--ambient-strength,1); }
+.study-app::after { opacity:calc(var(--ambient-strength,1) * .16); background-position:70% 30%; }
+@media (prefers-reduced-motion:no-preference) {
+  .study-app::before { animation:framewise-ambient-blue 14s ease-in-out -3s infinite alternate; }
+  .study-app::after { animation:framewise-ambient-lilac 18s ease-in-out -9s infinite alternate; }
+}
+.study-app.ambient-paused::before, .study-app.ambient-paused::after { animation-play-state:paused; }
+@keyframes framewise-ambient-blue {
+  from { transform:translate3d(-5vw,-4vh,0) scale(1.03); }
+  to { transform:translate3d(5vw,4vh,0) scale(1.1); }
+}
+@keyframes framewise-ambient-lilac {
+  from { transform:translate3d(6vw,-5vh,0) scale(1.08); }
+  to { transform:translate3d(-6vw,5vh,0) scale(1.02); }
+}
+
+/* Three appearances share layout and keep media and text fully opaque. */
+.appearance-switch { display:inline-flex; flex:none; gap:3px; padding:4px; border:1px solid #ffffffb8; border-radius:11px; background:#ffffff66; }
+.appearance-switch button { padding:8px 11px; border:0; border-radius:7px; background:transparent; color:#304466; font:inherit; font-size:12px; white-space:nowrap; cursor:pointer; transition:background-color .25s,color .25s,box-shadow .25s; }
+.appearance-switch button[aria-pressed="true"] { background:#fff; color:#2855df; box-shadow:0 2px 7px #22387414; }
+.appearance-switch button:hover { background:#ffffffb3; }
+.appearance-switch button:focus-visible { outline:2px solid #315df5; outline-offset:2px; }
+.study-app[data-appearance="classic"] { --ambient-strength:0; }
+.study-app :is(.panel,.study-sidebar,.mind-map-panel,.sidebar-heading,.sidebar-pane,.sidebar-tabs,.empty-steps span,.map-preview,.overview-item) { transition:background-color .45s ease,border-color .45s ease,box-shadow .45s ease; }
+.study-app .sidebar-heading { background:linear-gradient(120deg,#ffffff80,#f7faff80); }
+.study-app[data-appearance="acrylic"] :is(.panel,.study-sidebar) {
+  background:rgba(255,255,255,.44); border-color:rgba(255,255,255,.8);
+  -webkit-backdrop-filter:blur(20px) saturate(115%); backdrop-filter:blur(20px) saturate(115%);
+  box-shadow:inset 0 1px 0 #ffffffb3,0 8px 32px #344c9a12;
+}
+.study-app[data-appearance="acrylic"] :is(.sidebar-pane,.mind-map-panel,.sidebar-heading) { background:transparent; }
+.study-app[data-appearance="acrylic"] .sidebar-tabs { background:#ffffff2e; border-color:#ffffffb3; }
+.study-app[data-appearance="acrylic"] .sidebar-tabs::before { background:#ffffffb8; }
+.study-app[data-appearance="acrylic"] :is(.empty-steps span,.map-preview,.overview-item) { background-color:#ffffff40; border-color:#ffffff99; }
+.study-app[data-appearance="acrylic"] :is(.sidebar-empty p,.sidebar-empty .empty-hint,.video-overview-hint) { color:#405577; }
+@media(max-width:600px) {
+  .study-app .header-actions { flex-wrap:wrap; gap:8px; }
+  .appearance-switch button { min-height:36px; padding:6px 10px; }
+}
+@media(prefers-reduced-motion:reduce) {
+  .study-app::before,.study-app::after,.appearance-switch button,
+  .study-app :is(.panel,.study-sidebar,.mind-map-panel,.sidebar-heading,.sidebar-pane,.sidebar-tabs,.empty-steps span,.map-preview,.overview-item) { transition:none; }
+}

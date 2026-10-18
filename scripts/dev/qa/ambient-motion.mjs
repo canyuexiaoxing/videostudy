@@ -1,0 +1,16 @@
+import {chromium} from 'file:///C:/Users/Administrator/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import path from 'node:path';import {fileURLToPath} from 'node:url';import {mkdir,writeFile} from 'node:fs/promises';import assert from 'node:assert/strict';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../..'),out=path.join(root,'.local/qa/ambient-motion');await mkdir(out,{recursive:true});
+const browser=await chromium.launch({channel:'msedge',headless:true});
+try{const page=await browser.newPage({viewport:{width:1440,height:1000},reducedMotion:'no-preference'});const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('http://127.0.0.1:5173/',{waitUntil:'networkidle'});
+ await page.evaluate(()=>{for(const a of document.getAnimations()){if(!a.animationName?.startsWith('framewise-ambient-')&&Number.isFinite(a.effect.getComputedTiming().endTime))a.finish()}});const first=await page.locator('.player-panel').boundingBox();
+ const baseline=await page.evaluate(()=>{const animations=document.getAnimations().filter(a=>a.animationName?.startsWith('framewise-ambient-'));for(const a of animations){a.pause();a.currentTime=0;}return {names:animations.map(a=>a.animationName),style:getComputedStyle(document.querySelector('.study-app'),'::before').transform}});assert.equal(baseline.names.length,2);await page.screenshot({path:path.join(out,'start.png')});
+ await page.evaluate(()=>{for(const a of document.getAnimations().filter(a=>a.animationName?.startsWith('framewise-ambient-')))a.currentTime=7000});
+ const changed=await page.evaluate(()=>getComputedStyle(document.querySelector('.study-app'),'::before').transform);assert.notEqual(changed,baseline.style);assert.deepEqual(await page.locator('.player-panel').boundingBox(),first);await page.screenshot({path:path.join(out,'middle.png')});
+ await page.evaluate(()=>{for(const a of document.getAnimations().filter(a=>a.animationName?.startsWith('framewise-ambient-')))a.play();Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));});await page.waitForFunction(()=>document.querySelector('.study-app').classList.contains('ambient-paused'));assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector('.study-app'),'::before').animationPlayState),'paused');
+ await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'))});
+ await page.emulateMedia({reducedMotion:'reduce'});assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector('.study-app'),'::before').animationName),'none');
+ await page.emulateMedia({reducedMotion:'no-preference'});await page.setViewportSize({width:390,height:844});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await page.getByRole('tab',{name:'随手笔记',exact:true}).click();assert.equal(await page.locator('#tab-notes').isVisible(),true);assert.deepEqual(errors,[]);
+ await writeFile(path.join(out,'verification.json'),JSON.stringify({backgroundTransforms:true,contentDoesNotMove:true,hiddenPauses:true,reducedMotionStatic:true,mobileNoOverflow:true,tabsClickable:true,pageErrors:errors},null,2));console.log('Subtle background motion verified.');
+}finally{await browser.close()}

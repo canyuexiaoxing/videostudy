@@ -2,7 +2,10 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { chapterAt, timelineChapters, timeAtPointer } from './chapters'
 import type { VideoChapter } from './chapters'
-const props=defineProps<{src:string;chapters:VideoChapter[];chapterStatus:string}>()
+import { BrowserPreview } from './browserPreview'
+import type { PreviewState } from './browserPreview'
+import { previewTile } from './timelinePreview'
+const props=defineProps<{src:string;chapters:VideoChapter[];chapterStatus:string;previewCourseId?:string;previewFingerprint?:string;previewBlocked?:boolean}>()
 const emit=defineEmits<{ready:[HTMLVideoElement|null];timeupdate:[Event]}>()
 const media=ref<HTMLVideoElement|null>(null)
 const surface=ref<HTMLElement|null>(null)
@@ -11,6 +14,26 @@ const visible=ref(true),focused=ref(false),directory=ref(false),hoverTime=ref<nu
 const frameReady=ref(false),mediaError=ref('')
 let timer:ReturnType<typeof setTimeout>|undefined
 let pointerStart:number|null=null,dragging=false
+let preview:BrowserPreview|undefined,lastInteraction=performance.now(),previewRequest=0
+const previewImage=ref<string|null>(null),previewState=ref<PreviewState>('waiting')
+const previewLocation=computed(()=>hoverTime.value===null?null:previewTile(hoverTime.value,duration.value))
+const previewStyle=computed(()=>previewImage.value&&previewLocation.value?{backgroundImage:`url("${previewImage.value}")`,backgroundPosition:`-${previewLocation.value.x}px -${previewLocation.value.y}px`}:undefined)
+function interacted(){lastInteraction=performance.now()}
+async function loadPreview(){
+ const request=++previewRequest,location=previewLocation.value
+ if(!preview||!location){previewImage.value=null;return}
+ const image=await preview.sheet(location.sheet)
+ if(request===previewRequest)previewImage.value=image
+}
+watch(()=>[props.src,props.previewCourseId,props.previewFingerprint,duration.value] as const,([src,id,fingerprint,length])=>{
+ preview?.dispose();preview=undefined;previewImage.value=null;previewState.value='waiting';previewRequest++
+ if(!id||!fingerprint||!Number.isFinite(length)||length<=0)return
+ preview=new BrowserPreview({src,courseId:id,fingerprint,duration:length,
+  localIdle:()=>!props.previewBlocked&&document.visibilityState==='visible'&&!!media.value?.paused&&!dragging&&performance.now()-lastInteraction>2000,
+  onSheet:()=>void loadPreview(),onState:state=>{previewState.value=state;if(state==='completed')void loadPreview()}})
+})
+watch(()=>previewLocation.value?.sheet,()=>{previewImage.value=null;void loadPreview()})
+
 const chapters=computed(()=>timelineChapters(props.chapters,duration.value))
 const active=computed(()=>chapterAt(chapters.value,time.value*1000))
 const hovered=computed(()=>hoverTime.value===null?undefined:chapterAt(chapters.value,hoverTime.value*1000))
@@ -29,8 +52,8 @@ function down(event:PointerEvent){pointerStart=event.clientX;dragging=false;(eve
 function up(event:PointerEvent){if(pointerStart===null)return;const position=locate(event);seek(position*1000);pointerStart=null;dragging=false}
 async function fullscreen(){if(!surface.value)return;try{if(document.fullscreenElement)await document.exitFullscreen();else await surface.value.requestFullscreen()}catch{/* Browser may deny fullscreen without activation. */}}
 function key(event:KeyboardEvent){if((event.target as HTMLElement).matches('button,input,select'))return;if([' ','ArrowLeft','ArrowRight','f'].includes(event.key)){event.preventDefault();if(event.key===' ')void toggle();else if(event.key==='f')void fullscreen();else seek((time.value+(event.key==='ArrowLeft'?-5:5))*1000)}}
-onMounted(()=>emit('ready',media.value))
-onUnmounted(()=>{clearTimeout(timer);emit('ready',null)})
+onMounted(()=>{emit('ready',media.value);window.addEventListener('pointermove',interacted,{passive:true});window.addEventListener('keydown',interacted)})
+onUnmounted(()=>{clearTimeout(timer);preview?.dispose();window.removeEventListener('pointermove',interacted);window.removeEventListener('keydown',interacted);emit('ready',null)})
 </script>
 
 <template>
@@ -41,7 +64,7 @@ onUnmounted(()=>{clearTimeout(timer);emit('ready',null)})
       <div class="chapter-current"><span class="chapter-live-dot"></span>{{ active?.title || '课程视频' }}</div>
       <div class="chapter-seek" role="slider" aria-label="视频进度：点击或拖动定位到对应时间" :aria-valuemin="0" :aria-valuemax="duration" :aria-valuenow="time" :aria-valuetext="`${stamp(time)} ${active?.title||''}`" tabindex="0" @pointerdown="down" @pointermove.stop="move" @pointerup="up" @pointercancel="pointerStart=null;dragging=false" @pointerleave="hoverTime=null">
         <div v-for="c in sections" :key="c.id" class="chapter-bar-segment" :class="{'is-active':active?.id===c.id}" :style="{flexGrow:c.endMs-c.startMs}"><span class="chapter-bar-fill" :style="{width:`${Math.max(0,Math.min(100,(time*1000-c.startMs)/(c.endMs-c.startMs)*100))}%`}"></span></div>
-        <div v-if="hoverTime!==null" class="chapter-tooltip" :style="{'--hover-position':`${hoverRatio*100}%`}"><strong>{{ hovered?.title||'定位播放' }}</strong><span v-if="hovered">{{ stamp(hovered.startMs/1000) }} – {{ stamp(hovered.endMs/1000) }}</span><span>{{ stamp(hoverTime) }}</span></div>
+        <div v-if="hoverTime!==null" class="chapter-tooltip" :style="{'--hover-position':`${hoverRatio*100}%`}"><span v-if="previewImage" class="chapter-preview-image" :style="previewStyle" role="img" :aria-label="`${stamp(hoverTime)} 附近的视频预览`"></span><small v-else-if="previewCourseId && previewState!=='unavailable'" class="chapter-preview-hint">{{ previewState==='completed'?'此处预览暂不可用':'此处预览尚未生成，空闲后自动准备' }}</small><strong>{{ hovered?.title||'定位播放' }}</strong><span v-if="hovered">{{ stamp(hovered.startMs/1000) }} – {{ stamp(hovered.endMs/1000) }}</span><span>{{ stamp(hoverTime) }}</span></div>
       </div>
       <div class="chapter-controls">
         <button type="button" :aria-label="paused?'播放':'暂停'" @click="toggle">{{ paused?'▶':'❚❚' }}</button><span class="chapter-clock">{{ stamp(time) }}<span> / {{ stamp(duration) }}</span></span>

@@ -68,4 +68,20 @@ class YoloGroupingTests(unittest.TestCase):
   old=self.image(0,'top');current=self.image(2000)
   old['ocrBlocks'].append({'text':'example 99 false person text','score':.99,'polygon':[[8,20],[300,20],[300,55],[8,55]]})
   pages,_=self.group([old,current]);self.assertEqual(len(pages),1)
+ def test_person_text_cannot_hide_a_visible_page_change_even_if_raw_text_matches(self):
+  old=self.image(0,'partial');current=self.image(2000,'partial')
+  for block in current['ocrBlocks']:
+   block['text']='completely different visible topic '+str(current['ocrBlocks'].index(block))
+  for frame in (old,current):
+   for i in range(12):
+    frame['ocrBlocks'].append({'text':'same shirt recognition '+str(i),'score':.99,'polygon':[[10,105],[300,105],[300,160],[10,160]]})
+  # The shared shirt OCR dominates the raw retention, but none is visible lesson evidence.
+  self.assertEqual(len(self.group([old,current],'off')[0]),1)
+  pages,_=self.group([old,current])
+  self.assertEqual([p['memberFrameTimesMs'] for p in pages],[[0],[2000]])
+ def test_masked_comparison_does_not_keep_every_unchanged_frame_as_representative(self):
+  frames=[self.image(t,'partial') for t in (0,2000,4000)]
+  pages,_=self.group(frames)
+  self.assertEqual(len(pages),1)
+  self.assertEqual(pages[0]['representativeFrameTimesMs'],[4000])
 if __name__=='__main__':unittest.main()
