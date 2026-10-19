@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class VideoStudyApplication {
     public static void main(String[] args) {
-        SpringApplication.run(VideoStudyApplication.class, args);
+        boolean cloud="cloud".equals(System.getenv("FRAMEWISE_ROLE"))||java.util.Arrays.asList(args).contains("--framewise.role=cloud");
+        SpringApplication.run(cloud?cn.videostudy.cloud.CloudSyncApplication.class:VideoStudyApplication.class, args);
     }
 }

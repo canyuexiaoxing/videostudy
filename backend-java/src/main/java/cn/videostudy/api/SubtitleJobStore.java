@@ -20,6 +20,7 @@ public class SubtitleJobStore {
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
     private final TransactionTemplate transaction;
+    private final boolean sqlite;
     private final SecureRandom random = new SecureRandom();
     public record Source(String language, List<TranscriptionController.TranscriptSegment> segments,
                          List<TranscriptionController.PageGroup> pageGroups) {}
@@ -28,7 +29,7 @@ public class SubtitleJobStore {
     public record Run(String id, String targetLanguage, String token, int attempt, Source source) {}
 
     public SubtitleJobStore(JdbcTemplate jdbc, ObjectMapper json) {
-        this.jdbc = jdbc; this.json = json;
+        this.jdbc = jdbc; this.json = json; this.sqlite=DatabaseDialect.sqlite(jdbc);
         this.transaction = new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbc.getDataSource())));
     }
 
@@ -60,6 +61,7 @@ public class SubtitleJobStore {
     }
 
     private boolean lockParent(String id) {
+        if(sqlite)return jdbc.update("UPDATE transcription_jobs SET id=id WHERE id=?",id)==1;
         return !jdbc.query("SELECT id FROM transcription_jobs WHERE id = ? FOR UPDATE", (row, n) -> row.getString(1), id).isEmpty();
     }
     private void ensureSource(String id) {
@@ -147,7 +149,7 @@ public class SubtitleJobStore {
     public void retry(Run run, Instant when) {
         jdbc.update("UPDATE subtitle_jobs SET status = 'queued', run_token = NULL, next_attempt_at = ?, error_code = 'subtitle_temporarily_unavailable' " +
             "WHERE transcription_id = ? AND target_language = ? AND status = 'processing' AND run_token = ?",
-            Timestamp.from(when), run.id(), run.targetLanguage(), run.token());
+            DatabaseDialect.timestamp(when,sqlite), run.id(), run.targetLanguage(), run.token());
     }
     public int recoverInterrupted(int maxAttempts) {
         return transaction.execute(status -> {

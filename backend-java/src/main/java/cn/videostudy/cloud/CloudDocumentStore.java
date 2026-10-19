@@ -1,0 +1,21 @@
+package cn.videostudy.cloud;
+import cn.videostudy.api.CourseSnapshotStore;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import java.util.*;
+@Repository
+public class CloudDocumentStore {
+ public record Document(long revision,String hash,CourseSnapshotStore.Snapshot snapshot){}
+ public record Summary(String id,String name,long revision,String hash,boolean legacy){}
+ private final JdbcTemplate jdbc;private final ObjectMapper json;private final TransactionTemplate tx;
+ public CloudDocumentStore(JdbcTemplate jdbc,ObjectMapper json){this.jdbc=jdbc;this.json=json;tx=new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbc.getDataSource())));}
+ public List<Summary> list(String owner){var result=new ArrayList<Summary>();jdbc.query("SELECT course_id,revision,content_hash,payload_json FROM cloud_sync_documents WHERE owner_id=? ORDER BY updated_at DESC",(org.springframework.jdbc.core.RowCallbackHandler)r->{var s=decode(r.getString(4));result.add(new Summary(r.getString(1),name(s),r.getLong(2),r.getString(3),false));},owner);var known=new HashSet<String>();result.forEach(row->known.add(row.id()));jdbc.query("SELECT id,original_filename FROM transcription_jobs WHERE status IN ('completed','failed') ORDER BY created_at DESC",(org.springframework.jdbc.core.RowCallbackHandler)r->{if(!known.contains(r.getString(1)))result.add(new Summary(r.getString(1),Objects.toString(r.getString(2),"历史课程"),0,"",true));});return result;}
+ public Document get(String owner,String id){CourseSnapshotStore.validId(id);var rows=jdbc.query("SELECT revision,content_hash,payload_json FROM cloud_sync_documents WHERE owner_id=? AND course_id=?",(r,n)->new Document(r.getLong(1),r.getString(2),decode(r.getString(3))),owner,id);if(!rows.isEmpty())return rows.getFirst();var legacy=new CourseSnapshotStore(jdbc,json).exportCourse(id);return new Document(0,CourseSnapshotStore.hash(json,legacy),legacy);}
+ public Document put(String owner,String id,long expected,CourseSnapshotStore.Snapshot snapshot){CourseSnapshotStore.validate(snapshot);if(!snapshot.courseId().equals(id)||expected<0)throw new IllegalArgumentException("invalid_snapshot");String hash=CourseSnapshotStore.hash(json,snapshot),payload=encode(snapshot);if(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>32*1024*1024)throw new IllegalArgumentException("snapshot_too_large");return tx.execute(status->{var previous=jdbc.query("SELECT revision,content_hash FROM cloud_sync_documents WHERE owner_id=? AND course_id=? FOR UPDATE",(r,n)->Map.entry(r.getLong(1),r.getString(2)),owner,id);if(!previous.isEmpty()){var old=previous.getFirst();if(old.getValue().equals(hash))return new Document(old.getKey(),hash,snapshot);if(old.getKey()!=expected)throw new IllegalArgumentException("sync_conflict");long next=expected+1;if(jdbc.update("UPDATE cloud_sync_documents SET revision=?,content_hash=?,payload_json=?,updated_at=? WHERE owner_id=? AND course_id=? AND revision=?",next,hash,payload,java.sql.Timestamp.from(java.time.Instant.now()),owner,id,expected)!=1)throw new IllegalArgumentException("sync_conflict");return new Document(next,hash,snapshot);}if(expected!=0)throw new IllegalArgumentException("sync_conflict");try{jdbc.update("INSERT INTO cloud_sync_documents(owner_id,course_id,revision,content_hash,payload_json) VALUES (?,?,1,?,?)",owner,id,hash,payload);}catch(org.springframework.dao.DuplicateKeyException e){throw new IllegalArgumentException("sync_conflict");}return new Document(1,hash,snapshot);});}
+ private String name(CourseSnapshotStore.Snapshot s){return Objects.toString(s.tables().get("transcription_jobs").getFirst().get("original_filename"),"课程记录");}
+ private String encode(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new IllegalArgumentException("invalid_snapshot");}}
+ private CourseSnapshotStore.Snapshot decode(String value){try{return json.readValue(value,CourseSnapshotStore.Snapshot.class);}catch(Exception e){throw new IllegalArgumentException("invalid_snapshot");}}
+}

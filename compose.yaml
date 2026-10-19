@@ -52,12 +52,11 @@ services:
   java-api:
     build: ./backend-java
     volumes:
+      - ./.local/database:/data/database
       - ./.local/uploads:/data/uploads
       - ./.local/keyframes:/data/keyframes
     depends_on:
       agent-python:
-        condition: service_healthy
-      mysql:
         condition: service_healthy
     environment:
       AGENT_BASE_URL: http://agent-python:8000
@@ -65,11 +64,30 @@ services:
       MEDIA_TEMP_DIR: /data/uploads
       KEYFRAME_DIR: /data/keyframes
       ANALYSIS_MODE: ${ANALYSIS_MODE:-transcription}
+      SPRING_PROFILES_ACTIVE: sqlite
+      SQLITE_PATH: /data/database/framewise.db
+      SYNC_SERVER_URL: ${SYNC_SERVER_URL:-http://cloud-api:18080}
+      SYNC_TOKEN: ${SYNC_TOKEN:-}
+    ports:
+      - "127.0.0.1:18080:18080"
+    restart: unless-stopped
+
+  cloud-api:
+    image: videostudy-java-api
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      FRAMEWISE_ROLE: cloud
+      SPRING_PROFILES_ACTIVE: mysql
+      SERVER_PORT: 18080
       MYSQL_JDBC_URL: jdbc:mysql://mysql:3306/videostudy
       MYSQL_USER: videostudy
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      SYNC_TOKEN: ${SYNC_TOKEN:-}
+      SYNC_OWNER: ${SYNC_OWNER:-private}
     ports:
-      - "127.0.0.1:18080:18080"
+      - "127.0.0.1:18081:18080"
     restart: unless-stopped
 
 volumes:

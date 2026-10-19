@@ -31,7 +31,7 @@ public class PracticeStore {
     public SetJob request(String analysis,String hash,String key,String title,Map<String,Object> source,boolean retry) {
         try{jdbc.update("INSERT INTO practice_sets(id,transcription_id,source_hash,request_key,scope_title,status,source_json) VALUES (?,?,?,?,?,'queued',?)",
             UUID.randomUUID().toString(),analysis,hash,key,title,encode(source));}
-        catch(DuplicateKeyException existing){/* Same evidence and settings reuse a saved set. */}
+        catch(org.springframework.dao.DataAccessException existing){if(!DatabaseDialect.duplicate(existing))throw existing;/* Same evidence and settings reuse a saved set. */}
         if(retry)jdbc.update("UPDATE practice_sets SET status='queued',attempt_count=0,error_code=NULL WHERE transcription_id=? AND request_key=? AND status='failed'",analysis,key);
         String id=jdbc.queryForObject("SELECT id FROM practice_sets WHERE transcription_id=? AND request_key=?",String.class,analysis,key);
         return find(id).orElseThrow();
@@ -121,7 +121,7 @@ public class PracticeStore {
                 .orElseThrow(()->new IllegalArgumentException("question_not_found"));
             if(chosen<0||chosen>=((List<?>)q.get("options")).size())throw new IllegalArgumentException("invalid_option");
             try{jdbc.update("INSERT INTO practice_answers(session_id,question_id,selected_index,correct) VALUES (?,?,?,?)",session,questionId,chosen,chosen==((Number)q.get("answerIndex")).intValue());}
-            catch(DuplicateKeyException existing){/* First answer wins, including concurrent requests. */}
+            catch(org.springframework.dao.DataAccessException existing){if(!DatabaseDialect.duplicate(existing))throw existing;/* First answer wins, including concurrent requests. */}
             int recorded=jdbc.queryForObject("SELECT selected_index FROM practice_answers WHERE session_id=? AND question_id=?",Integer.class,session,questionId);
             return feedback(q,recorded);
         });

@@ -1,0 +1,3 @@
+CREATE TRIGGER transcription_jobs_touch AFTER UPDATE ON transcription_jobs FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE transcription_jobs SET updated_at=strftime('%Y-%m-%d %H:%M:%f','now') WHERE rowid=NEW.rowid; END;
+CREATE TRIGGER subtitle_sources_touch AFTER UPDATE ON subtitle_sources FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE subtitle_sources SET updated_at=strftime('%Y-%m-%d %H:%M:%f','now') WHERE rowid=NEW.rowid; END;
+CREATE TRIGGER subtitle_jobs_touch AFTER UPDATE ON subtitle_jobs FOR EACH ROW WHEN NEW.updated_at = OLD.updated_at BEGIN UPDATE subtitle_jobs SET updated_at=strftime('%Y-%m-%d %H:%M:%f','now') WHERE rowid=NEW.rowid; END;

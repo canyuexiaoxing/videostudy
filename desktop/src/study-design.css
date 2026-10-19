@@ -519,7 +519,7 @@ body { background:#f3f6ff; }
 .study-app[data-appearance="acrylic"] :is(.empty-steps span,.map-preview,.overview-item) { background-color:#ffffff40; border-color:#ffffff99; }
 .study-app[data-appearance="acrylic"] :is(.sidebar-empty p,.sidebar-empty .empty-hint,.video-overview-hint) { color:#405577; }
 @media(max-width:600px) {
-  .study-app .header-actions { flex-wrap:wrap; gap:8px; }
+  .study-app .header-actions { flex-wrap:wrap; gap:8px; max-width:100%; min-width:0; }
   .appearance-switch button { min-height:36px; padding:6px 10px; }
 }
 @media(prefers-reduced-motion:reduce) {

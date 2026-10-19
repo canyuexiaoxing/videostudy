@@ -13,7 +13,7 @@ public class OverviewChatStore {
     private Map<String,Object> decode(String value){try{return json.readValue(value,new TypeReference<Map<String,Object>>(){});}catch(Exception e){throw new IllegalStateException(e);}}
     private String encode(Object value){try{return json.writeValueAsString(value);}catch(Exception e){throw new IllegalStateException(e);}}
     public String thread(String course,String context,String client){
-        try{jdbc.update("INSERT INTO overview_chat_threads(id,transcription_id,context_key,client_id) VALUES (?,?,?,?)",UUID.randomUUID().toString(),course,context,client);}catch(DuplicateKeyException existing){}
+        try{jdbc.update("INSERT INTO overview_chat_threads(id,transcription_id,context_key,client_id) VALUES (?,?,?,?)",UUID.randomUUID().toString(),course,context,client);}catch(org.springframework.dao.DataAccessException existing){if(!DatabaseDialect.duplicate(existing))throw existing;}
         return jdbc.queryForObject("SELECT id FROM overview_chat_threads WHERE transcription_id=? AND context_key=? AND client_id=?",String.class,course,context,client);
     }
     public Optional<Map<String,Object>> previous(String thread,String request){return jdbc.query("SELECT user_text,reply_json FROM overview_chat_turns WHERE thread_id=? AND request_id=?",(r,n)->{

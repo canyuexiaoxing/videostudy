@@ -14,10 +14,12 @@ import java.sql.Timestamp;
 public class TranscriptionJobStore {
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
+    private final boolean sqlite;
 
     public TranscriptionJobStore(JdbcTemplate jdbc, ObjectMapper json) {
         this.jdbc = jdbc;
         this.json = json;
+        this.sqlite=DatabaseDialect.sqlite(jdbc);
     }
 
     public void createQueued(String id) {
@@ -101,7 +103,7 @@ public class TranscriptionJobStore {
     public List<HistoryItem> listHistory() {
         return jdbc.query("SELECT id, original_filename, status, created_at FROM transcription_jobs ORDER BY created_at DESC, id DESC",
             (row, number) -> new HistoryItem(row.getString("id"), row.getString("original_filename"),
-                row.getString("status"), row.getTimestamp("created_at").toInstant()));
+                row.getString("status"), DatabaseDialect.instant(row,"created_at",sqlite)));
     }
 
     public IgnoreRegion findIgnoredRegion(String id) {
@@ -169,12 +171,12 @@ public class TranscriptionJobStore {
 
     public List<String> findOldFailedIds(Instant cutoff) {
         return jdbc.query("SELECT id FROM transcription_jobs WHERE (status = 'failed' AND updated_at < ?) OR status = 'expired'",
-            (row, number) -> row.getString(1), Timestamp.from(cutoff));
+            (row, number) -> row.getString(1), DatabaseDialect.timestamp(cutoff,sqlite));
     }
 
     public List<String> findOldCompletedIds(Instant cutoff) {
         return jdbc.query("SELECT id FROM transcription_jobs WHERE status = 'completed' AND updated_at < ?",
-            (row, number) -> row.getString(1), Timestamp.from(cutoff));
+            (row, number) -> row.getString(1), DatabaseDialect.timestamp(cutoff,sqlite));
     }
 
     public void markExpired(String id) {

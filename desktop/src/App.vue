@@ -17,6 +17,7 @@ import type { IgnoreSetting } from './videoRegionTimeline'
 import SubtitleSettings from './SubtitleSettings.vue'
 import AiOverview from './AiOverview.vue'
 import OverviewChat from './OverviewChat.vue'
+import CloudSyncDialog from './CloudSyncDialog.vue'
 import AiPractice from './AiPractice.vue'
 import PageGallery from './PageGallery.vue'
 import { appearanceCss, normalizeAppearance, positionCue } from './subtitleAppearance'
@@ -78,6 +79,7 @@ function readHistory(): HistoryEntry[] {
   return entries
 }
 
+const cloudSyncOpen=ref(false)
 const apiBase = 'http://127.0.0.1:18080/api'
 type WorkspaceAppearance = 'acrylic' | 'blue' | 'classic'
 const appearanceOptions: { value: WorkspaceAppearance; label: string }[] = [
@@ -1028,11 +1030,13 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <CloudSyncDialog v-if="cloudSyncOpen" :course-id="existingJobId" @close="cloudSyncOpen=false" @updated="refreshHistory" />
   <main class="study-app" :data-appearance="workspaceAppearance" :class="{ 'ambient-paused': ambientHidden || isAnalysisPending || generatingMindMap || compatibilityBusy }">
     <header class="app-header">
       <div class="brand" aria-label="Framewise"><img class="brand-symbol" src="/framewise.svg" alt="" width="35" height="35" /><span>Framewise</span></div>
       <div class="header-context"><strong>沉浸式学习台</strong><span class="header-divider" aria-hidden="true"></span><span class="header-file">{{ filename || currentHistoryName || '选择一段课程视频，开始建立知识导图' }}</span></div>
       <div class="header-actions">
+        <button type="button" class="secondary" @click="cloudSyncOpen=true">云同步</button>
         <div class="appearance-switch" role="group" aria-label="界面外观">
           <button v-for="option in appearanceOptions" :key="option.value" type="button" :aria-pressed="workspaceAppearance === option.value" @click="workspaceAppearance = option.value">{{ option.label }}</button>
         </div>
