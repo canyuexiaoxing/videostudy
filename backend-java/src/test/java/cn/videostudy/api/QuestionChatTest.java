@@ -105,4 +105,27 @@ class QuestionChatTest {
         var context=practice.chatContext(course,set,session,client,q);
         assertThrows(IllegalArgumentException.class,()->QuestionChatController.validate(Map.of("reply","解释","citations",List.of(Map.of("sourceId","s1","startMs",999,"endMs",2000,"quote","分母用基期"))),context));
     }
+    @Test void chatContextCarriesCourseAndTeachingNode() {
+        practice.answer(course,set,session,client,q,0);
+        var context=practice.chatContext(course,set,session,client,q);
+        assertEquals(course,context.get("courseId"));
+        assertEquals("n1",((Map<?,?>)context.get("knowledgeNode")).get("id"));
+        assertTrue(context.containsKey("_imageCandidates"));
+    }
+    @Test void teachingMaterialsStayWithinQuestionPagesAndSupportNullMapFields() throws Exception {
+        practice.answer(course,set,session,client,q,0);
+        var source=new LinkedHashMap<>(practice.find(set).orElseThrow().source());
+        var node=new LinkedHashMap<String,Object>(Map.of("id","n1","title","本课方法","children",List.of()));node.put("details",null);
+        var map=new LinkedHashMap<String,Object>(Map.of("root",Map.of("id","root","children",List.of(node))));map.put("examples",null);
+        source.put("mindMap",map);
+        source.put("pages",List.of(Map.of("pageIndex",1,"firstFrameTimeMs",1000,"lastFrameTimeMs",2000),Map.of("pageIndex",2,"firstFrameTimeMs",9000,"lastFrameTimeMs",10000)));
+        source.put("pageGroups",List.of(Map.of("pageIndex",1,"representativeFrameTimesMs",List.of(1000,2000)),Map.of("pageIndex",2,"representativeFrameTimesMs",List.of(9000))));
+        source.put("sourceSegments",List.of(Map.of("id","s1","startMs",1000,"endMs",1500,"text","老师的方法"),Map.of("id","s2","startMs",1600,"endMs",2000,"text","后续步骤"),Map.of("id","s9","startMs",9000,"endMs",10000,"text","无关讲解")));
+        jdbc.update("UPDATE practice_sets SET source_json=? WHERE id=?",new ObjectMapper().writeValueAsString(source),set);
+        var context=practice.chatContext(course,set,session,client,q);
+        assertEquals("本课方法",((Map<?,?>)context.get("knowledgeNode")).get("title"));
+        assertEquals(List.of(1000L,2000L),context.get("_imageCandidates"));
+        assertEquals(2,((List<?>)context.get("courseSpeech")).size());
+        assertEquals(List.of(),context.get("referenceExamples"));
+    }
 }

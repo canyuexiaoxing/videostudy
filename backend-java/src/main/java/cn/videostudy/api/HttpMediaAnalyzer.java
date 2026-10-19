@@ -24,6 +24,9 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
 
     HttpMediaAnalyzer(RestClient agent) { this.agent = agent; }
 
+    @Override public Map<String,Object> chatOverview(Map<String,Object> source) {
+        return agent.post().uri("/overview-chat").body(source).retrieve().body(new ParameterizedTypeReference<Map<String,Object>>() {});
+    }
     @Override public Map<String,Object> chatQuestion(Map<String,Object> source) {
         return agent.post().uri("/question-chat").body(source).retrieve()
             .body(new ParameterizedTypeReference<Map<String,Object>>() {});

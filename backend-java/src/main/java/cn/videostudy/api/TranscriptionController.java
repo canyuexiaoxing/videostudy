@@ -102,6 +102,9 @@ public class TranscriptionController {
         var id = UUID.randomUUID().toString();
         var path = uploadRoot.resolve(id);
         file.transferTo(path);
+        long identityStarted=System.nanoTime();
+        MediaIdentity identity;
+        try { identity=MediaIdentity.read(path); } catch(IOException error) { Files.deleteIfExists(path); throw error; }
         var job = new TranscriptionJob(id, "queued", null, null);
         try {
             if (ignoredRegion == null) store.createQueued(id, visualAnalysisMode, coarseChangePercent, coarseSampleSeconds);
@@ -110,6 +113,8 @@ public class TranscriptionController {
             store.saveMindMapMode(id,mindMapMode);
             if (personSelectionMode != null) store.savePersonSelectionMode(id,personSelectionMode);
             store.saveOriginalFilename(id, file.getOriginalFilename());
+            store.saveMediaIdentity(id, identity);
+            log.info("Media identity task={} stage=upload result=saved elapsedMs={}",id,(System.nanoTime()-identityStarted)/1_000_000);
             if (aiSubtitles && subtitles != null) subtitles.createUploadRequest(id, subtitleTargetLanguage);
         } catch (RuntimeException error) {
             store.delete(id);
@@ -154,6 +159,44 @@ public class TranscriptionController {
         return store.find(id).<ResponseEntity<?>>map(job -> ResponseEntity.ok(new TranscriptionJob(
             job.id(), job.status(), job.result(), job.error(), readProgress(job.id(), job.status()))))
             .orElseGet(() -> ResponseEntity.status(404).body(Map.of("error", "job_not_found")));
+    }
+
+    @GetMapping("/{id}/media")
+    public ResponseEntity<?> media(@PathVariable String id) {
+        long started=System.nanoTime();
+        if(!SubtitleController.validId(id) || store.find(id).isEmpty()) return ResponseEntity.notFound().build();
+        var identity=store.findMediaIdentity(id);
+        if(identity!=null)return ResponseEntity.ok(identity);
+        var original=uploadRoot.resolve(id).normalize();
+        if(!original.startsWith(uploadRoot)||!Files.isRegularFile(original)){
+            log.info("Media identity task={} stage=backfill result=original_unavailable elapsedMs={}",id,(System.nanoTime()-started)/1_000_000);
+            return ResponseEntity.status(410).body(Map.of("error","original_media_unavailable"));
+        }
+        try{
+            identity=MediaIdentity.read(original);store.saveMediaIdentity(id,identity);
+            log.info("Media identity task={} stage=backfill result=completed elapsedMs={}",id,(System.nanoTime()-started)/1_000_000);
+            return ResponseEntity.ok(identity);
+        }catch(IOException error){
+            log.warn("Media identity task={} stage=backfill result=failed error={} elapsedMs={}",id,error.getClass().getSimpleName(),(System.nanoTime()-started)/1_000_000);
+            return ResponseEntity.status(503).body(Map.of("error","media_identity_unavailable"));
+        }
+    }
+
+    public record CachedMedia(long size,String fingerprint,String bindingSource){}
+    @PutMapping("/{id}/media")
+    public ResponseEntity<?> migrateMedia(@PathVariable String id,@RequestBody CachedMedia cache) {
+        long started=System.nanoTime();
+        if(!SubtitleController.validId(id)||store.find(id).isEmpty())return ResponseEntity.notFound().build();
+        if(cache.size()<0||cache.fingerprint()==null||!cache.fingerprint().matches("[a-f0-9]{64}")||!"legacy_auto".equals(cache.bindingSource()))return ResponseEntity.badRequest().body(Map.of("error","invalid_automatic_cache"));
+        var incoming=new MediaIdentity(cache.size(),cache.fingerprint());var saved=store.findMediaIdentity(id);
+        if(saved==null){
+            var original=uploadRoot.resolve(id);
+            try{if(Files.isRegularFile(original))saved=MediaIdentity.read(original);}catch(IOException error){log.warn("Media identity task={} stage=cache_migration result=failed error={} elapsedMs={}",id,error.getClass().getSimpleName(),(System.nanoTime()-started)/1_000_000);return ResponseEntity.status(503).body(Map.of("error","media_identity_unavailable"));}
+            if(saved==null){store.migrateMediaIdentity(id,incoming);saved=store.findMediaIdentity(id);}else store.saveMediaIdentity(id,saved);
+        }
+        boolean matched=incoming.equals(saved);
+        log.info("Media identity task={} stage=cache_migration source=legacy_auto result={} elapsedMs={}",id,matched?"matched":"conflict",(System.nanoTime()-started)/1_000_000);
+        return matched?ResponseEntity.ok(saved):ResponseEntity.status(409).body(Map.of("error","media_identity_conflict"));
     }
 
     @PostMapping("/{id}/retry")

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MathText from './MathText.vue'
 import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import StudyIcon from './StudyIcon.vue'
 import { resolvePracticeScope } from './practiceScope'
@@ -143,12 +144,12 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
    <nav class="practice-steps" aria-label="选择题目"><button v-for="(q,i) in questions" :key="q.id" type="button" :disabled="pending" :class="{current:index===i,done:!!feedback[q.id]}" :aria-current="index===i?'step':undefined" @click="index=i">{{ String(i+1).padStart(2,'0') }}<span>{{ feedback[q.id]?'已答':'待答' }}</span></button></nav>
    <article :key="question.id" class="practice-question">
     <div class="practice-question-meta"><span>第 {{ index+1 }} 题 · {{ question.kind==='true_false'?'判断':'单选' }}</span><span>{{ question.nodeTitle }}</span><span>{{ question.scenario==='adapted'?'应用题 · 设定数据':'课程知识题' }}</span></div>
-    <fieldset><legend>{{ question.prompt }}</legend>
-     <figure v-if="question.diagram" class="practice-figure"><PracticeFigure :diagram="question.diagram"/><figcaption><span>结构与计算已检查</span><button type="button" @click="chartDialog?.showModal()">放大查看 ↗</button></figcaption></figure>
-     <label v-for="(option,i) in question.options" :key="i" class="practice-option" :class="{selected:current?.selectedIndex===i,correct:current?.answerIndex===i,incorrect:current?.selectedIndex===i&&!current.correct}"><input type="radio" :name="`practice-${question.id}`" :checked="current?.selectedIndex===i" :disabled="pending||!!current||(!demo&&!session)" @click="choose(i)"/><span class="practice-letter">{{ letters[i] }}</span><span>{{ option }}</span><span v-if="current?.answerIndex===i" class="practice-option-note">正确答案</span><span v-else-if="current?.selectedIndex===i" class="practice-option-note">你的选择</span></label>
+    <fieldset><legend><MathText :text="question.prompt" /></legend>
+     <figure v-if="question.diagram" class="practice-figure"><PracticeFigure :diagram="question.diagram"/><figcaption><span>按题目条件绘制 · 可放大查看</span><button type="button" @click="chartDialog?.showModal()">放大查看 ↗</button></figcaption></figure>
+     <label v-for="(option,i) in question.options" :key="i" class="practice-option" :class="{selected:current?.selectedIndex===i,correct:current?.answerIndex===i,incorrect:current?.selectedIndex===i&&!current.correct}"><input type="radio" :name="`practice-${question.id}`" :checked="current?.selectedIndex===i" :disabled="pending||!!current||(!demo&&!session)" @click="choose(i)"/><span class="practice-letter">{{ letters[i] }}</span><span><MathText :text="option" /></span><span v-if="current?.answerIndex===i" class="practice-option-note">正确答案</span><span v-else-if="current?.selectedIndex===i" class="practice-option-note">你的选择</span></label>
     </fieldset>
     <p v-if="pending" role="status">正在保存答案…</p>
-    <div v-if="current" class="practice-feedback" :class="{'needs-review':!current.correct}" role="status"><strong>{{ current.correct?'答对了':'答错了，看看解题思路' }}</strong><h4>答案解析</h4><p>{{ current.explanation }}</p><p v-if="current.selectedReason" class="choice-reason">你的选项：{{ current.selectedReason }}</p><div class="practice-takeaway"><StudyIcon name="spark"/><span>{{ current.takeaway }}</span></div><section v-if="!current.correct" ref="reviewCard" class="practice-review" aria-label="错题精准回看">
+    <div v-if="current" class="practice-feedback" :class="{'needs-review':!current.correct}" role="status"><strong>{{ current.correct?'答对了':'答错了，看看解题思路' }}</strong><h4>答案解析</h4><p><MathText :text="current.explanation" /></p><p v-if="current.selectedReason" class="choice-reason">你的选项：<MathText :text="current.selectedReason" /></p><div class="practice-takeaway"><StudyIcon name="spark"/><span><MathText :text="current.takeaway" /></span></div><section v-if="!current.correct" ref="reviewCard" class="practice-review" aria-label="错题精准回看">
       <div class="review-heading"><StudyIcon name="play"/><strong>错题精准回看</strong></div>
       <p class="review-knowledge">复习知识点：{{ question.nodeTitle }}</p>
       <template v-if="preferredTarget">
@@ -176,7 +177,9 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
   <p class="practice-disclaimer">{{ demo?'当前为固定示例，不保存成绩。':'题目与答题记录关联本次解析并保存。再次练习不重复调用 AI；删除解析时一并删除。' }} AI 题目仍可能存在理解偏差，请结合课程依据判断。</p>
  </div>
 </template>
-<style scoped src="./AiPractice.css"></style>
+<style scoped src="./AiPractice.css">
+.practice-question legend{box-sizing:border-box;width:100%;max-width:100%;min-width:0}.practice-option>span:nth-of-type(2){flex:1;min-width:0}.practice-steps{flex-wrap:wrap}
+</style>
 <style scoped>
 .practice-chat-entry{margin-top:22px;border:1px solid #bdccfb;border-radius:16px;overflow:hidden;background:#f7f9ff;box-shadow:0 5px 18px #4166ed0b}
 .practice-chat-toggle{display:flex;align-items:center;gap:13px;width:100%;padding:18px;text-align:left;border:0;background:linear-gradient(115deg,#eaf0ff,#f6f3ff);color:#254aab;cursor:pointer;font:inherit}
@@ -188,4 +191,6 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
 
 .practice-review{margin-top:18px;padding:16px;border:1px solid #d8e1ff;border-radius:12px;background:linear-gradient(130deg,#edf3ff,#f8f5ff)}.review-heading{display:flex;align-items:center;gap:8px;color:#3759ca;font-size:14px}.review-heading svg{width:17px;height:17px}.practice-review .review-knowledge{margin-top:10px;color:#25395f;font-weight:650}.practice-review .review-hint{margin-top:8px;font-size:12px;color:#62749a}.practice-review blockquote{margin:12px 0;padding:10px 13px;border-left:3px solid #9cb3f7;background:#ffffffb0;font-size:13px;line-height:1.8;color:#405779;white-space:pre-wrap}.review-play{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;width:100%;padding:12px;border:0;border-radius:9px;background:#4166ed;color:white;font-size:13px;font-weight:650}.review-play svg{width:15px;height:15px}.review-other{margin-top:12px;font-size:12px;color:#526998}.review-other button{display:block;width:100%;margin-top:8px;padding:9px;border:1px solid #dce6ff;border-radius:7px;background:white;color:#4166cc;text-align:left;font-size:12px;line-height:1.7}.review-wrong-list{display:grid;gap:8px;margin-top:12px}.review-wrong-list button{padding:10px;border:1px solid #e0dafa;border-radius:8px;background:#fff;color:#6850b2;text-align:left;font-size:12px;line-height:1.7}.review-wrong-list button span{display:block;font-size:11px}.practice-summary>div{min-width:0;flex:1}
 .practice-settings{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px;background:#f5f8ff;border:1px solid #e0e7fb;border-radius:13px;margin-bottom:18px}.practice-settings label,.saved-set{display:grid;gap:7px;font-size:12px;color:#53698f}.practice-settings select,.saved-set select{min-width:0;width:100%;padding:10px;border:1px solid #dce4f7;border-radius:8px;background:#fff;color:#25395f}.practice-settings .practice-primary{justify-content:center;align-self:end;padding:12px;border-radius:9px}.saved-set{margin-bottom:16px}.practice-empty{padding:30px 20px;background:#f7faff;border:1px dashed #d6e2fb;border-radius:12px;color:#62779c;font-size:13px;line-height:1.8}.practice-error{padding:12px;background:#fff4f3;color:#a44555;border-radius:8px;font-size:13px}.choice-reason{margin-top:12px!important}.practice-citations{display:grid;gap:8px;margin-top:14px}.practice-citations button{text-align:left;padding:10px;border:1px solid #dce6ff;background:#fff;border-radius:8px;color:#4166cc;font-size:12px;line-height:1.8}button:disabled{opacity:.5;cursor:default}fieldset:disabled label{cursor:default}
+
+.practice-question legend{box-sizing:border-box;width:100%;max-width:100%;min-width:0}.practice-option>span:nth-of-type(2){flex:1;min-width:0}.practice-steps{flex-wrap:wrap}
 </style>

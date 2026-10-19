@@ -1,0 +1,4 @@
+export type DiagramPoint={id:string;x:number;y:number;label?:string}
+export type DiagramEdge={from:string;to:string;label?:string;dashed?:boolean;arrow?:boolean}
+export type CircuitComponent=DiagramEdge&{id:string;type:'battery'|'resistor'|'lamp'|'capacitor'|'inductor'|'switch'|'ammeter'|'voltmeter';value?:number;unit?:string;closed?:boolean}
+export type Diagram={kind:'bar'|'line'|'table'|'pie'|'scatter'|'function'|'geometry'|'circuit';title?:string;unit?:string;values?:{label:string;value?:number;x?:number;y?:number}[];domain?:number[];range?:number[];curves?:{label:string;segments:number[][][]}[];points?:DiagramPoint[];edges?:DiagramEdge[];circles?:{center:string;radius:number}[];angles?:{a:string;vertex:string;b:string;label?:string}[];nodes?:DiagramPoint[];components?:CircuitComponent[];wires?:DiagramEdge[];topology?:string;voltage?:number;r1?:number;r2?:number;r3?:number}

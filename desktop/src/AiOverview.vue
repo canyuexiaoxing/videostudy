@@ -6,11 +6,12 @@ type Citation={sourceId:string;startMs:number;endMs:number;quote:string}
 type Item={text:string;citations:Citation[]}
 type Overview={status:string;headline:string;summary:Item[];objectives:Item[];keyPoints:Item[];pitfalls:Item[];highlights:Item[];notes?:Note[]}
 const props=defineProps<{courseId:string;ready:boolean}>()
-const emit=defineEmits<{seek:[time:number]}>()
+const emit=defineEmits<{seek:[time:number];state:[value:{status:string;revision:string}]}>()
 const refresh=ref(0)
 const requested=ref(false)
 const result=ref<Overview|null>(null),status=ref('not_requested')
 const errorCode=ref('')
+watch([status,result],()=>emit('state',{status:status.value,revision:result.value?JSON.stringify(result.value):''}),{immediate:true})
 const analysis=computed(()=>{
   const parts=[...new Set((result.value?.summary??[]).map(item=>item.text.trim()).filter(Boolean))]
   return parts.map(text=>/[。！？.!?]$/.test(text)?text:`${text}。`).join('')

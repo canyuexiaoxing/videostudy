@@ -37,6 +37,26 @@ def question_chat(request: QuestionChatRequest):
         raise HTTPException(422, 'invalid_chat_reply') from error
 
 
+class OverviewChatRequest(BaseModel):
+    courseId: str
+    overview: dict
+    source: dict
+    history: list[dict] = Field(default_factory=list,max_length=80)
+    message: str = Field(min_length=1,max_length=2000)
+
+@app.post('/overview-chat')
+def overview_chat(request: OverviewChatRequest):
+    from overview_chat import reply_to_overview
+    from urllib.error import HTTPError,URLError
+    try:return reply_to_overview(request.courseId,request.overview,request.source,request.history,request.message)
+    except HTTPError as error:raise HTTPException(502,'overview_chat_provider_failed') from error
+    except (URLError,TimeoutError,RuntimeError,OSError) as error:raise HTTPException(503,'overview_chat_provider_unavailable') from error
+    except ValueError as error:
+        from model_diagnostics import record_event
+        record_event('stage_failed',request.courseId,operation='overview_chat',stage='reply_validation',error_type=type(error).__name__)
+        raise HTTPException(422,'invalid_overview_chat_reply') from error
+
+
 class PracticeRequest(BaseModel):
     nodes: list[dict]
     pages: list[dict] = []

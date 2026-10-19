@@ -40,6 +40,7 @@ const hovered=computed(()=>hoverTime.value===null?undefined:chapterAt(chapters.v
 const sections=computed(()=>chapters.value.length?chapters.value:duration.value>0?[{id:'whole',title:'课程视频',startMs:0,endMs:duration.value*1000}]:[])
 function stamp(seconds:number){const s=Math.max(0,Math.floor(seconds));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
 function sync(event?:Event){if(!media.value)return;frameReady.value=media.value.readyState>=2;time.value=media.value.currentTime;duration.value=Number.isFinite(media.value.duration)?media.value.duration:0;paused.value=media.value.paused;muted.value=media.value.muted;volume.value=media.value.volume;if(event?.type==='timeupdate')emit('timeupdate',event)}
+function loadedMetadata(event:Event){if(media.value)media.value.playbackRate=Number(rate.value);sync(event)}
 function failed(){mediaError.value=media.value?.error?.code===4?'当前视频的实际封装格式或编码无法直接播放，请使用上方的“显卡兼容播放”生成兼容副本。':'视频读取或解码失败，请重新选择本地文件。'}
 watch(()=>props.src,()=>{frameReady.value=false;mediaError.value='';time.value=0;duration.value=0;paused.value=true;directory.value=false;hoverTime.value=null;reveal()})
 function reveal(){visible.value=true;clearTimeout(timer);if(!paused.value)timer=setTimeout(()=>{visible.value=false},2800)}
@@ -58,7 +59,7 @@ onUnmounted(()=>{clearTimeout(timer);preview?.dispose();window.removeEventListen
 
 <template>
   <div ref="surface" class="chapter-player" :class="{'controls-visible':visible||paused||focused||directory}" tabindex="0" aria-label="课程视频播放器，空格播放暂停，方向键快进后退" @pointermove="reveal" @pointerenter="reveal" @pointerleave="leave" @focusin="focused=!!surface?.querySelector(':focus-visible')||!!surface?.matches(':focus-visible')" @focusout="focused=!!surface?.contains($event.relatedTarget as Node)&&!!surface?.querySelector(':focus-visible')" @keydown="key">
-    <video ref="media" :src="src" preload="auto" playsinline @loadedmetadata="sync" @loadeddata="sync" @canplay="sync" @error="failed" @durationchange="sync" @timeupdate="sync" @play="sync();reveal()" @pause="sync" @ended="sync" @volumechange="sync" @click="toggle"><slot /></video>
+    <video ref="media" crossorigin="anonymous" :src="src" preload="auto" playsinline @loadedmetadata="loadedMetadata" @loadeddata="sync" @canplay="sync" @error="failed" @durationchange="sync" @timeupdate="sync" @play="sync();reveal()" @pause="sync" @ended="sync" @volumechange="sync" @click="toggle"><slot /></video>
     <div v-if="mediaError||!frameReady" class="chapter-media-status" role="status"><span>{{ mediaError||'正在加载本地视频画面…' }}</span><button v-if="!mediaError" type="button" @click="toggle">点击播放</button></div>
     <div class="chapter-overlay">
       <div class="chapter-current"><span class="chapter-live-dot"></span>{{ active?.title || '课程视频' }}</div>

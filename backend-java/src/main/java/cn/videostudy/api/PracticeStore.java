@@ -156,7 +156,41 @@ public class PracticeStore {
             String content=(Objects.toString(page.get("title"),"")+Objects.toString(page.get("content"),"")+Objects.toString(page.get("ocr"),"")).toLowerCase().replaceAll("[^\\p{L}\\p{N}]","");
             return terms.stream().anyMatch(content::contains);
         }).limit(6).toList());
+        context.put("courseId",analysis);
+        var teaching=(Map<String,Object>)((List<Map<String,Object>>)job.source().getOrDefault("nodes",List.of())).stream()
+            .filter(node->Objects.equals(q.get("nodeId"),node.get("id"))).findFirst().orElse(Map.of());
+        var map=(Map<String,Object>)job.source().getOrDefault("mindMap",Map.of());
+        var richer=findTeachingNode((Map<String,Object>)map.get("root"),Objects.toString(q.get("nodeId"),""));
+        context.put("knowledgeNode",richer==null?teaching:richer);
+        var selectedPages=(List<Map<String,Object>>)context.get("pages");
+        var imageTimes=new LinkedHashSet<Long>();
+        for(var ref:refs)if("image".equals(ref.get("sourceType"))&&ref.get("startMs") instanceof Number time)imageTimes.add(time.longValue());
+        for(var page:(List<Map<String,Object>>)job.source().getOrDefault("pageGroups",List.of()))
+            if(selectedPages.stream().anyMatch(selected->Objects.equals(selected.get("pageIndex"),page.get("pageIndex"))))
+                for(var time:(List<Number>)page.getOrDefault("representativeFrameTimesMs",List.of()))imageTimes.add(time.longValue());
+        context.put("_imageCandidates",new ArrayList<>(imageTimes));
+        if(job.source().get("ignoredRegion")!=null)context.put("_ignoredRegion",job.source().get("ignoredRegion"));
+        if(!map.isEmpty())context.put("_mapResult",map);
+        var speech=(List<Map<String,Object>>)job.source().getOrDefault("sourceSegments",List.of());
+        context.put("courseSpeech",speech.stream().filter(segment->segment.get("startMs") instanceof Number start&&segment.get("endMs") instanceof Number end&&
+            (refs.stream().anyMatch(ref->Objects.equals(ref.get("sourceId"),segment.get("id")))||selectedPages.stream().anyMatch(page->page.get("firstFrameTimeMs") instanceof Number first&&page.get("lastFrameTimeMs") instanceof Number last&&start.longValue()<=last.longValue()&&end.longValue()>=first.longValue()))).limit(120).toList());
+        var sourceIds=evidence.keySet();
+        context.put("referenceExamples",teachingList(map,"examples").stream()
+            .filter(example->teachingRefs(example).stream().anyMatch(ref->sourceIds.contains(ref.get("sourceId")))).limit(4).toList());
         return context;
+    }
+    @SuppressWarnings("unchecked") private static List<Map<String,Object>> teachingList(Map<String,Object> node,String key){
+        return node!=null&&node.get(key) instanceof List<?> values?(List<Map<String,Object>>)values:List.of();
+    }
+    @SuppressWarnings("unchecked") private static Map<String,Object> findTeachingNode(Map<String,Object> node,String id){
+        if(node==null)return null;if(Objects.equals(node.get("id"),id))return node;
+        for(String key:List.of("children","details"))for(var child:teachingList(node,key)){var found=findTeachingNode(child,id);if(found!=null)return found;}
+        return null;
+    }
+    @SuppressWarnings("unchecked") private static List<Map<String,Object>> teachingRefs(Map<String,Object> node){
+        var refs=new ArrayList<>(teachingList(node,"evidenceRefs"));
+        for(String key:List.of("children","details"))for(var child:teachingList(node,key))refs.addAll(teachingRefs(child));
+        return refs;
     }
     public Map<String,Object> session(String analysis,String setId,String session,String client) {
         requireSession(analysis,setId,session,client);

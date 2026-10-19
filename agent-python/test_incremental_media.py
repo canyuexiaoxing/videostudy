@@ -27,7 +27,7 @@ class IncrementalMediaTest(unittest.TestCase):
             model = Path(directory, 'faster-whisper-base'); model.mkdir()
             (model/'model.bin').write_bytes(b'fixture')
             engine = Mock(); engine.transcribe.return_value = (decoded(), SimpleNamespace(language='en'))
-            with patch.dict(os.environ, {'MEDIA_TEMP_DIR':directory,'MODEL_DIR':directory,'WHISPER_MODEL':'base','WHISPER_DEVICE':'cpu','WHISPER_COMPUTE_TYPE':'int8'}), patch('transcription.subprocess.run', return_value=SimpleNamespace(stdout='0')), patch('transcription._get_model', return_value=engine):
+            with patch.dict(os.environ, {'MEDIA_TEMP_DIR':directory,'MODEL_DIR':directory,'WHISPER_MODEL':'base','WHISPER_DEVICE':'cpu','WHISPER_COMPUTE_TYPE':'int8','WHISPER_BATCH_SIZE':'0'}), patch('transcription.subprocess.run', return_value=SimpleNamespace(stdout='0')), patch('transcription._get_model', return_value=engine):
                 result = transcribe_file(file_id, on_segment=seen.append)
             self.assertEqual(result['segments'], seen)
             self.assertEqual(result['language'], 'en')

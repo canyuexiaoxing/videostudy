@@ -79,6 +79,17 @@ public class TranscriptionJobStore {
 
     public record HistoryItem(String id, String name, String status, Instant createdAt) {}
 
+    public MediaIdentity findMediaIdentity(String id) {
+        return jdbc.query("SELECT media_size, media_fingerprint FROM transcription_jobs WHERE id = ? AND media_fingerprint IS NOT NULL AND media_size IS NOT NULL",
+            (row,n)->new MediaIdentity(row.getLong(1),row.getString(2)),id).stream().findFirst().orElse(null);
+    }
+    public void migrateMediaIdentity(String id,MediaIdentity identity) {
+        jdbc.update("UPDATE transcription_jobs SET media_size=?,media_fingerprint=? WHERE id=? AND media_fingerprint IS NULL",identity.size(),identity.fingerprint(),id);
+    }
+    public void saveMediaIdentity(String id, MediaIdentity identity) {
+        requireOne(jdbc.update("UPDATE transcription_jobs SET media_size = ?, media_fingerprint = ? WHERE id = ?",identity.size(),identity.fingerprint(),id));
+    }
+
     public void saveOriginalFilename(String id, String filename) {
         var name = filename == null ? "" : filename.replace((char)92, (char)47);
         name = name.substring(name.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}]", "").strip();

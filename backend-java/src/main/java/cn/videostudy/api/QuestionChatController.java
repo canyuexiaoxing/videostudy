@@ -7,6 +7,7 @@ import java.util.*;
 @RequestMapping("/api/transcriptions/{course}/practice/{set}/questions/{question}/chat")
 @CrossOrigin(origins={"http://localhost:5173","http://127.0.0.1:5173"})
 public class QuestionChatController {
+    private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(QuestionChatController.class);
     private final QuestionChatStore chats;private final PracticeStore practice;private final MediaAnalyzer agent;
     public record Request(String sessionId,String requestId,String message){}
     public QuestionChatController(QuestionChatStore chats,PracticeStore practice,MediaAnalyzer agent){this.chats=chats;this.practice=practice;this.agent=agent;}
@@ -30,8 +31,11 @@ public class QuestionChatController {
             if(chats.count(thread)>=20)return ResponseEntity.status(429).body(Map.of("error","chat_limit"));
             var history=chats.history(thread);var recent=history.subList(Math.max(0,history.size()-12),history.size());
             Map<String,Object> reply;
+            long started=System.nanoTime();
+            log.info("question_chat course={} request={} stage=request_started",course,request.requestId());
             try{reply=validate(agent.chatQuestion(Map.of("context",context,"history",recent,"message",request.message().trim())),context);}
-            catch(Exception error){return ResponseEntity.status(502).body(Map.of("error","chat_provider_failed"));}
+            catch(Exception error){log.warn("question_chat course={} request={} stage=request_failed type={} elapsed_ms={}",course,request.requestId(),error.getClass().getSimpleName(),(System.nanoTime()-started)/1000000);return ResponseEntity.status(502).body(Map.of("error","chat_provider_failed"));}
+            log.info("question_chat course={} request={} stage=request_completed elapsed_ms={}",course,request.requestId(),(System.nanoTime()-started)/1000000);
             chats.save(thread,token,request.requestId(),request.message().trim(),reply);
             return ResponseEntity.ok(reply);
         }finally{chats.release(thread,token);}

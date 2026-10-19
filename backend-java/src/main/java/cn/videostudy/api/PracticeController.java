@@ -47,7 +47,7 @@ public class PracticeController {
             if(!"legacy".equals(request.mode())) {source.put("courseId",id);source.put("ignoredRegion",main.findIgnoredRegion(id));}
             String hash=hash(json.writeValueAsString(result.mindMap()));
             if(!"legacy".equals(request.mode())) {source.put("conversationVersion","practice-course-history-v1");source.put("conversationRevision",store.conversationRevision(id,hash));}
-            String key=hash(hash+":"+source.get("scopeNodeId")+":"+json.writer().with(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).writeValueAsString(source)+":mindmap-practice-v6-history-json");
+            String key=hash(hash+":"+source.get("scopeNodeId")+":"+json.writer().with(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).writeValueAsString(source)+":mindmap-practice-v7-math-diagrams");
             var set=store.request(id,hash,key,result.mindMap().root().id().equals(source.get("scopeNodeId"))?"整课知识点":(String)source.get("scopeTitle"),source,request.retry());
             dispatch();return ResponseEntity.accepted().body(store.publicSet(id,set.id()));
         }catch(IllegalArgumentException error){return ResponseEntity.unprocessableEntity().body(Map.of("error",error.getMessage()));}
@@ -163,7 +163,7 @@ public class PracticeController {
             var canonical=(List<Map<String,Object>>)nodes.get(q.get("nodeId")).get("evidenceRefs");
             if(!(q.get("citations") instanceof List<?> refs)||refs.isEmpty())throw new IllegalArgumentException("missing_citations");
             for(var ref:refs)if(!(ref instanceof Map<?,?> citation)||canonical.stream().noneMatch(c->(citation.get("sourceType")==null||Objects.equals(c.get("sourceType"),citation.get("sourceType")))&&Objects.equals(c.get("sourceId"),citation.get("sourceId"))&&Objects.equals(c.get("quote"),citation.get("quote"))&&citation.get("startMs") instanceof Number start&&citation.get("endMs") instanceof Number end&&start.longValue()==((Number)c.get("startMs")).longValue()&&end.longValue()==((Number)c.get("endMs")).longValue()))throw new IllegalArgumentException("ungrounded_citation");
-            if(q.get("diagram")!=null&&(!(q.get("diagram") instanceof Map<?,?> diagram)||!List.of("bar","line","table","circuit").contains(diagram.get("kind"))||!(q.get("validation") instanceof Map<?,?> flags)||!Boolean.TRUE.equals(flags.get("diagramChecked"))))throw new IllegalArgumentException("unvalidated_diagram");
+            if(q.get("diagram")!=null&&(!(q.get("diagram") instanceof Map<?,?> diagram)||!List.of("bar","line","table","circuit","pie","scatter","function","geometry").contains(diagram.get("kind"))||!(q.get("validation") instanceof Map<?,?> flags)||!Boolean.TRUE.equals(flags.get("diagramChecked"))))throw new IllegalArgumentException("unvalidated_diagram");
         }
     }
     @PreDestroy public void close(){worker.shutdownNow();}

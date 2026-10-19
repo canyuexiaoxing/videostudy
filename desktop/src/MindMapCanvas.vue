@@ -115,10 +115,15 @@ function initialize() {
 }
 onMounted(() => {
   if (!container.value) return
+  let lastWidth = 0
   resizeObserver = new ResizeObserver(() => {
     if (!container.value?.clientWidth || !container.value.clientHeight) return
-    if (canvas) canvas.resize()
-    else initialize()
+    if (canvas) {
+      canvas.resize()
+      // Fit existing nodes to the resized pane without changing course content.
+      if (lastWidth && lastWidth !== container.value.clientWidth) fit()
+    } else initialize()
+    lastWidth = container.value.clientWidth
   })
   resizeObserver.observe(container.value)
   initialize()

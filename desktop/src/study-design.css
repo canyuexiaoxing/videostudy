@@ -526,3 +526,26 @@ body { background:#f3f6ff; }
   .study-app::before,.study-app::after,.appearance-switch button,
   .study-app :is(.panel,.study-sidebar,.mind-map-panel,.sidebar-heading,.sidebar-pane,.sidebar-tabs,.empty-steps span,.map-preview,.overview-item) { transition:none; }
 }
+
+/* The separator occupies the existing gutter; panels retain their grid cells. */
+@media(min-width:801px) {
+  .study-app { grid-template-columns:minmax(0,var(--workspace-left,1.52fr)) minmax(0,var(--workspace-right,1fr)); }
+  .workspace-divider { grid-column:1; grid-row:2; justify-self:end; align-self:start; position:sticky; top:12px; width:22px; height:calc(100vh - 128px); min-height:200px; margin-right:-22px; z-index:6; display:flex; align-items:center; justify-content:center; cursor:col-resize; touch-action:none; border-radius:8px; outline:none; }
+  .workspace-divider::before { content:""; position:absolute; top:0; bottom:0; width:2px; border-radius:2px; background:#5376e522; transition:background-color .18s; }
+  .workspace-divider>span { position:sticky; top:45vh; width:5px; height:42px; border-radius:4px; background:#637bc180; box-shadow:0 0 0 3px #ffffff66; transition:background-color .18s,box-shadow .18s; }
+  .workspace-divider:hover::before,.workspace-divider:focus-visible::before,.workspace-divider.is-dragging::before { background:#5376e580; }
+  .workspace-divider:hover>span,.workspace-divider:focus-visible>span,.workspace-divider.is-dragging>span { background:#4168ef; box-shadow:0 0 0 4px #ffffffa6; }
+  .workspace-resizing,.workspace-resizing * { cursor:col-resize!important; user-select:none!important; }
+  .workspace-resizing video,.workspace-resizing iframe { pointer-events:none; }
+  .study-app .player-tools { flex-wrap:wrap; }
+  .study-app .player-panel .section-title { flex-wrap:wrap; gap:10px; }
+  .study-app .sidebar-heading { flex-wrap:wrap; }
+}
+@media(max-width:800px) { .workspace-divider { display:none; } }
+
+.media-association { margin:0 0 12px; padding:11px 14px; border:1px solid #d5e1fa; border-radius:10px; background:#f1f6ff; color:#344e79; font-size:12px; line-height:1.7; overflow-wrap:anywhere; }
+.media-association p { margin:6px 0; }
+.media-association .text-link { margin-left:12px; }
+.media-association.mismatch { border-color:#ebc7bc; background:#fff5f0; color:#8d483a; }
+.media-association.unverified { border-color:#e5d7ac; background:#fffbee; color:#756036; }
+.study-app .playback-notice { padding:9px 12px; border-radius:8px; color:#855038; background:#fff5e9; }

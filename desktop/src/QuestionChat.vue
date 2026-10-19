@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import MathText from './MathText.vue'
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import StudyIcon from './StudyIcon.vue'
 import { latestRequests } from './mediaBinding'
@@ -54,7 +55,7 @@ onBeforeUnmount(()=>requests.invalidate())
   <div ref="transcript" class="chat-messages" role="log" aria-label="本题对话记录" aria-live="polite">
    <div v-if="!loading&&!messages.length" class="chat-empty"><span class="chat-empty-icon"><StudyIcon name="chat"/></span><strong>哪里没想明白？从这里开始</strong><p>可以问“为什么我的选项不对？”，也可以写下你的计算过程。</p></div>
    <article v-for="(message,i) in messages" :key="i" :class="['chat-message',message.role]">
-    <strong>{{ message.role==='user'?'你':'本题助教' }}</strong><p>{{ message.content }}</p>
+    <strong>{{ message.role==='user'?'你':'本题助教' }}</strong><p><MathText :text="message.content" /></p>
     <div v-if="message.citations?.length" class="chat-citations"><button v-for="citation in message.citations" :key="citation.sourceId" type="button" :disabled="!playbackReady" @click="emit('seek',citation.startMs,citation.sourceId)">回看 {{ time(citation.startMs) }} · {{ citation.quote }}</button></div>
    </article>
   </div>
