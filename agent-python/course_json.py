@@ -3,9 +3,10 @@ import json,math,re
 from model_diagnostics import record_event
 
 class CourseJsonFormatError(json.JSONDecodeError):
- def __init__(self,code,doc,pos=0,*,path=None):
+ def __init__(self,code,doc,pos=0,*,path=None,syntax_reason=None):
   self.code=code
   self.path=path
+  self.syntax_reason=syntax_reason
   super().__init__(code,doc,pos)
  def __str__(self):
   if self.code=='json_duplicate_key' and self.path:
@@ -26,6 +27,17 @@ def _plain_numbers(value):
  if isinstance(value,dict):return {key:_plain_numbers(item) for key,item in value.items()}
  if isinstance(value,list):return [_plain_numbers(item) for item in value]
  return value
+
+_SYNTAX_REASONS={
+ "Expecting ',' delimiter":'syntax_expected_comma',
+ "Expecting ':' delimiter":'syntax_expected_colon',
+ 'Expecting property name enclosed in double quotes':'syntax_expected_property',
+ 'Expecting value':'syntax_expected_value',
+ 'Unterminated string starting at':'syntax_unterminated_string',
+ 'Invalid control character at':'syntax_invalid_control',
+ 'Invalid \\escape':'syntax_invalid_escape',
+ 'Invalid \\uXXXX escape':'syntax_invalid_unicode',
+}
 
 _PATH_FIELDS={'topic','children','details','examples','uncertainties','title','sourceIds','imageIds','mergeEvidence','candidateDecisions','reason','startMs','endMs','id','type','quote'}
 
@@ -78,10 +90,10 @@ def parse_course_json(text,*,task=None):
   while cursor<len(source):
    while cursor<len(source) and source[cursor].isspace():cursor+=1
    if cursor==len(source):break
-   if source[cursor]!='{':raise CourseJsonFormatError('json_trailing_content' if count else 'json_root_invalid',text,cursor+offset)
+   if source[cursor]!='{':raise CourseJsonFormatError('json_trailing_content' if count else 'json_root_invalid',text,cursor+offset,syntax_reason='syntax_trailing_content' if count else 'syntax_root_not_object')
    try:value,end=decoder.raw_decode(source,cursor)
    except json.JSONDecodeError as error:
-    raise CourseJsonFormatError('json_multiple_fragments' if count else 'json_invalid_syntax',text,error.pos+offset) from None
+    raise CourseJsonFormatError('json_multiple_fragments' if count else 'json_invalid_syntax',text,error.pos+offset,syntax_reason=_SYNTAX_REASONS.get(error.msg,'syntax_invalid_json')) from None
    value=_materialize(value,'root',duplicates,text)
    if count and not _same_value(first,value):raise CourseJsonFormatError('json_ambiguous_documents',text,cursor+offset)
    if not count:first=value

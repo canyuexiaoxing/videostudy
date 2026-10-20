@@ -9,7 +9,7 @@ class ReplyStructureError(CourseJsonFormatError):
   self.issues=issues
   super().__init__('json_structure_invalid',text,path=issues[0]['path'] if issues else 'root')
  def __str__(self):
-  message='json_structure_invalid ('+'; '.join(i['code']+': '+i['path'] for i in self.issues[:8])+')'
+  message='json_structure_invalid ('+'; '.join(i['code']+': '+i['path']+(f" [{i['syntaxReason']}, character {i['position']+1}]" if i.get('syntaxReason') else '') for i in self.issues[:8])+')'
   outcome=getattr(self,'repair_outcome',None)
   if outcome:message+='；已自动修复1次，'+('修复结果未通过原内容保留校验' if outcome=='content' else '修复请求或结果校验仍未通过')
   return message
@@ -118,6 +118,7 @@ def parse_map_reply(text,*,task=None):
   code='duplicate_field' if error.code=='json_duplicate_key' else 'parse_error'
   issues=[{'code':code,'path':error.path or 'root','parserCode':error.code,
            'line':error.lineno,'column':error.colno,'position':error.pos}]
+  if error.syntax_reason:issues[0]['syntaxReason']=error.syntax_reason
   try:
    recovered=_recover_tree(text)
    for issue in collect_issues(recovered):

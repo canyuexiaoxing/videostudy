@@ -167,4 +167,20 @@ class ReplyRepairTests(unittest.TestCase):
   with mock:
    with self.assertRaises(CourseJsonFormatError):course._deepseek_course_json(self.payload,[])
   self.assertEqual(len(calls),2)
+ def test_precise_syntax_reason_reaches_repair_without_changing_materials(self):
+  raw=self.good();text=json.dumps(raw).replace(', "examples"',' "examples"')
+  calls,mock=self.invoke([text,json.dumps(raw)])
+  with mock:self.assertEqual(course._deepseek_course_json(self.payload,[]),raw)
+  self.assertEqual(len(calls),2)
+  self.assertEqual(calls[1]['messages'][:2],calls[0]['messages'])
+  issue=json.loads(calls[1]['messages'][3]['content'])['issues'][0]
+  self.assertEqual(issue['syntaxReason'],'syntax_expected_comma')
+  self.assertEqual(issue['position'],text.index('"examples"'))
+  for body in calls:
+   self.assertEqual(body['response_format'],{'type':'json_object'})
+   self.assertEqual(body['max_tokens'],393216)
+   self.assertEqual(body['thinking'],{'type':'disabled'})
+   self.assertNotIn('temperature',body)
+  logs=(self.root/'logs/model-events.jsonl').read_text()
+  self.assertIn('syntax_expected_comma',logs);self.assertNotIn('PRIVATE',logs)
 if __name__=='__main__':unittest.main()
