@@ -3,3 +3,19 @@ test('renders mixed inline/display fractions and matrices',()=>{const parts=math
 test('bad formula and unmatched delimiter retain source',()=>{assert.ok(mathParts('式子 $\\unknowncommand{x}$').some(p=>p.error));assert.equal(mathParts('未结束 $x')[0].text,'未结束 $x')});
 test('plain html is never trusted and TeX cannot load external resources',()=>{assert.equal(mathParts('<img src=x onerror=alert(1)>')[0].html,undefined);assert.ok(!mathParts('$\\includegraphics{https://example.com/a}$').some(p=>p.html?.includes('<img')));assert.ok(!mathParts('$\\href{javascript:alert(1)}{click}$').some(p=>p.html?.includes('href="javascript')))});
 test('escaped dollar and code spans are not rendered',()=>{assert.equal(mathParts('\\$20 and `$x$`').filter(p=>p.html).length,0)});
+
+
+test('real native practice doubled delimiters render without altering inner TeX',()=>{
+ const question={"prompt": "关于二次函数 \\(y=x^2\\) 的图像，它的顶点坐标是（ ）。", "options": ["\\((0,0)\\)", "\\((1,1)\\)", "\\((2,4)\\)", "\\((-2,4)\\)"]}
+ for(const text of [question.prompt,...question.options])assert.equal(mathParts(text).filter(p=>p.html?.includes('katex')).length,1)
+ const matrix="\\\\[\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}\\\\]"
+ assert.ok(mathParts(matrix)[0].html?.includes('mtable'))
+ assert.equal(mathParts(matrix)[0].error,undefined)
+})
+test('doubled delimiter repair preserves code currency and unmatched text',()=>{
+ const code="`\\\\(y=x^2\\\\)`"
+ assert.equal(mathParts(code).some(p=>p.html),false)
+ const unmatched="prefix \\\\(x plus \\$20"
+ assert.deepEqual(mathParts(unmatched),[{text:unmatched}])
+ assert.equal(mathParts("\\$20 and \\$30").some(p=>p.html),false)
+})

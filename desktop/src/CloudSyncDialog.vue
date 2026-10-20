@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { API_ORIGIN } from './apiOrigin' 
 import {ref,onMounted,onBeforeUnmount} from 'vue'
 const props=defineProps<{courseId:string}>(),emit=defineEmits<{close:[];updated:[]}>()
 type Remote={id:string;name:string;revision:number;legacy:boolean}
 const dialog=ref<HTMLDialogElement|null>(null),busy=ref(false),error=ref(''),notice=ref(''),configured=ref(false),connected=ref(false),localCount=ref(0),syncedCount=ref(0),documents=ref<Remote[]>([])
 const controller=new AbortController()
 const explanations:Record<string,string>={sync_not_configured:'尚未配置云同步服务，请先完成本机后台的同步连接配置。',sync_invalid_server:'同步服务地址不正确，请检查后台配置。',sync_unauthorized:'同步凭证无效，请检查本机与云端的配置。',sync_conflict:'云端已有不同版本，已停止上传，保留两边的数据。',local_changes:'本机有尚未上传的改动，已停止下载，避免覆盖。',course_busy:'这节课仍有任务正在处理，请完成后再同步。',sync_unavailable:'暂时连不上云端，本机课程仍可正常使用。',sync_server_error:'云端暂时无法完成同步，请稍后再试。',course_not_found:'找不到这节课的记录。',sync_invalid_reply:'云端返回的数据未通过校验，未覆盖本机记录。'}
-async function call(path:string,method='GET'){const response=await fetch('http://127.0.0.1:18080/api/sync'+path,{method,signal:controller.signal});const data=await response.json();if(!response.ok)throw Error(explanations[data.error]||'同步未完成，本机数据已保留。');return data}
+async function call(path:string,method='GET'){const response=await fetch(API_ORIGIN + '/api/sync'+path,{method,signal:controller.signal});const data=await response.json();if(!response.ok)throw Error(explanations[data.error]||'同步未完成，本机数据已保留。');return data}
 async function run(action:()=>Promise<void>){if(busy.value)return;busy.value=true;error.value='';notice.value='';try{await action()}catch(e){if(!controller.signal.aborted)error.value=e instanceof Error?e.message:'同步未完成。'}finally{busy.value=false}}
 async function status(){const data=await call('/status');configured.value=data.configured;localCount.value=data.localCourses;syncedCount.value=data.syncedCourses}
 async function connect(){await run(async()=>{const data=await call('/connection','POST');connected.value=data.connected;documents.value=data.documents;notice.value='云端连接正常。'})}

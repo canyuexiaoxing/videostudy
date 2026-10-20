@@ -92,4 +92,13 @@ class PracticeStoreTest {
         assertEquals(1,store.conversationRevision(course,"hash"));
         assertEquals(0,store.conversationRevision(UUID.randomUUID().toString(),"hash"));
     }
+    @Test void exhaustedFormatRepairIsNotDispatchedAgain()throws Exception {
+        var set=store.request(course,"hash","format-failed","知识点",Map.of(),false);
+        var agent=org.mockito.Mockito.mock(MediaAnalyzer.class);
+        org.mockito.Mockito.when(agent.generatePractice(org.mockito.ArgumentMatchers.anyMap())).thenThrow(new org.springframework.web.client.HttpServerErrorException(org.springframework.http.HttpStatus.BAD_GATEWAY,"agent failed","{\"detail\":\"practice_format_repair_failed\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8),java.nio.charset.StandardCharsets.UTF_8));
+        var controller=new PracticeController(store,new TranscriptionJobStore(jdbc,new ObjectMapper()),agent,new ObjectMapper());
+        try {controller.dispatch();for(int i=0;i<100&&!"failed".equals(store.find(set.id()).orElseThrow().status());i++)Thread.sleep(20);
+            assertEquals("failed",store.find(set.id()).orElseThrow().status());assertEquals("practice_format_repair_failed",store.find(set.id()).orElseThrow().error());assertTrue(store.due().isEmpty());org.mockito.Mockito.verify(agent,org.mockito.Mockito.times(1)).generatePractice(org.mockito.ArgumentMatchers.anyMap());
+        } finally {controller.close();}
+    }
 }

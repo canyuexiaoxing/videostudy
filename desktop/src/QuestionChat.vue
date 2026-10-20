@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { API_ORIGIN } from './apiOrigin' 
 import MathText from './MathText.vue'
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import StudyIcon from './StudyIcon.vue'
@@ -12,7 +13,7 @@ const transcript=ref<HTMLElement|null>(null)
 const requests=latestRequests()
 const historyReady=ref(false)
 let retryId='', retryText=''
-const url=`http://127.0.0.1:18080/api/transcriptions/${props.courseId}/practice/${props.setId}/questions/${props.questionId}/chat`
+const url=`${API_ORIGIN}/api/transcriptions/${props.courseId}/practice/${props.setId}/questions/${props.questionId}/chat`
 function problem(code:string){
  return ({chat_busy:'这道题的答疑正在处理，请稍后重试。',chat_limit:'本题已达到 20 次交流上限。',answer_required:'请先完成本题作答。',chat_provider_failed:'答疑暂时未完成，输入已保留，可以重试。',chat_request_conflict:'请求记录有冲突，请修改问题后再试。'} as Record<string,string>)[code]??'暂时无法读取答疑，请稍后重试。'
 }

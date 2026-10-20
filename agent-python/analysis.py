@@ -30,7 +30,7 @@ def media_duration_ms(path: Path) -> int:
     result = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
          "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
-        capture_output=True, text=True, check=True,
+        capture_output=True, text=True, check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     return round(float(result.stdout.strip()) * 1000)
 

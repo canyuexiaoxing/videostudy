@@ -14,9 +14,31 @@ class CompatiblePlaybackTests(unittest.TestCase):
         self.assertEqual(args[args.index('-c:v') + 1], 'h264_nvenc')
         self.assertEqual(args[args.index('-c:a') + 1], 'copy')
         self.assertIn('yuv420p', args)
-        self.assertNotIn('libx264', args)
+        self.assertNotIn('libopenh264', args)
         self.assertNotIn('-ss', args)
         self.assertNotIn('-r', args)
+
+    def test_native_auto_uses_cpu_when_nvenc_unavailable(self):
+        with patch.dict(playback.os.environ, {'FRAMEWISE_DEVICE_MODE':'auto'}), patch.object(playback, 'encoder_available', side_effect=lambda x:x=='libopenh264'):
+            self.assertEqual(playback.choose_encoder(),'libopenh264')
+
+    def test_native_cpu_never_probes_gpu(self):
+        with patch.dict(playback.os.environ, {'FRAMEWISE_DEVICE_MODE':'cpu'}), patch.object(playback, 'encoder_available', return_value=True) as probe:
+            self.assertEqual(playback.choose_encoder(),'libopenh264')
+            probe.assert_called_once_with('libopenh264')
+
+    def test_strict_gpu_and_docker_never_cpu_fallback(self):
+        for mode in ('gpu',''):
+            with patch.dict(playback.os.environ, {'FRAMEWISE_DEVICE_MODE':mode}), patch.object(playback, 'encoder_available', return_value=False) as probe:
+                with self.assertRaises(ValueError):playback.choose_encoder()
+                probe.assert_called_once_with('h264_nvenc')
+
+    def test_cpu_encode_uses_software_decode_and_preserves_timing(self):
+        args=command('input','output','opus','libopenh264')
+        self.assertNotIn('-hwaccel',args)
+        self.assertEqual(args[args.index('-c:v')+1],'libopenh264')
+        self.assertNotIn('-r',args)
+        self.assertNotIn('-ss',args)
 
     def test_reject_path_traversal(self):
         with tempfile.TemporaryDirectory() as root:

@@ -17,10 +17,13 @@ public class VideoRegionController {
     public record Frame(long timeMs,String image){}
     public record Batch(List<Frame> frames){}
     @org.springframework.beans.factory.annotation.Autowired
-    public VideoRegionController(@Value("${agent.base-url}")String base){
+    public VideoRegionController(@Value("${agent.base-url}")String base,@Value("${FRAMEWISE_RUNTIME_TOKEN:}")String runtimeToken){
         var factory=new SimpleClientHttpRequestFactory();factory.setConnectTimeout(3000);factory.setReadTimeout(60000);
-        agent=RestClient.builder().baseUrl(base).requestFactory(factory).build();
+        var builder=RestClient.builder().baseUrl(base).requestFactory(factory);
+        if(!runtimeToken.isEmpty())builder.defaultHeader(NativeRuntimeFilter.HEADER,runtimeToken);
+        agent=builder.build();
     }
+    public VideoRegionController(String base){this(base,"");}
     VideoRegionController(RestClient client){agent=client;}
     @PostMapping public ResponseEntity<?> detect(@RequestBody Batch request){
         if(request.frames()==null||request.frames().isEmpty()||request.frames().size()>4)return ResponseEntity.badRequest().body(Map.of("error","invalid_region_frames"));

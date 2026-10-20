@@ -8,7 +8,9 @@ export function mathParts(text:string):MathPart[]{
   if(text[i]==='`'){const marker=text.startsWith('```',i)?'```':'`';const end=text.indexOf(marker,i+marker.length);i=end<0?text.length:end+marker.length;continue}
   let open='',close='',display=false
   if(!escaped(i)){
-   if(text.startsWith('$$',i)){open=close='$$';display=true}
+   if(text.startsWith('\\\\[',i)){open='\\\\[';close='\\\\]';display=true}
+   else if(text.startsWith('\\\\(',i)){open='\\\\(';close='\\\\)'}
+   else if(text.startsWith('$$',i)){open=close='$$';display=true}
    else if(text.startsWith('\\[',i)){open='\\[';close='\\]';display=true}
    else if(text.startsWith('\\(',i)){open='\\(';close='\\)'}
    else if(text[i]==='$'){open=close='$'}

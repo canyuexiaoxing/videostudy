@@ -8,7 +8,7 @@ MODEL_SHA256='361fbfabab285c3237700b6bb91d7ecfa602cd945fffda8dbe1242829b71e73f'
 
 def settings(selection_mode=None):
  if selection_mode is not None and selection_mode not in ('off','adjacent'):raise ValueError('invalid_person_selection_mode')
- mode=('cuda' if selection_mode=='adjacent' else 'off') if selection_mode is not None else os.environ.get('PERSON_SEGMENTATION','off')
+ mode=((os.environ.get('PERSON_DEVICE',os.environ.get('PERSON_SEGMENTATION','cpu')) if os.environ.get('FRAMEWISE_DEVICE_MODE') else 'cuda') if selection_mode=='adjacent' else 'off') if selection_mode is not None else os.environ.get('PERSON_SEGMENTATION','off')
  if mode not in ('off','auto','cpu','cuda'):raise ValueError('invalid_person_segmentation_mode')
  return {'mode':mode,'model':str(Path(os.environ.get('PERSON_MODEL_PATH',str(Path(os.environ.get('MODEL_DIR','../.local/models'))/'yolo26/yolo26n-seg.pt'))).resolve()),'python':os.environ.get('PERSON_PYTHON','/opt/person/bin/python'),'sha256':MODEL_SHA256,'version':VERSION,'imgsz':640,'threads':4,'libraryRoot':os.environ.get('PERSON_LIBRARY_ROOT','/opt/person-cuda/nvidia'),**({'strategy':'adjacent','strategyVersion':'adjacent-pair-v1'} if selection_mode=='adjacent' else {})}
 
@@ -89,7 +89,7 @@ class PersonMaskProcess:
    if library_root.is_dir():
     libraries=[str(p) for p in sorted(library_root.glob('*/lib')) if p.parent.name!='nccl']
     env['LD_LIBRARY_PATH']=':'.join([*libraries,env.get('LD_LIBRARY_PATH','')])
-   self.process=subprocess.Popen([self.config['python'],'-u',str(Path(__file__).with_name('person_mask_worker.py'))],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,encoding='utf-8',bufsize=1,env=env)
+   self.process=subprocess.Popen([self.config['python'],'-u',str(Path(__file__).with_name('person_mask_worker.py'))],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0),text=True,encoding='utf-8',bufsize=1,env=env)
    def read():
     try:
      for line in self.process.stdout:self.answers.put(line)
@@ -111,6 +111,8 @@ class PersonMaskProcess:
   raw=np.asarray(image,dtype=np.uint8)
   self.process.stdin.write(json.dumps({'shape':list(raw.shape),'data':base64.b64encode(raw.tobytes()).decode('ascii')})+'\n');self.process.stdin.flush()
   value=self._receive();shape=tuple(value['shape'])
+  if value.get('fallback'):
+   self.device='cpu';os.environ['PERSON_DEVICE']='cpu'
   if shape!=raw.shape[:2]:raise ValueError('invalid_person_mask_shape')
   packed=base64.b64decode(value['data'],validate=True)
   if len(packed)!=(shape[0]*shape[1]+7)//8:raise ValueError('invalid_person_mask_size')
@@ -160,3 +162,5 @@ class PersonMaskLease:
  def close(self):
   if not self.closed:self.closed=True;_person_lock.release()
  def __exit__(self,*args):self.close()
+
+

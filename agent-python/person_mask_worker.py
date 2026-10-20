@@ -2,7 +2,20 @@
 import os,sys,json,base64,hashlib,threading,time
 from pathlib import Path
 from contextlib import redirect_stdout
+from native_devices import configure_dll_directories
+configure_dll_directories()
 import numpy as np
+
+def predict_with_fallback(model,image,device):
+ from native_devices import allow_cpu_fallback,record_fallback
+ kwargs=dict(imgsz=640,classes=[0],conf=.25,retina_masks=True,verbose=False)
+ try:return model.predict(image,device=device,half=device!='cpu',**kwargs)[0],device,False
+ except Exception as error:
+  if not allow_cpu_fallback(error,device):raise
+  record_fallback('person',error)
+  import torch
+  model.to('cpu');torch.cuda.empty_cache()
+  return model.predict(image,device='cpu',half=False,**kwargs)[0],'cpu',True
 
 def reply(value):print(json.dumps(value,separators=(',',':')),flush=True)
 def main():
@@ -30,14 +43,14 @@ def main():
    if len(raw)!=int(np.prod(shape)):raise ValueError('invalid_preview_size')
    image=np.frombuffer(raw,dtype=np.uint8).reshape(shape)
    with redirect_stdout(sys.stderr):
-    result=model.predict(image,device=device,half=device!='cpu',imgsz=640,classes=[0],conf=.25,retina_masks=True,verbose=False)[0]
+    result,device,fallback=predict_with_fallback(model,image,device)
     # select_device can override CPU threads on the first call.
     torch.set_num_threads(config['threads'])
    mask=np.zeros(shape[:2],dtype=np.uint8)
    if result.masks is not None:mask=np.any(result.masks.data.cpu().numpy()>0,axis=0).astype(np.uint8)
    # A small safety margin protects body edges; original images remain untouched.
    mask=cv2.dilate(mask,np.ones((3,3),np.uint8))
-   reply({'ok':True,'shape':list(mask.shape),'data':base64.b64encode(np.packbits(mask).tobytes()).decode('ascii')})
+   reply({'ok':True,'device':'cpu' if device=='cpu' else 'cuda','fallback':fallback,'shape':list(mask.shape),'data':base64.b64encode(np.packbits(mask).tobytes()).decode('ascii')})
   except Exception as error:reply({'ok':False,'error_type':type(error).__name__,'reason':'person_inference_failed'});break
 if __name__=='__main__':
  try:main()
@@ -45,3 +58,4 @@ if __name__=='__main__':
   code=str(error)
   reason='person_model_invalid' if code=='person_model_digest_mismatch' or isinstance(error,FileNotFoundError) else 'person_cuda_unavailable' if code=='person_cuda_unavailable' else 'person_runtime_unavailable' if isinstance(error,ImportError) else 'person_model_load_failed'
   reply({'ok':False,'error_type':type(error).__name__,'reason':reason});sys.exit(1)
+

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { unavailableAnalysisModules } from './nativeRuntime'
+import { API_ORIGIN, setApiOrigin } from './apiOrigin' 
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import MindMapCanvas from './MindMapCanvas.vue'
 import MindMapDialog from './MindMapDialog.vue'
@@ -18,6 +20,7 @@ import SubtitleSettings from './SubtitleSettings.vue'
 import AiOverview from './AiOverview.vue'
 import OverviewChat from './OverviewChat.vue'
 import CloudSyncDialog from './CloudSyncDialog.vue'
+import RuntimeSettings from './RuntimeSettings.vue'
 import AiPractice from './AiPractice.vue'
 import PageGallery from './PageGallery.vue'
 import { appearanceCss, normalizeAppearance, positionCue } from './subtitleAppearance'
@@ -79,8 +82,14 @@ function readHistory(): HistoryEntry[] {
   return entries
 }
 
+const runtimeSettingsOpen=ref(false)
+onMounted(() => {
+  if (window.framewiseDesktop) void window.framewiseDesktop.status().then(status => {
+    if (status.phase !== 'ready' || !status.settings?.hasKey || !['ready', 'installed'].includes(status.models?.state || '')) runtimeSettingsOpen.value = true
+  }).catch(() => { runtimeSettingsOpen.value = true })
+})
 const cloudSyncOpen=ref(false)
-const apiBase = 'http://127.0.0.1:18080/api'
+const apiBase = API_ORIGIN + '/api'
 type WorkspaceAppearance = 'acrylic' | 'blue' | 'classic'
 const appearanceOptions: { value: WorkspaceAppearance; label: string }[] = [
   { value: 'acrylic', label: '亚克力' }, { value: 'blue', label: '蓝紫' }, { value: 'classic', label: '简洁' },
@@ -132,8 +141,21 @@ async function refreshHistory(){
 watch(rightTab,tab=>{if(tab==='history')void refreshHistory()})
 let historyTimer:ReturnType<typeof setInterval>|undefined
 function focusHistory(){void refreshHistory()}
-onMounted(()=>{void refreshHistory();window.addEventListener('focus',focusHistory);historyTimer=setInterval(()=>{if(rightTab.value==='history'&&!document.hidden&&!historyLoading.value)void refreshHistory()},15000)})
-onUnmounted(()=>{++historyGeneration;historyController?.abort();clearInterval(historyTimer);window.removeEventListener('focus',focusHistory)})
+function nativeRuntimeState(event: Event) {
+ const detail = (event as CustomEvent<{phase?: string; apiOrigin?: string}>).detail
+ if (!window.framewiseDesktop || detail?.phase !== 'ready') return
+ const previousOrigin = API_ORIGIN
+ if (!setApiOrigin(detail.apiOrigin)) return
+ if (API_ORIGIN !== previousOrigin) {
+  setApiOrigin(previousOrigin)
+  error.value = '本机服务地址已变化，请保存笔记并重新打开软件，随后继续学习。'
+  runtimeSettingsOpen.value = true
+  return
+ }
+ if (!existingJobId.value && !isAnalysisPending.value) void refreshHistory()
+}
+onMounted(()=>{void refreshHistory();window.addEventListener('focus',focusHistory);window.addEventListener('framewise-runtime-state',nativeRuntimeState);historyTimer=setInterval(()=>{if(rightTab.value==='history'&&!document.hidden&&!historyLoading.value)void refreshHistory()},15000)})
+onUnmounted(()=>{++historyGeneration;historyController?.abort();clearInterval(historyTimer);window.removeEventListener('focus',focusHistory);window.removeEventListener('framewise-runtime-state',nativeRuntimeState)})
 
 const selectedFile = ref<SelectedMedia | null>(null)
 const selectedFingerprint = ref('')
@@ -701,8 +723,31 @@ async function waitForAnalysis(id: string, request: RequestTicket) {
     throw new Error('等待分析超时')
 }
 
+const nativePreflightPending = ref(false)
+async function nativeAnalysisReady(): Promise<boolean> {
+  if (!window.framewiseDesktop) return true
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const current = await Promise.race([window.framewiseDesktop.status(), new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 3500) })])
+    const unavailable = unavailableAnalysisModules(current, personSelectionMode.value).length > 0
+    const reason = !current || current.phase !== 'ready' ? '本机服务尚未就绪，请在设置中启动或重试。'
+      : !current.settings?.hasKey ? '请先在设置中保存 DeepSeek API 密钥，再开始分析。'
+      : !['ready', 'installed'].includes(current.models?.state || '') || unavailable ? '本地模型尚未就绪，请先在设置中下载或导入模型，并检查设备状态。'
+      : current.apiOrigin && current.apiOrigin !== API_ORIGIN ? '本机服务地址已变化，请重新打开软件后再开始分析。' : ''
+    if (reason) { error.value = reason; runtimeSettingsOpen.value = true; return false }
+    return true
+  } catch { error.value = '暂时无法检查本机环境，请在设置中重试或导出诊断。'; runtimeSettingsOpen.value = true; return false }
+  finally { if (timer) clearTimeout(timer) }
+}
 async function runTranscription() {
-  if (!selectedFile.value || isAnalysisPending.value || checkingMedia.value) return
+  if (!selectedFile.value || isAnalysisPending.value || checkingMedia.value || nativePreflightPending.value) return
+  if (window.framewiseDesktop) {
+    const selectedBeforeCheck = selectedFile.value
+    nativePreflightPending.value = true
+    let ready = false
+    try { ready = await nativeAnalysisReady() } finally { nativePreflightPending.value = false }
+    if (!ready || selectedFile.value !== selectedBeforeCheck || checkingMedia.value || isAnalysisPending.value) return
+  }
   const request = analysisRequests.begin()
   const file = selectedFile.value
   const fingerprint = selectedFingerprint.value
@@ -1030,19 +1075,21 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <RuntimeSettings v-if="runtimeSettingsOpen" @close="runtimeSettingsOpen=false" />
   <CloudSyncDialog v-if="cloudSyncOpen" :course-id="existingJobId" @close="cloudSyncOpen=false" @updated="refreshHistory" />
   <main class="study-app" :data-appearance="workspaceAppearance" :class="{ 'ambient-paused': ambientHidden || isAnalysisPending || generatingMindMap || compatibilityBusy }">
     <header class="app-header">
       <div class="brand" aria-label="Framewise"><img class="brand-symbol" src="/framewise.svg" alt="" width="35" height="35" /><span>Framewise</span></div>
       <div class="header-context"><strong>沉浸式学习台</strong><span class="header-divider" aria-hidden="true"></span><span class="header-file">{{ filename || currentHistoryName || '选择一段课程视频，开始建立知识导图' }}</span></div>
       <div class="header-actions">
+        <button type="button" class="secondary" @click="runtimeSettingsOpen=true">设置</button>
         <button type="button" class="secondary" @click="cloudSyncOpen=true">云同步</button>
         <div class="appearance-switch" role="group" aria-label="界面外观">
           <button v-for="option in appearanceOptions" :key="option.value" type="button" :aria-pressed="workspaceAppearance === option.value" @click="workspaceAppearance = option.value">{{ option.label }}</button>
         </div>
         <span v-if="mindMap?.status === 'completed'" class="ready-indicator">已生成 {{ mindMap.root.children.length }} 个主题</span>
         <label class="file-picker"><StudyIcon name="upload" />选择本地视频 <input type="file" accept="video/*,audio/*" @change="chooseVideo" /></label>
-        <button v-if="selectedFile && (!transcript.length || !confirmedMedia)" class="run" type="button" :disabled="isAnalysisPending" @click="runTranscription">{{ isAnalysisPending ? '处理中…' : '开始分析' }}</button>
+        <button v-if="selectedFile && (!transcript.length || !confirmedMedia)" class="run" type="button" :disabled="isAnalysisPending || nativePreflightPending" @click="runTranscription">{{ nativePreflightPending ? '正在检查本机环境…' : isAnalysisPending ? '处理中…' : '开始分析' }}</button>
       </div>
       <AnalysisProgressBar :state="analysisState" :progress="analysisProgress" />
     </header>

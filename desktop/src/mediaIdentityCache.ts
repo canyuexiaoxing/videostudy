@@ -1,3 +1,4 @@
+import { API_ORIGIN } from './apiOrigin.ts'
 type Identity={size:number;fingerprint:string}
 type Storage=Pick<globalThis.Storage,'getItem'|'setItem'>
 type Hooks={signal?:AbortSignal;onUpdate?:(media:Identity|null)=>void;onConflict?:()=>void;onError?:(error:unknown)=>void}
@@ -6,7 +7,7 @@ export function localMediaIdentity(storage:Storage,id:string):Identity|null{
  try{const value=JSON.parse(storage.getItem(`analysisMedia:${id}`)||'null');if(!valid(value)||(value as Identity & {conflict?:boolean}).conflict||!['automatic_upload','server','legacy_auto',undefined].includes((value as Identity & {bindingSource?:string}).bindingSource))return null;return {size:value.size,fingerprint:value.fingerprint}}catch{return null}
 }
 export async function resolveMediaIdentity(id:string,storage:Storage,request:typeof fetch,hooks:Hooks={}):Promise<Identity|null>{
- const local=localMediaIdentity(storage,id),url=`http://127.0.0.1:18080/api/transcriptions/${id}/media`
+ const local=localMediaIdentity(storage,id),url=`${API_ORIGIN}/api/transcriptions/${id}/media`
  const sync=async()=>{
   let response=await request(url,{signal:hooks.signal})
   if(response.status===410&&local)response=await request(url,{method:'PUT',signal:hooks.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({...local,bindingSource:'legacy_auto'})})

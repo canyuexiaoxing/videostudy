@@ -126,7 +126,36 @@ def ask(payload):
     messages=body['messages']
     images=sum(1 for m in messages if isinstance(m.get('content'),list) for part in m['content'] if part.get('type')=='image_url')
     chars=sum(len(m['content']) if isinstance(m.get('content'),str) else sum(len(p.get('text','')) for p in m['content'] if p.get('type')=='text') for m in messages)
-    return request_model_json(request,180,payload.get('_diagnosticTaskId'),'practice',transport=urlopen,image_count=images,input_characters=chars,model=body['model'],error_prefix='incomplete_practice_response')
+    from practice_reply import parse_practice_reply,PracticeReplyError,preserves_existing,repair_instruction,readable_original_questions
+    task=payload.get('_diagnosticTaskId');started=time.monotonic()
+    def send(current):
+        data={**body,'messages':current}
+        retry_request=Request(request.full_url,data=json.dumps(data).encode(),headers=dict(request.header_items()))
+        characters=sum(len(m['content']) if isinstance(m['content'],str) else sum(len(p.get('text','')) for p in m['content'] if p.get('type')=='text') for m in current)
+        return request_model_json(retry_request,180,task,'practice',transport=urlopen,image_count=images,input_characters=characters,model=body['model'],error_prefix='incomplete_practice_response',content_parser=lambda source:parse_practice_reply(source,task=task))
+    try:return send(messages)
+    except PracticeReplyError as original:
+        record_event('stage_started',task,operation='practice',stage='reply_repair',attempt=1,issue_count=len(original.issues),reason='practice_format_invalid')
+        repaired_messages=messages+[{'role':'assistant','content':original.doc},{'role':'user','content':repair_instruction(original)}]
+        try:
+            repaired=send(repaired_messages)
+            if not preserves_existing(original.source,repaired):
+                record_event('stage_failed',task,operation='practice',stage='reply_repair',attempt=1,reason='json_content_changed',elapsed_ms=round((time.monotonic()-started)*1000))
+                raise PracticeReplyError(original.source,['repair:content_changed'])
+            record_event('stage_completed',task,operation='practice',stage='reply_repair',attempt=1,status='completed',elapsed_ms=round((time.monotonic()-started)*1000))
+            return repaired
+        except Exception as error:
+            record_event('stage_failed',task,operation='practice',stage='reply_repair',attempt=1,error_type=type(error).__name__,reason='json_repair_failed',elapsed_ms=round((time.monotonic()-started)*1000))
+            # Prevent Java's transient network retry from multiplying format correction attempts.
+            original_questions=readable_original_questions(original)
+            if original_questions is not None:
+                record_event('stage_completed',task,operation='practice',stage='fallback',reason='practice_original_questions_retained',elapsed_ms=round((time.monotonic()-started)*1000))
+                return original_questions
+            if isinstance(error,PracticeReplyError):
+                error.code='practice_format_repair_failed'
+                raise
+            final=PracticeReplyError(original.source,['repair:failed']);final.code='practice_format_repair_failed'
+            raise final from error
 
 
 DIFFICULTY_POLICIES = {

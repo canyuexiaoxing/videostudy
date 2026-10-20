@@ -36,7 +36,7 @@ MAX_PROGRESS_INTERVAL_MS = 30_000
 def _has_video(path: Path) -> bool:
     result = subprocess.run(
         ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=index",
-         "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True,
+         "-of", "csv=p=0", str(path)], capture_output=True, text=True, check=True, creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0),
     )
     return bool(result.stdout.strip())
 
@@ -145,7 +145,7 @@ def _candidate_times(path: Path, page_change_fraction: float = PAGE_CHANGE_FRACT
                 gray,rgb,allowed=preview(original,ignore_region,ms,use_person)
                 yield ms,gray,rgb,allowed,original
             return
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         assert process.stdout is not None and process.stderr is not None
         while frame_bytes := process.stdout.read(read_bytes):
             if len(frame_bytes) != read_bytes:
@@ -252,7 +252,7 @@ def _frames_at(path: Path, times_ms: list[int], *, _check=lambda:None, _with_req
 
 
 @lru_cache(maxsize=1)
-def _ocr_model():
+def _ocr_model(device=None):
     from paddleocr import PaddleOCR
     import os
 
@@ -269,12 +269,20 @@ def _ocr_model():
         use_doc_orientation_classify=False,
         use_doc_unwarping=False,
         use_textline_orientation=False,
-        device=os.environ.get("OCR_DEVICE", "cpu"),
+        device=device or os.environ.get("OCR_DEVICE", "cpu"),
     )
 
 
 def _recognize(frame: np.ndarray) -> list[dict]:
-    result = _ocr_model().predict(frame)[0].json["res"]
+    from native_devices import allow_cpu_fallback,record_fallback
+    try:
+        result = _ocr_model().predict(frame)[0].json["res"]
+    except Exception as error:
+        if not allow_cpu_fallback(error,os.environ.get('OCR_DEVICE','cpu')):raise
+        record_fallback('ocr',error)
+        _ocr_model.cache_clear()
+        os.environ['OCR_DEVICE']='cpu'
+        result = _ocr_model('cpu').predict(frame)[0].json["res"]
     texts = result.get("rec_texts", [])
     scores = result.get("rec_scores", [])
     polygons = result.get("rec_polys", [])
@@ -503,3 +511,5 @@ class VisualOcrWorker:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
+
+

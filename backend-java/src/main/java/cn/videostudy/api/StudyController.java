@@ -22,12 +22,17 @@ public class StudyController {
     private final Map<String, Job> jobs = new ConcurrentHashMap<>();
     private final RestClient agent;
 
-    public StudyController(@Value("${agent.base-url}") String agentBaseUrl) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public StudyController(@Value("${agent.base-url}") String agentBaseUrl,@Value("${FRAMEWISE_RUNTIME_TOKEN:}") String runtimeToken) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(3000);
         requestFactory.setReadTimeout(10000);
-        this.agent = RestClient.builder().baseUrl(agentBaseUrl).requestFactory(requestFactory).build();
+        var builder=RestClient.builder().baseUrl(agentBaseUrl).requestFactory(requestFactory);
+        if(!runtimeToken.isEmpty())builder.defaultHeader(NativeRuntimeFilter.HEADER,runtimeToken);
+        this.agent=builder.build();
     }
+
+    public StudyController(String agentBaseUrl){this(agentBaseUrl,"");}
 
     @GetMapping("/health")
     public Map<String, String> health() { return Map.of("status", "ok"); }

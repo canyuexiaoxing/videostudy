@@ -15,12 +15,16 @@ public class HttpMediaAnalyzer implements MediaAnalyzer {
     private final RestClient agent;
 
     @org.springframework.beans.factory.annotation.Autowired
-    public HttpMediaAnalyzer(@Value("${agent.base-url}") String agentBaseUrl) {
+    public HttpMediaAnalyzer(@Value("${agent.base-url}") String agentBaseUrl,@Value("${FRAMEWISE_RUNTIME_TOKEN:}") String runtimeToken) {
         var requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(3000);
         requestFactory.setReadTimeout(30 * 60 * 1000);
-        agent = RestClient.builder().baseUrl(agentBaseUrl).requestFactory(requestFactory).build();
+        var builder=RestClient.builder().baseUrl(agentBaseUrl).requestFactory(requestFactory);
+        if(runtimeToken!=null&&!runtimeToken.isEmpty())builder.defaultHeader(NativeRuntimeFilter.HEADER,runtimeToken);
+        agent=builder.build();
     }
+
+    public HttpMediaAnalyzer(String agentBaseUrl){this(agentBaseUrl,"");}
 
     HttpMediaAnalyzer(RestClient agent) { this.agent = agent; }
 

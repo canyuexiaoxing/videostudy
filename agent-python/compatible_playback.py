@@ -1,4 +1,4 @@
-"""Temporary GPU playback copies. No AI requests or CPU encoding fallback."""
+"""Temporary playback copies, with bounded native hardware adaptation."""
 import json
 import os
 import shutil
@@ -9,6 +9,7 @@ import uuid
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from model_diagnostics import record_event
 
 router = APIRouter(prefix='/compatibility')
 slot = threading.Lock()
@@ -55,17 +56,18 @@ def progress_percent(out_time_us, duration):
     return min(99, max(0, int(out_time_us / 1_000_000 / max(duration, .001) * 100)))
 
 
-def command(source, output, audio_codec='aac'):
-    return ['ffmpeg', '-hide_banner', '-y', '-hwaccel', 'cuda', '-i', str(source),
-            '-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'h264_nvenc', '-preset', 'p4',
-            '-rc', 'vbr', '-cq', '23', '-b:v', '0', '-pix_fmt', 'yuv420p',
+def command(source, output, audio_codec='aac', encoder='h264_nvenc'):
+    gpu = encoder == 'h264_nvenc'
+    return ['ffmpeg', '-hide_banner', '-y', *(['-hwaccel', 'cuda'] if gpu else []), '-i', str(source),
+            '-map', '0:v:0', '-map', '0:a:0?', '-c:v', encoder, *(['-preset', 'p4'] if gpu else []),
+            *(['-rc', 'vbr', '-cq', '23', '-b:v', '0'] if gpu else ['-b:v', '2500k']), '-pix_fmt', 'yuv420p',
             '-c:a', 'copy' if audio_codec == 'aac' else 'aac',
             '-movflags', '+faststart', '-progress', 'pipe:1', '-nostats', str(output)]
 
 
 def probe(path):
     result = subprocess.run(['ffprobe', '-v', 'error', '-show_streams', '-show_format',
-                             '-of', 'json', str(path)], capture_output=True, text=True, timeout=30)
+                             '-of', 'json', str(path)], capture_output=True, text=True, timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
     if result.returncode:
         raise ValueError('无法读取原视频格式')
     return json.loads(result.stdout)
@@ -98,17 +100,20 @@ def encode(identity, directory, cancel):
     state = {'id': identity, 'status': 'processing', 'progress': 0, 'encoder': 'h264_nvenc'}
     process = None
     watchdog = None
+    started = time.monotonic()
+    record_event('stage_started', identity, operation='compatibility', stage='probe')
     try:
         data = probe(directory / 'input')
         duration = float(data['format']['duration'])
         audio = next((s['codec_name'] for s in data['streams'] if s['codec_type'] == 'audio'), 'aac')
+        state['encoder'] = choose_encoder()
         with state_lock:
             if cancel.is_set():
                 return
             save(directory, state)
             log = (directory / 'ffmpeg.log').open('w', encoding='utf-8')
-            process = subprocess.Popen(command(directory / 'input', directory / 'playback.mp4', audio),
-                                       stdout=subprocess.PIPE, stderr=log, text=True)
+            process = subprocess.Popen(command(directory / 'input', directory / 'playback.mp4', audio, state['encoder']),
+                                       stdout=subprocess.PIPE, stderr=log, text=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
             active[identity]['process'] = process
         watchdog = threading.Timer(2 * 3600, process.kill)
         watchdog.daemon = True
@@ -134,11 +139,13 @@ def encode(identity, directory, cancel):
         converted = probe(directory / 'playback.mp4')
         if abs(float(converted['format']['duration']) - duration) > .25:
             raise ValueError('转换后的时长与原视频不一致，未切换播放')
+        record_event('stage_completed', identity, operation='compatibility', stage='completed', device='cuda' if state['encoder']=='h264_nvenc' else 'cpu', elapsed_ms=round((time.monotonic()-started)*1000), status='completed')
         state.update(status='completed', progress=100)
         with state_lock:
             if not cancel.is_set():
                 save(directory, state)
     except Exception as error:
+        record_event('stage_failed', identity, operation='compatibility', stage='decode', error_type=type(error).__name__, elapsed_ms=round((time.monotonic()-started)*1000), status='failed')
         with state_lock:
             if not cancel.is_set():
                 state.update(status='failed', error=str(error))
@@ -159,17 +166,35 @@ class StartRequest(BaseModel):
     id: str
 
 
+def encoder_available(encoder):
+    try:
+        result = subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=s=640x360',
+                                 '-frames:v', '1', '-c:v', encoder, '-f', 'null', '-'],
+                                capture_output=True, text=True, timeout=20,
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def choose_encoder():
+    # Only the native supervisor sets this policy; Docker behavior stays GPU-only.
+    mode = os.environ.get('FRAMEWISE_DEVICE_MODE')
+    if mode != 'cpu' and encoder_available('h264_nvenc'):
+        return 'h264_nvenc'
+    if mode in ('auto', 'cpu') and encoder_available('libopenh264'):
+        return 'libopenh264'
+    raise ValueError('兼容转码编码器不可用，请检查 FFmpeg 或显卡驱动')
+
+
 @router.get('/capabilities')
 def capabilities():
     cleanup_expired()
     try:
-        result = subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=s=640x360',
-                                 '-frames:v', '1', '-c:v', 'h264_nvenc', '-f', 'null', '-'],
-                                capture_output=True, text=True, timeout=20)
-        return {'available': result.returncode == 0, 'encoder': 'h264_nvenc',
-                'error': None if result.returncode == 0 else '后台显卡编码不可用，请检查驱动和 GPU 容器配置'}
-    except (OSError, subprocess.TimeoutExpired):
-        return {'available': False, 'error': '后台 FFmpeg 或显卡编码不可用'}
+        encoder = choose_encoder()
+        return {'available': True, 'encoder': encoder, 'error': None}
+    except ValueError as error:
+        return {'available': False, 'error': str(error)}
 
 
 @router.post('')

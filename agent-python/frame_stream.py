@@ -14,6 +14,18 @@ QUEUE_CAPACITY=2
 from frame_run_guard import FrameRunGuard
 
 
+class NonSeekablePipe:
+ """Expose read alone: Windows pipe objects have unusable seek/tell methods.
+
+ PyAV discovers seekability by attributes, so passing Popen.stdout directly
+ can trigger a seek even though the FFmpeg NUT output is a sequential stream.
+ """
+ def __init__(self,pipe):self.pipe=pipe
+ def read(self,size=-1):return self.pipe.read(size)
+ def readable(self):return True
+ def seekable(self):return False
+
+
 def _origin(container,stream):
  if container.start_time is not None:return float(container.start_time)/av.time_base
  if stream.start_time is not None:return float(stream.start_time*stream.time_base)
@@ -68,7 +80,7 @@ def sample_frames_ffmpeg(path,sample_seconds=2,*,check=lambda:None):
           '-map','0:v:0','-an','-sn','-dn','-vf','select='+expression.replace(',',r'\,'),
           '-fps_mode','passthrough','-enc_time_base:v','1:1000000','-c:v','rawvideo','-threads:v','1','-pix_fmt','bgr24',
           '-avoid_negative_ts','disabled','-f','nut','pipe:1']
- process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+ process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
  stop=threading.Event();failure=[];failure_reason=[];started=time.monotonic();count=0;status='failed';error_kind=None
  def monitor():
   while not stop.wait(.1):
@@ -94,7 +106,7 @@ def sample_frames_ffmpeg(path,sample_seconds=2,*,check=lambda:None):
  watcher.start();stderr.start()
  try:
   try:
-   with av.open(process.stdout,format='nut',options={'probesize':'32','analyzeduration':'0'}) as output:
+   with av.open(NonSeekablePipe(process.stdout),format='nut',options={'probesize':'32','analyzeduration':'0'}) as output:
     for ms,frame in _decoded(output,output.streams.video[0],origin,check):
      if failure:raise failure[0]
      count+=1;yield ms,display_image(frame)
@@ -257,3 +269,4 @@ class SavedFramePipeline:
    self.person_masks.clear()
    record_event('stage_completed',self.root.name if self.root else 'unbound',operation='person_grouping',stage='mask_persistence',image_count=self.saved,accepted_count=self.mask_saved,rejected_count=self.mask_failed,elapsed_ms=self.mask_elapsed)
   return False
+

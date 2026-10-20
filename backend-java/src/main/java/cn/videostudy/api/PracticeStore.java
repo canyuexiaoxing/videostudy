@@ -11,6 +11,7 @@ import java.util.*;
 
 @Repository
 public class PracticeStore {
+    private static final org.slf4j.Logger log=org.slf4j.LoggerFactory.getLogger(PracticeStore.class);
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
     private final TransactionTemplate tx;
@@ -32,7 +33,21 @@ public class PracticeStore {
         try{jdbc.update("INSERT INTO practice_sets(id,transcription_id,source_hash,request_key,scope_title,status,source_json) VALUES (?,?,?,?,?,'queued',?)",
             UUID.randomUUID().toString(),analysis,hash,key,title,encode(source));}
         catch(org.springframework.dao.DataAccessException existing){if(!DatabaseDialect.duplicate(existing))throw existing;/* Same evidence and settings reuse a saved set. */}
-        if(retry)jdbc.update("UPDATE practice_sets SET status='queued',attempt_count=0,error_code=NULL WHERE transcription_id=? AND request_key=? AND status='failed'",analysis,key);
+        if(retry){
+            long retryStarted=System.nanoTime();String retryRequest=UUID.randomUUID().toString();
+            int failedReset=jdbc.update("UPDATE practice_sets SET status='queued',attempt_count=0,result_json=NULL,error_code=NULL,run_token=NULL WHERE transcription_id=? AND request_key=? AND status='failed'",analysis,key);
+            if(failedReset>0)log.info("Practice task={} request={} stage=explicit_retry result=queued previous=failed elapsed_ms={}",analysis,retryRequest,(System.nanoTime()-retryStarted)/1000000);
+            // Compare the exact completed result so concurrent retry requests cannot reset an active run.
+            var completed=jdbc.query("SELECT id,result_json FROM practice_sets WHERE transcription_id=? AND request_key=? AND status='completed'",(r,n)->new String[]{r.getString(1),r.getString(2)},analysis,key);
+            for(var row:completed){var result=decode(row[1]);Object questions=result==null?null:result.get("questions");
+                if(questions==null||(questions instanceof List<?> list&&list.isEmpty())){
+                    String condition=row[1]==null?"result_json IS NULL":"result_json=?";
+                    var args=new ArrayList<Object>();args.add(row[0]);if(row[1]!=null)args.add(row[1]);
+                    int changed=jdbc.update("UPDATE practice_sets SET status='queued',attempt_count=0,result_json=NULL,error_code=NULL,run_token=NULL WHERE id=? AND status='completed' AND "+condition,args.toArray());
+                    if(changed>0)log.info("Practice task={} course={} request={} stage=explicit_retry result=queued previous=empty_completed elapsed_ms={}",row[0],analysis,retryRequest,(System.nanoTime()-retryStarted)/1000000);
+                }
+            }
+        }
         String id=jdbc.queryForObject("SELECT id FROM practice_sets WHERE transcription_id=? AND request_key=?",String.class,analysis,key);
         return find(id).orElseThrow();
     }

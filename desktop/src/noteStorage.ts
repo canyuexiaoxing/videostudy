@@ -23,5 +23,11 @@ export class NoteStorage{
   await done
   try{localStorage.removeItem('studyNotes:v1')}catch{/* The durable migration marker prevents deleted notes being restored. */}
  }
+ async replaceAll(notes:StudyNote[]){
+  const db=await this.db,tx=db.transaction(['notes','meta'],'readwrite'),done=committed(tx)
+  tx.objectStore('notes').clear();tx.objectStore('meta').clear();tx.objectStore('meta').put(true,'legacy-v1')
+  for(const note of notes)tx.objectStore('notes').put(note)
+  await done
+ }
  async close(){(await this.db).close()}
 }

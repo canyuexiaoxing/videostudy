@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { API_ORIGIN } from './apiOrigin' 
 import { computed, ref, watch } from 'vue'
 import { groupFrameTimes, pageNearTime } from './pageGallery'
 type Page={pageIndex:number;firstFrameTimeMs:number;lastFrameTimeMs:number;memberFrameTimesMs:number[];representativeFrameTimesMs:number[];ocrLines:{text:string}[];imageAnalysis?:{title:string;content:string}|null;textAnalysis?:{title:string;content:string}|null}
@@ -17,7 +18,7 @@ const thumbnails=computed(()=>times.value.slice(thumbnailPage.value*8,thumbnailP
 const automatic=computed(()=>pageNearTime(pages.value,props.timeMs)?.pageIndex)
 function stamp(ms:number){const seconds=Math.floor(ms/1000);return `${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`}
 function title(page:Page){return page.imageAnalysis?.title||page.textAnalysis?.title||page.ocrLines?.[0]?.text||'课程画面'}
-function url(time:number){return `http://127.0.0.1:18080/api/transcriptions/${props.courseId}/frames/${time}`}
+function url(time:number){return `${API_ORIGIN}/api/transcriptions/${props.courseId}/frames/${time}`}
 function choosePage(pageIndex:number,manual=true){
   const page=pages.value.find(p=>p.pageIndex===pageIndex);if(!page)return
   if(manual)following.value=false

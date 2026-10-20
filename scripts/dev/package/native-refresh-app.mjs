@@ -1,0 +1,20 @@
+// Refresh small renderer/main-process code while preserving a verified native runtime.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../../..');
+const asar=await import(pathToFileURL(path.join(root,'desktop/node_modules/@electron/asar/lib/asar.js')).href);
+const pkg=JSON.parse(await fs.readFile(path.join(root,'desktop/package.json'),'utf8'));
+const latest=JSON.parse(await fs.readFile(path.join(root,'.local/releases/latest.json'),'utf8'));
+const argument=process.argv.find(x=>x.startsWith('--folder='));
+const folder=argument?path.resolve(argument.slice(9)):latest.folder;
+const runtimeManifest=JSON.parse(await fs.readFile(path.join(folder,'resources/runtime/runtime-manifest.json'),'utf8'));
+if(runtimeManifest.appVersion!==pkg.version)throw Error('runtime_version_mismatch_rebuild_package_required');
+const stage=path.join(root,'.local/dev/framewise-package','asar-refresh-'+Date.now());
+await fs.mkdir(path.join(stage,'electron'),{recursive:true});
+await fs.cp(path.join(root,'desktop/dist'),path.join(stage,'dist'),{recursive:true,filter:source=>!source.split(path.sep).includes('framewise-preview')});
+for(const file of await fs.readdir(path.join(root,'desktop/electron')))if(file.endsWith('.cjs')&&!file.endsWith('.test.cjs'))await fs.copyFile(path.join(root,'desktop/electron',file),path.join(stage,'electron',file));
+await fs.writeFile(path.join(stage,'package.json'),JSON.stringify({name:'framewise',productName:'Framewise',author:'Framewise',license:'UNLICENSED',version:pkg.version,main:'electron/main.cjs',description:pkg.description,private:true},null,2));
+const temporary=path.join(folder,'resources/app-next.asar');
+await asar.createPackage(stage,temporary);await fs.rename(temporary,path.join(folder,'resources/app.asar'));
+console.log(JSON.stringify({stage:'asar_refreshed',folder}));

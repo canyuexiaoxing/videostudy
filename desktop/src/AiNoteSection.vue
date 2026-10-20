@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { API_ORIGIN } from './apiOrigin' 
 import { ref } from 'vue'
 type Ref={sourceId:string;startMs:number;endMs:number;quote:string;sourceType?:string}
 export type Note={title:string;anchor:Ref;image:Ref|null;points:{label:string;text:string}[];children:Note[]}
@@ -10,7 +11,7 @@ const time=(ms:number)=>{const seconds=Math.floor(ms/1000);return `${Math.floor(
 <template>
   <section class="note-section" :class="{ 'note-nested': depth > 1 }">
     <div class="note-title"><strong>{{ note.title }}</strong><button type="button" class="note-time" :aria-label="`回看${note.title} ${time(note.anchor.startMs)}`" @click="emit('seek',note.anchor.startMs)">{{ time(note.anchor.startMs) }}</button></div>
-    <img v-if="note.image && !imageFailed" class="note-image" loading="lazy" :src="`http://127.0.0.1:18080/api/transcriptions/${courseId}/frames/${note.image.startMs}`" :alt="`${note.title}的课件画面`" @error="imageFailed=true" />
+    <img v-if="note.image && !imageFailed" class="note-image" loading="lazy" :src="`${API_ORIGIN}/api/transcriptions/${courseId}/frames/${note.image.startMs}`" :alt="`${note.title}的课件画面`" @error="imageFailed=true" />
     <ul v-if="note.points.length" class="note-points"><li v-for="(point,i) in note.points" :key="i"><strong v-if="point.label">{{ point.label }}：</strong>{{ point.text }}</li></ul>
     <AiNoteSection v-for="(child,i) in note.children" :key="i" :note="child" :course-id="courseId" :depth="depth+1" @seek="emit('seek',$event)" />
   </section>

@@ -120,3 +120,72 @@ class CourseFirstChatTests(unittest.TestCase):
         for ms in self.context['_imageCandidates']:cv2.imwrite(str(self.root/f'{ms}.jpg'),np.full((40,80,3),50,np.uint8))
         text,images=self.prepare('看不懂推导')
         self.assertEqual(len(images),4)
+
+
+class ProviderRepairTests(unittest.TestCase):
+    def run_provider(self, contents):
+        import json, os
+        from unittest.mock import patch
+        from question_chat import ask_provider
+        captured=[]
+        class Response:
+            def __init__(self, content):self.content=content
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def read(self):return json.dumps({'choices':[{'finish_reason':'stop','message':{'content':self.content}}]}).encode()
+        def transport(request,**kw):
+            captured.append(json.loads(request.data))
+            return Response(contents[len(captured)-1])
+        payload={'context':{'question':{'prompt':'test'},'evidence':[{'sourceId':'s1'}]},'history':[{'role':'user','content':'previous'}],'message':'why','_images':[{'imageId':'frame_0','_bytes':b'fixture'}]}
+        with patch.dict(os.environ,{'DEEPSEEK_API_KEY':'test-key'}),patch('question_chat.urlopen',side_effect=transport):
+            try:result=ask_provider(payload)
+            except ValueError as error:result=error
+        return result,captured
+    def test_unknown_evidence_repaired_in_same_context_once(self):
+        import json
+        invalid=json.dumps({'reply':'explain','sourceIds':['invented']})
+        result,calls=self.run_provider([invalid,json.dumps({'reply':'fixed','sourceIds':['s1']})])
+        self.assertEqual(result['sourceIds'],['s1']);self.assertEqual(len(calls),2)
+        self.assertEqual(calls[1]['messages'][:2],calls[0]['messages'])
+        self.assertEqual(calls[1]['messages'][2],{'role':'assistant','content':invalid})
+        self.assertIn('s1',calls[1]['messages'][3]['content'])
+        self.assertEqual(sum(p.get('type')=='image_url' for p in calls[1]['messages'][1]['content']),1)
+    def test_invalid_json_and_required_fields_are_repaired(self):
+        import json
+        for invalid in ['{invalid',json.dumps({'reply':'missing sources'}),json.dumps({'reply':'','sourceIds':[]})]:
+            with self.subTest(invalid=invalid):
+                result,calls=self.run_provider([invalid,json.dumps({'reply':'fixed','sourceIds':[]})])
+                self.assertEqual(result['reply'],'fixed');self.assertEqual(len(calls),2)
+    def test_repeated_invalid_reply_stops_after_one_retry(self):
+        import json
+        invalid=json.dumps({'reply':'explain','sourceIds':['invented']})
+        result,calls=self.run_provider([invalid,invalid])
+        self.assertIsInstance(result,ValueError);self.assertEqual(len(calls),2)
+    def test_http_failure_does_not_trigger_format_retry(self):
+        import os
+        from unittest.mock import patch
+        from urllib.error import HTTPError
+        from question_chat import ask_provider
+        with patch.dict(os.environ,{'DEEPSEEK_API_KEY':'test-key'}),patch('question_chat.urlopen',side_effect=HTTPError('https://example.invalid',401,'unauthorized',{},None)) as transport:
+            with self.assertRaises(HTTPError):ask_provider({'context':{'evidence':[]}})
+        self.assertEqual(transport.call_count,1)
+
+    def test_valid_reply_has_no_extra_call(self):
+        import json
+        result,calls=self.run_provider([json.dumps({'reply':'ok','sourceIds':['s1']})])
+        self.assertEqual(result['reply'],'ok');self.assertEqual(len(calls),1)
+    def test_oversized_invalid_reply_is_not_echoed(self):
+        import json
+        result,calls=self.run_provider([json.dumps({'reply':'x'*20001,'sourceIds':[]})])
+        self.assertIsInstance(result,ValueError);self.assertEqual(len(calls),1)
+    def test_truncated_response_does_not_trigger_format_retry(self):
+        import json,os
+        from unittest.mock import patch
+        from question_chat import ask_provider
+        class Response:
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def read(self):return json.dumps({'choices':[{'finish_reason':'length','message':{'content':'{unfinished'}}]}).encode()
+        with patch.dict(os.environ,{'DEEPSEEK_API_KEY':'test-key'}),patch('question_chat.urlopen',return_value=Response()) as transport:
+            with self.assertRaisesRegex(ValueError,'finish_reason=length'):ask_provider({'context':{'evidence':[]}})
+        self.assertEqual(transport.call_count,1)

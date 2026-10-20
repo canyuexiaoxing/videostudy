@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { API_ORIGIN } from './apiOrigin' 
 import { computed, onUnmounted, ref, watch } from 'vue'
 import AiNoteSection from './AiNoteSection.vue'
 import type { Note } from './AiNoteSection.vue'
@@ -23,7 +24,7 @@ watch(()=>[props.courseId,props.ready,refresh.value] as const,async ([id,ready])
   controller?.abort();result.value=null;status.value='not_requested';errorCode.value=''
   if(!id||!ready)return
   const current=new AbortController();controller=current;let errors=0
-  const endpoint=`http://127.0.0.1:18080/api/transcriptions/${id}/overview`
+  const endpoint=`${API_ORIGIN}/api/transcriptions/${id}/overview`
   try {
     for(let attempt=0;attempt<900&&!current.signal.aborted;attempt++){
       try {

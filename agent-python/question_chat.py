@@ -76,9 +76,43 @@ def ask_provider(payload):
     model=os.environ.get('DEEPSEEK_MODEL','deepseek-flash')
     body={'model':model,'thinking':{'type':'disabled'},'response_format':{'type':'json_object'},'stream':False,
           'messages':[{'role':'system','content':SYSTEM},{'role':'user','content':parts}]}
-    request=Request(os.environ.get('DEEPSEEK_BASE_URL','https://api.deepseek.com').rstrip('/')+'/chat/completions',
-                    data=json.dumps(body).encode(),headers={'Content-Type':'application/json','Authorization':'Bearer '+key})
-    return request_model_json(request,120,payload.get('context',{}).get('courseId'),'question_chat',transport=urlopen,image_count=len(images),input_characters=len(content)+len(SYSTEM),model=model,error_prefix='incomplete_chat_reply')
+    task=payload.get('context',{}).get('courseId')
+    sources={r['sourceId'] for r in payload.get('context',{}).get('evidence',[]) if isinstance(r,dict) and isinstance(r.get('sourceId'),str)}
+    for attempt in (1,2):
+        received=[]
+        def parse(content):
+            received.append(content)
+            raw=json.loads(content)
+            validate_reply(raw,sources)
+            return raw
+        request=Request(os.environ.get('DEEPSEEK_BASE_URL','https://api.deepseek.com').rstrip('/')+'/chat/completions',
+                        data=json.dumps(body).encode(),headers={'Content-Type':'application/json','Authorization':'Bearer '+key})
+        try:
+            result=request_model_json(request,120,task,'question_chat',transport=urlopen,image_count=len(images),input_characters=len(content)+len(SYSTEM),model=model,error_prefix='incomplete_chat_reply',content_parser=parse)
+            record_event('stage_completed',task,operation='question_chat',stage='reply_validation',attempt=attempt)
+            return result
+        except ValueError as error:
+            # Only complete provider replies can receive one format correction.
+            # Transport errors and truncated envelopes keep their original failure.
+            if not received:raise
+            reason='invalid_json' if isinstance(error,json.JSONDecodeError) else str(error)
+            record_event('stage_failed',task,operation='question_chat',stage='reply_validation',reason=reason,attempt=attempt)
+            if attempt==2 or len(received[0])>20000:raise
+            correction={'instruction':'修复上一条回答的JSON格式和引用。保留原课程解题思路与有效回答，不新增无依据内容。只返回完整JSON对象；reply为1至6000字符的非空字符串；sourceIds为至多3条引用ID的数组，只能选allowedSourceIds，无依据可用空数组。每个字段只出现一次。',
+                        'reason':reason if reason in {'invalid_json','invalid_chat_reply','unknown_chat_evidence'} else 'invalid_chat_reply',
+                        'allowedSourceIds':sorted(sources)}
+            body['messages'].extend([{'role':'assistant','content':received[0]},
+                                     {'role':'user','content':json.dumps(correction,ensure_ascii=False)}])
+            record_event('stage_started',task,operation='question_chat',stage='reply_repair',attempt=2)
+
+
+def validate_reply(raw,sources):
+    if not isinstance(raw,dict):raise ValueError('invalid_chat_reply')
+    reply=raw.get('reply');ids=raw.get('sourceIds')
+    if not isinstance(reply,str) or not reply.strip() or len(reply)>6000 or not isinstance(ids,list) or len(ids)>3:
+        raise ValueError('invalid_chat_reply')
+    if any(not isinstance(i,str) or i not in sources for i in ids):raise ValueError('unknown_chat_evidence')
+
 
 
 def reply_to_question(context,history,message,ask_json=None):
@@ -93,9 +127,6 @@ def reply_to_question(context,history,message,ask_json=None):
     sources={r['sourceId']:r for r in context.get('evidence',[]) if isinstance(r,dict) and isinstance(r.get('sourceId'),str)}
     text,images=prepare_course_context(context,message.strip())
     raw=(ask_json or ask_provider)({'context':text,'history':recent,'message':message.strip(),'_images':images})
-    if not isinstance(raw,dict): raise ValueError('invalid_chat_reply')
-    reply=raw.get('reply');ids=raw.get('sourceIds')
-    if not isinstance(reply,str) or not reply.strip() or len(reply)>6000 or not isinstance(ids,list) or len(ids)>3:
-        raise ValueError('invalid_chat_reply')
-    if any(not isinstance(i,str) or i not in sources for i in ids): raise ValueError('unknown_chat_evidence')
+    validate_reply(raw,sources)
+    reply=raw['reply'];ids=raw['sourceIds']
     return {'reply':reply.strip(),'citations':[sources[i] for i in dict.fromkeys(ids)]}

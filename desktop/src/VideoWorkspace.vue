@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { API_ORIGIN } from './apiOrigin' 
 import {ref,computed,watch,onMounted,onBeforeUnmount} from 'vue'
 import StudyIcon from './StudyIcon.vue'
 import type {PersonSelectionMode} from './personSelection'
@@ -116,7 +117,7 @@ async function autoScan(mode:'full'|'current'='full'){
   decoder=await createRegionCapture(props.src,controller.signal)
   const detect=async (times:number[])=>{
    const frames=[];for(const t of times)frames.push(await decoder!.capture(t))
-   const response=await fetch('http://127.0.0.1:18080/api/video-region-detections',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({frames}),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(65000)])})
+   const response=await fetch(API_ORIGIN + '/api/video-region-detections',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({frames}),signal:AbortSignal.any([controller.signal,AbortSignal.timeout(65000)])})
    if(!response.ok)throw new Error(response.status===429?'识别服务繁忙，请稍后重试':response.status===422||response.status===400?'截图无法识别，请尝试兼容播放':'AI 自动识别暂时不可用，请检查模型配置或使用手动框选')
    const data=await response.json();return data.detections
   }

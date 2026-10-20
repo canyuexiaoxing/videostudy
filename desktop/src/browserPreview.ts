@@ -1,3 +1,4 @@
+import { API_ORIGIN } from './apiOrigin.ts'
 import { generatePreviewSheets, PreviewMemoryCache, PREVIEW_COLUMNS, PREVIEW_HEIGHT, PREVIEW_INTERVAL, PREVIEW_TILES, PREVIEW_WIDTH } from './timelinePreview'
 import { PreviewStorage } from './previewStorage'
 export type PreviewState='waiting'|'generating'|'completed'|'unavailable'
@@ -38,7 +39,7 @@ export class BrowserPreview{
      this.nextCheck=now+2000;this.serverUntil=0
      const request=new AbortController(),cancel=()=>request.abort(),timeout=setTimeout(cancel,4000)
      signal.addEventListener('abort',cancel,{once:true})
-     try{const response=await fetch(`http://127.0.0.1:18080/api/transcriptions/${encodeURIComponent(this.settings.courseId)}/preview-permission`,{signal:request.signal,cache:'no-store'});if(response.ok){const p=await response.json();this.permissionWarned=false;if(p.allowed===true&&p.leaseMs>0)this.serverUntil=performance.now()+Math.min(2000,p.leaseMs)}}catch(error){if(!this.permissionWarned){console.debug('preview_permission_unavailable',error instanceof Error?error.name:'unknown');this.permissionWarned=true}signal.throwIfAborted()}
+     try{const response=await fetch(`${API_ORIGIN}/api/transcriptions/${encodeURIComponent(this.settings.courseId)}/preview-permission`,{signal:request.signal,cache:'no-store'});if(response.ok){const p=await response.json();this.permissionWarned=false;if(p.allowed===true&&p.leaseMs>0)this.serverUntil=performance.now()+Math.min(2000,p.leaseMs)}}catch(error){if(!this.permissionWarned){console.debug('preview_permission_unavailable',error instanceof Error?error.name:'unknown');this.permissionWarned=true}signal.throwIfAborted()}
      finally{clearTimeout(timeout);signal.removeEventListener('abort',cancel)}
     }
     if(performance.now()<this.serverUntil&&this.settings.localIdle()){

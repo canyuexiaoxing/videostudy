@@ -78,7 +78,7 @@ def practice(request: PracticeRequest):
     from practice import generate_practice
     from urllib.error import HTTPError
     try:
-        if request.mode=='legacy':return generate_practice(request.nodes, request.pages, request.count, request.difficulty,history=request.practiceHistory)
+        if request.mode=='legacy':return generate_practice(request.nodes, request.pages, request.count, request.difficulty,context={'_diagnosticTaskId':request.courseId},history=request.practiceHistory)
         if not request.courseId or not request.mindMap:raise ValueError('practice_evidence_missing')
         root=_analysis_directory(request.courseId).parent
         if request.mode=='map_context':
@@ -97,7 +97,7 @@ def practice(request: PracticeRequest):
         raise HTTPException(424 if error.code == 402 else 502,
                             'practice_provider_payment_required' if error.code == 402 else 'practice_provider_failed') from error
     except JSONDecodeError as error:
-        raise HTTPException(422,'practice_provider_invalid_json') from error
+        raise HTTPException(422,'practice_format_repair_failed' if getattr(error,'code',None)=='practice_format_repair_failed' else 'practice_provider_invalid_json') from error
     except (ValueError, RuntimeError) as error:
         raise HTTPException(422, str(error)) from error
 

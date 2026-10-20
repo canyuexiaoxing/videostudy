@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { API_ORIGIN } from './apiOrigin' 
 import MathText from './MathText.vue'
 import {ref,watch,onBeforeUnmount,nextTick} from 'vue'
 import StudyIcon from './StudyIcon.vue'
@@ -13,7 +14,7 @@ const drafts=new Map<string,string>();let previousCourse='',retryId='',retryText
 function client(){const key='framewise:study-chat-client:v1';let value=localStorage.getItem(key);if(!value||!/^[a-f0-9-]{36}$/i.test(value)){value=crypto.randomUUID();localStorage.setItem(key,value)}return value}
 function problem(code:string){return ({overview_not_completed:'请先等待 AI 解读完成。',overview_context_changed:'课程解读已更新，请重新读取后继续对话。',chat_busy:'正在回答前一个问题，请稍后重试。',chat_limit:'本次课程对话已达到 40 次交流上限。',chat_request_conflict:'请求记录冲突，请修改问题后再试。'} as Record<string,string>)[code]||'暂时无法完成对话，输入已保留，可以重试。'}
 async function call(method:string,signal:AbortSignal,body?:unknown){
- const response=await fetch(`http://127.0.0.1:18080/api/transcriptions/${props.courseId}/overview/chat`,{method,signal,headers:{'Content-Type':'application/json','X-Study-Client':client()},body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw new Error(problem(data.error));return data
+ const response=await fetch(`${API_ORIGIN}/api/transcriptions/${props.courseId}/overview/chat`,{method,signal,headers:{'Content-Type':'application/json','X-Study-Client':client()},body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw new Error(problem(data.error));return data
 }
 async function scroll(){await nextTick();transcript.value?.scrollTo({top:transcript.value.scrollHeight,behavior:'smooth'})}
 async function load(){

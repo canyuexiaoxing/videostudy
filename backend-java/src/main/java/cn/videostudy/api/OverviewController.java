@@ -9,7 +9,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.context.event.EventListener;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
@@ -47,9 +47,14 @@ public class OverviewController {
         return ResponseEntity.accepted().body(find(id));
     }
     public void request(String id) {
+        long started=System.nanoTime();
         try { jdbc.update("INSERT INTO overview_jobs (transcription_id,status) VALUES (?,'queued')",id); }
-        catch (DuplicateKeyException existing) { /* Reuse the existing job. */ }
-        catch (DataIntegrityViolationException deleted) { return; }
+        catch (DataAccessException error) {
+            if(DatabaseDialect.duplicate(error)) {
+                log.info("Job request task={} request={} stage=reuse result=existing elapsedMs={}",id,UUID.randomUUID(),TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-started));
+            } else if(error instanceof DataIntegrityViolationException) return;
+            else throw error;
+        }
         dispatch();
     }
     private Job find(String id) {

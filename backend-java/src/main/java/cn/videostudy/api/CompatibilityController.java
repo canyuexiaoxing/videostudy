@@ -21,13 +21,17 @@ import java.util.UUID;
 public class CompatibilityController {
     private final Path root;
     private final RestClient agent;
+    @org.springframework.beans.factory.annotation.Autowired
     public CompatibilityController(@Value("${media.temp-dir}") String directory,
-                                   @Value("${agent.base-url}") String url) {
+                                   @Value("${agent.base-url}") String url,@Value("${FRAMEWISE_RUNTIME_TOKEN:}") String runtimeToken) {
         root = Path.of(directory).toAbsolutePath().normalize().resolve("compatibility");
         var factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(3000); factory.setReadTimeout(30000);
-        agent = RestClient.builder().baseUrl(url).requestFactory(factory).build();
+        var builder=RestClient.builder().baseUrl(url).requestFactory(factory);
+        if(!runtimeToken.isEmpty())builder.defaultHeader(NativeRuntimeFilter.HEADER,runtimeToken);
+        agent=builder.build();
     }
+    public CompatibilityController(String directory,String url){this(directory,url,"");}
     private Path path(String id) {
         if (!UUID.fromString(id).toString().equals(id)) throw new IllegalArgumentException("invalid_job_id");
         return root.resolve(id);

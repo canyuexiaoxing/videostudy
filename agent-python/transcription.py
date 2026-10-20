@@ -55,7 +55,7 @@ def _decode_audio(path):
     return decode_audio(str(path),sampling_rate=16000)
 
 
-def transcribe_file(file_id: str, on_segment=None) -> dict:
+def _transcribe_file_once(file_id: str, on_segment=None, *, _runtime_override=None) -> dict:
     UUID(file_id)
     upload_root=Path(os.environ.get('MEDIA_TEMP_DIR','../.local/uploads')).resolve()
     video_path=upload_root/file_id
@@ -71,9 +71,10 @@ def transcribe_file(file_id: str, on_segment=None) -> dict:
     try:
         model_name,device,precision=transcription_config()
         batch=transcription_batch_size(device)
+        if _runtime_override is not None:model_name,device,precision,batch=_runtime_override
         common.update(model=model_name,device=device,compute_type=precision,engine='batch' if batch else 'standard',batch_size=batch)
         mark=begin('probe')
-        probe=subprocess.run(['ffprobe','-v','error','-select_streams','a:0','-show_entries','stream=index','-of','csv=p=0',str(video_path)],capture_output=True,text=True,check=True)
+        probe=subprocess.run(['ffprobe','-v','error','-select_streams','a:0','-show_entries','stream=index','-of','csv=p=0',str(video_path)],capture_output=True,text=True,check=True,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         done(mark)
         if not probe.stdout.strip():
             record_event('stage_completed',file_id,**common,stage='completed',status='empty',segments=0,elapsed_ms=round((time.monotonic()-started)*1000))
@@ -107,3 +108,30 @@ def transcribe_file(file_id: str, on_segment=None) -> dict:
         reason='out_of_memory' if 'out of memory' in str(error).lower() else None
         record_event('stage_failed',file_id,**common,stage=stage,status='cancelled' if type(error).__name__=='CancelledError' else 'failed',error_type=type(error).__name__,reason=reason,elapsed_ms=round((time.monotonic()-started)*1000))
         raise
+
+
+def transcribe_file(file_id: str, on_segment=None) -> dict:
+    """Retry only before streaming output; callbacks already published cannot be replayed."""
+    from native_devices import allow_cpu_fallback,record_fallback
+    emitted=False
+    def deliver(item):
+        nonlocal emitted
+        emitted=True
+        if on_segment is not None:on_segment(item)
+    override=None
+    while True:
+        try:
+            return _transcribe_file_once(file_id,deliver,_runtime_override=override)
+        except Exception as error:
+            model,device,precision=transcription_config() if override is None else override[:3]
+            batch=transcription_batch_size(device) if override is None else override[3]
+            if emitted or not allow_cpu_fallback(error,device):raise
+            if batch>1:
+                smaller=batch//2
+                record_event('stage_failed',file_id,operation='transcription',stage='fallback',device='cuda',reason='out_of_memory',batch_size=smaller,error_type=type(error).__name__,status='failed')
+                override=(model,device,precision,smaller)
+            else:
+                record_fallback('whisper',error,file_id)
+                _load_model.cache_clear()
+                override=(model,'cpu','int8',0)
+

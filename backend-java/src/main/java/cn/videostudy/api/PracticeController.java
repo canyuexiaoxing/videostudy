@@ -44,7 +44,8 @@ public class PracticeController {
         if(!"completed".equals(parent.get().status()))return ResponseEntity.status(409).body(Map.of("error","course_not_completed"));
         try{
             var result=parent.get().result();var source=new LinkedHashMap<>(source(result,request));
-            if(!"legacy".equals(request.mode())) {source.put("courseId",id);source.put("ignoredRegion",main.findIgnoredRegion(id));}
+            source.put("courseId",id);
+            if(!"legacy".equals(request.mode())) {source.put("ignoredRegion",main.findIgnoredRegion(id));}
             String hash=hash(json.writeValueAsString(result.mindMap()));
             if(!"legacy".equals(request.mode())) {source.put("conversationVersion","practice-course-history-v1");source.put("conversationRevision",store.conversationRevision(id,hash));}
             String key=hash(hash+":"+source.get("scopeNodeId")+":"+json.writer().with(com.fasterxml.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).writeValueAsString(source)+":mindmap-practice-v7-math-diagrams");
@@ -146,7 +147,7 @@ public class PracticeController {
     private void process(String id){
         store.claim(id).ifPresent(run->{try{var source=new LinkedHashMap<String,Object>(run.source());var history=store.generationHistory(id);source.put("practiceHistory",history);log.info("practice_history task={} course={} rounds={}",id,source.get("courseId"),history.size());var result=agent.generatePractice(source);validate(result,run.source());store.complete(run,result);}
             catch(Exception error){boolean temporary=error instanceof ResourceAccessException||error instanceof RestClientResponseException r&&(r.getStatusCode().value()==429||r.getStatusCode().is5xxServerError());String code="practice_generation_failed";
-                if(error instanceof RestClientResponseException response)for(var known:List.of("practice_provider_invalid_json","practice_map_context_missing","practice_map_context_changed","practice_images_missing","practice_images_invalid","practice_evidence_missing","practice_provider_payment_required","practice_context_too_large","practice_provider_rejected"))if(response.getResponseBodyAsString().contains(known)){code=known;temporary=false;break;}
+                if(error instanceof RestClientResponseException response)for(var known:List.of("practice_provider_invalid_json","practice_format_repair_failed","practice_map_context_missing","practice_map_context_changed","practice_images_missing","practice_images_invalid","practice_evidence_missing","practice_provider_payment_required","practice_context_too_large","practice_provider_rejected"))if(response.getResponseBodyAsString().contains(known)){code=known;temporary=false;break;}
                 log.warn("practice_failed task={} type={} code={} retry={}",id,error.getClass().getSimpleName(),code,temporary);store.fail(run,code,temporary);}});
     }
     @SuppressWarnings("unchecked") static void validate(Map<String,Object> result,Map<String,Object> source){

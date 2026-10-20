@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { API_ORIGIN } from './apiOrigin' 
 import MathText from './MathText.vue'
 import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import StudyIcon from './StudyIcon.vue'
@@ -15,7 +16,7 @@ type Feedback={questionId:string;selectedIndex:number;answerIndex:number;correct
 type SetData={id:string;title:string;status:string;error?:string;questions?:Question[];rejectedCount?:number;practiceMode?:string;historyRounds?:number;historyQuestions?:number}
 const props=defineProps<{courseId?:string;hasMedia?:boolean;playbackReady?:boolean;mindMap?:{root:Node}|null;selectedNodeId?:string;ready?:boolean}>()
 const emit=defineEmits<{seek:[timeMs:number,sourceId:string]}>()
-const base='http://127.0.0.1:18080/api/transcriptions'
+const base=API_ORIGIN + '/api/transcriptions'
 const clientKey='videostudy:practice-client'
 let client=localStorage.getItem(clientKey)
 if(!client){client=crypto.randomUUID();localStorage.setItem(clientKey,client)}
@@ -23,7 +24,7 @@ const count=ref(0), difficulty=ref('basic'), scope=ref('')
 
 const practiceMode=ref<'map_context'|'related_materials'>('related_materials')
 const practiceModes=[{value:'map_context',label:'整课导图资料'},{value:'related_materials',label:'当前范围资料'}] as const
-const practiceError=(code?:string)=>({practice_provider_invalid_json:'模型返回的题目格式不合法，无法读取；本次没有自动再次调用模型，可重新生成。',practice_map_context_missing:'这门课未保存导图上下文，请重新生成导图，或选择相关资料出题。',practice_map_context_changed:'导图或原图已变化，请重新生成导图后再沿用上下文。',practice_images_missing:'所需课件截图缺失，请恢复课程资料或重新分析；本次未裁减图片出题。',practice_images_invalid:'图片来源无法核对，请检查课程资料。',practice_evidence_missing:'缺少有效课程依据，请检查导图与原始资料。',practice_context_too_large:'模型拒绝了过大的图片或上下文请求；可以缩小范围或改用相关资料出题，本次未自动裁减。',practice_provider_rejected:'模型服务不接受这次请求，请核对多图支持和上下文限制。',practice_provider_payment_required:'模型服务余额或额度不足，请恢复后重试。'}[code??''] ?? '出题失败，请重试。')
+const practiceError=(code?:string)=>({practice_provider_invalid_json:'模型返回的题目格式无法读取，可重新生成。',practice_format_repair_failed:'题目格式已尝试自动修复一次，仍未通过检查，可重新生成。',practice_map_context_missing:'这门课未保存导图上下文，请重新生成导图，或选择相关资料出题。',practice_map_context_changed:'导图或原图已变化，请重新生成导图后再沿用上下文。',practice_images_missing:'所需课件截图缺失，请恢复课程资料或重新分析；本次未裁减图片出题。',practice_images_invalid:'图片来源无法核对，请检查课程资料。',practice_evidence_missing:'缺少有效课程依据，请检查导图与原始资料。',practice_context_too_large:'模型拒绝了过大的图片或上下文请求；可以缩小范围或改用相关资料出题，本次未自动裁减。',practice_provider_rejected:'模型服务不接受这次请求，请核对多图支持和上下文限制。',practice_provider_payment_required:'模型服务余额或额度不足，请恢复后重试。'}[code??''] ?? '出题失败，请重试。')
 const sets=ref<SetData[]>([]), active=ref<SetData|null>(null), session=ref(''), index=ref(0)
 const feedback=ref<Record<string,Feedback>>({}), busy=ref(false), pending=ref(false), error=ref('')
 const chartDialog=ref<HTMLDialogElement|null>(null)
@@ -63,14 +64,14 @@ async function restore(set:SetData,version=epoch){
  const loaded=await api(`/${set.id}`,'GET',undefined,course)
  if(version!==epoch)return
  active.value=loaded;index.value=0;feedback.value={};session.value=''
- if(loaded.status==='completed'&&loaded.questions.length){
+ if(loaded.status==='completed'&&loaded.questions?.length){
    const data=await api(`/${set.id}/sessions`,'POST',{fresh:false},course)
    if(version!==epoch)return
    session.value=data.id;feedback.value=Object.fromEntries(data.feedback.map((f:Feedback)=>[f.questionId,f]))
    index.value=Math.max(0,loaded.questions.findIndex((q:Question)=>!feedback.value[q.id]))
    busy.value=false
  }else if(['queued','processing'].includes(loaded.status)){busy.value=true;poll(set.id,version,course!,Date.now())}
- else {busy.value=false;if(loaded.status==='failed')error.value=practiceError(loaded.error)}
+ else {busy.value=false;if(loaded.status==='failed')error.value=practiceError(loaded.error);else if(loaded.status==='completed')error.value='本次未生成有效题目，请点击重新生成重试。'}
 }
 async function refresh(version:number){
  try{const data=await api('');if(version!==epoch)return;sets.value=data;if(data[0])await restore(data[0],version)}
@@ -129,13 +130,13 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
    <PracticeScopePicker v-model="scope" :root="mindMap?.root" :disabled="busy||pending"/>
    <label>题量<select v-model.number="count" :disabled="busy"><option :value="0">智能推荐</option><option v-for="n in [3,5,10]" :key="n" :value="n">{{ n }} 道</option></select></label>
    <label>难度<select aria-label="难度" v-model="difficulty" :disabled="busy||pending"><option value="basic">基础巩固</option><option value="application">应用练习</option><option value="advanced">进阶挑战</option></select></label>
-   <button class="practice-primary" type="button" :disabled="busy||pending||!ready||!mindMap" @click="generate">{{ busy?'正在出题…':'生成练习' }}</button>
+   <button class="practice-primary" type="button" :disabled="busy||pending||!ready||!mindMap" @click="generate">{{ busy?'正在出题…':active&&(active.status==='failed'||(active.status==='completed'&&!questions.length))?'重新生成':'生成练习' }}</button>
   </div>
 
   <label v-if="sets.length" class="saved-set">已保存的练习<select :value="active?.id" :disabled="busy||pending" @change="switchSet(($event.target as HTMLSelectElement).value)"><option v-for="set in sets" :key="set.id" :value="set.id">{{ set.title }} · {{ set.status==='completed'?'已生成':set.status==='failed'?'失败':'生成中' }} · {{ set.id.slice(0,6) }}</option></select></label>
   <p v-if="error" class="practice-error" role="alert">{{ error }}</p>
   <p v-if="busy" class="practice-intro" role="status">正在根据知识点出题并检查答案，完成后自动显示。</p>
-  <div v-else-if="!questions.length" class="practice-empty">{{ !courseId&&!hasMedia?'请先选择并分析视频，或从历史记录打开课程，随后显示对应练习。':active?.status==='completed'?'本次没有通过检查的题目，可调整范围或难度后再试。':!mindMap?'分析完成并生成思维导图后，就可以练习。':'选择范围、题量和难度，生成本课练习。' }}</div>
+  <div v-else-if="!questions.length" class="practice-empty">{{ !courseId&&!hasMedia?'请先选择并分析视频，或从历史记录打开课程，随后显示对应练习。':active?.status==='failed'?'本次出题失败，可点击重新生成重试。':active?.status==='completed'?'本次没有通过检查的题目，可点击重新生成，或调整范围和难度后再试。':!mindMap?'分析完成并生成思维导图后，就可以练习。':'选择范围、题量和难度，生成本课练习。' }}</div>
   <template v-if="questions.length&&question&&!busy">
    <div class="practice-course"><span class="practice-course-icon"><StudyIcon name="practice"/></span><div><strong>{{ demo?'增长量与增长率':active?.title }}</strong><span>{{ questions.length }} 道题 · 按知识点生成 · 选择后自动判分</span></div></div>
    <p v-if="active?.rejectedCount" class="practice-intro">{{ active.rejectedCount }} 道题未通过检查，已剔除。</p>
