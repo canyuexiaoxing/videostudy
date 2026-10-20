@@ -1,0 +1,9 @@
+'use strict';const test=require('node:test'),assert=require('node:assert/strict');const {installRuntimeNetwork}=require('./runtime-network.cjs');
+test('native renderer requests retain capability injection and log only safe network metadata',()=>{
+ const hooks={},records=[];const runtime={phase:'ready',apiOrigin:'http://127.0.0.1:12345',token:'TEST_CAPABILITY'};const session={webRequest:Object.fromEntries(['onBeforeSendHeaders','onCompleted','onErrorOccurred'].map(n=>[n,f=>hooks[n]=f]))};installRuntimeNetwork(session,{getRuntime:()=>runtime,getWindow:()=>({webContents:{id:7}}),dataDir:__dirname,write:r=>records.push(r)});
+ const request={url:runtime.apiOrigin+'/api/transcriptions?secret=NEVER_LOG',webContentsId:7,method:'GET',requestHeaders:{'x-framewise-runtime':'spoof'}};let headers;hooks.onBeforeSendHeaders(request,r=>headers=r.requestHeaders);assert.equal(headers['X-Framewise-Runtime'],runtime.token);assert(!headers['x-framewise-runtime']);
+ hooks.onCompleted({...request,statusCode:403,responseHeaders:{}});hooks.onErrorOccurred({...request,error:'net::ERR_FAILED private body'});
+ assert.equal(records[0].headerInjected,true);assert.equal(records[1].httpStatus,403);assert.equal(records[1].corsAllowsDesktop,false);assert.equal(records[2].errorCode,'ERR_FAILED');assert(!JSON.stringify(records).includes('TEST_CAPABILITY'));assert(!JSON.stringify(records).includes('NEVER_LOG'));assert(!JSON.stringify(records).includes('private body'));
+ const remote={...request,url:'https://unrelated.example/api/transcriptions',requestHeaders:{'X-Framewise-Runtime':'spoof'}};hooks.onBeforeSendHeaders(remote,r=>assert.deepEqual(r.requestHeaders,{}));assert.equal(records.length,3);
+ const wrongWindow={...request,webContentsId:8,requestHeaders:{}};hooks.onBeforeSendHeaders(wrongWindow,r=>assert.deepEqual(r.requestHeaders,{}));assert.equal(records.at(-1).headerInjected,false);
+});

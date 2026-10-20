@@ -14,12 +14,12 @@ async function bounded<T>(work:(signal:AbortSignal)=>Promise<T>,ticket:RequestTi
  }),work(controller.signal)]).then(value=>{current(ticket);return value})}
  finally{clearTimeout(timer);ticket.signal.removeEventListener('abort',abort)}
 }
-export async function waitForRuntimeReady(bridge:Pick<DesktopBridge,'status'>|undefined,ticket:RequestTicket,options:{expectedOrigin?:string;onWaiting?:()=>void;pollMs?:number;statusTimeoutMs?:number;timeoutMs?:number}={}):Promise<void>{
+export async function waitForRuntimeReady(bridge:Pick<DesktopBridge,'status'|'connection'>|undefined,ticket:RequestTicket,options:{expectedOrigin?:string;onWaiting?:()=>void;pollMs?:number;statusTimeoutMs?:number;timeoutMs?:number}={}):Promise<void>{
  current(ticket);if(!bridge)return
  const deadline=Date.now()+(options.timeoutMs??300000)
  while(Date.now()<deadline){
   current(ticket);let state
-  try{state=await bounded(()=>bridge.status(),ticket,Math.min(options.statusTimeoutMs??3500,deadline-Date.now()))}catch{current(ticket)}
+  try{state=await bounded(()=>(bridge.connection??bridge.status).call(bridge),ticket,Math.min(options.statusTimeoutMs??3500,deadline-Date.now()))}catch{current(ticket)}
   if(state?.phase==='ready'){
    if(options.expectedOrigin && state.apiOrigin!==options.expectedOrigin)throw new Error('本机服务地址已变化，请重新打开软件后读取课程。')
    return

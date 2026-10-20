@@ -9,6 +9,7 @@ export type RuntimeStatus = {
   paths?: { dataDir?: string }; metrics?: { cacheBytes?: number; busy?: boolean }; [key: string]: unknown
 }
 export type DesktopBridge = {
+  connection?(): Promise<RuntimeStatus>
   status(): Promise<RuntimeStatus>
   saveSettings(settings: { mode: RuntimeMode; apiKey?: string; model?: string; baseUrl?: string }): Promise<unknown>
   start(): Promise<unknown>; restart(): Promise<unknown>; installModels(): Promise<unknown>; cancelModels(): Promise<unknown>
@@ -16,12 +17,12 @@ export type DesktopBridge = {
   clearCache(): Promise<unknown>; openDataDirectory(): Promise<unknown>; importModels(): Promise<unknown>
 }
 declare global { interface Window { framewiseDesktop?: DesktopBridge } }
-export async function bootstrapRuntime(bridge?: Pick<DesktopBridge, 'status'>, timeoutMs = 2500): Promise<RuntimeStatus | null> {
+export async function bootstrapRuntime(bridge?: Pick<DesktopBridge, 'status' | 'connection'>, timeoutMs = 2500): Promise<RuntimeStatus | null> {
   if (!bridge) return null
   disableApiOrigin()
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
-    const status = await Promise.race([bridge.status(), new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), timeoutMs) })])
+    const status = await Promise.race([(bridge.connection??bridge.status).call(bridge), new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), timeoutMs) })])
     if (status?.apiOrigin) setApiOrigin(status.apiOrigin)
     return status
   } catch { return null } finally { if (timer) clearTimeout(timer) }
@@ -35,6 +36,7 @@ export function unavailableAnalysisModules(status: RuntimeStatus | null, personM
 }
 export function runtimeError(code?: string): string {
   const messages: Record<string, string> = {
+    runtime_key_unavailable: '保存的 API 密钥暂时无法解密，课程历史仍可读取；请重新输入并保存密钥后使用 AI 功能。',
     runtime_missing: '本机运行环境尚未安装，请使用完整安装包或打开诊断检查安装。', missing_runtime: '本机运行环境尚未安装，请使用完整安装包。',
     models_missing: '首次使用需要准备模型，可在线下载或导入离线模型。', download_failed: '模型下载未完成，请重试或导入离线模型。',
     runtime_start_failed: '本机服务启动失败，请重试或导出诊断。', runtime_agent_timeout: '本地分析服务启动超时，请重试；仍失败时可打开数据目录或导出诊断。', runtime_initialization_failed: '本机环境初始化失败，原设置和密钥已保留。请先打开数据目录备份 settings.json，再导出诊断排查；重新安装不会自动修复用户设置。', renderer_restore_recovery_required: '备份恢复尚未完成，已暂停启动以保护数据。请打开数据目录保留恢复副本，并导出诊断。', restore_recovery_required: '检测到未完成的备份恢复，请保留数据目录中的恢复副本并导出诊断。', runtime_timeout: '本机服务启动超时，请重试或导出诊断。',

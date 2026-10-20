@@ -57,3 +57,9 @@ test('unknown native errors never display raw details or secrets', () => {
  test('native recovery errors provide readable actionable descriptions',()=>{
  for(const code of ['runtime_agent_timeout','runtime_initialization_failed','renderer_restore_recovery_required']) assert.match(runtimeError(code),/数据目录/)
  })
+
+test('bootstrap obtains its origin without waiting for heavyweight model checks',async()=>{
+ let fullCalls=0;const value={phase:'starting',apiOrigin:'http://127.0.0.1:32456'};
+ const result=await bootstrapRuntime({connection:async()=>value,status:()=>{fullCalls++;return new Promise(()=>{})}},20);
+ assert.equal(result,value);assert.equal(API_ORIGIN,value.apiOrigin);assert.equal(fullCalls,0);setApiOrigin('http://127.0.0.1:18080');
+})
