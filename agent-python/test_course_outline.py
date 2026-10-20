@@ -55,3 +55,48 @@ class OutlineTests(unittest.TestCase):
   raw={'children':[{'title':'公式','children':[],'details':[{'title':'公式三：增长量=现期/(1+r)×r（已知现期、增长率）','sourceIds':['s']}]}]}
   title=normalize_reply(raw)['children'][0]['children'][0]['title']
   self.assertEqual(title,'公式三：增长量=现期/(1+r)×r')
+
+
+class SameFrameClassificationAuditTests(unittest.TestCase):
+ def fixture(self):
+  headings=['1.给基期、增长率','2.给现期、基期','3.给现期、增长率']
+  small={'title':'方法二：先加再减','imageIds':['frame_1182000'],'children':[{'title':'总的增长量=总现期-总基期','children':[]}]}
+  categories=[{'title':title,'children':[]} for title in headings]
+  categories[1]['children']=[{'title':'主体为多个数加和','children':[small]}]
+  raw={'children':[{'title':'增长量计算方法','children':categories}]}
+  hints=[{'imageId':'frame_1182000','parentLabels':['方法二：先加再减'],'headings':headings}]
+  return raw,hints
+ def test_same_frame_submethod_does_not_own_three_main_categories(self):
+  raw,hints=self.fixture()
+  self.assertEqual(audit_outline(raw,hints),[])
+ def test_real_missing_category_is_still_reported_once_for_course_branch(self):
+  raw,hints=self.fixture();raw['children'][0]['children'].pop()
+  errors=audit_outline(raw,hints)
+  self.assertEqual(len(errors),1)
+  self.assertIn('3.给现期、增长率',errors[0])
+  self.assertNotIn('1.给基期、增长率',errors[0])
+  self.assertNotIn('先加再减 缺少',errors[0])
+ def test_similarly_named_node_in_unrelated_branch_does_not_hide_omission(self):
+  raw,hints=self.fixture();missing=raw['children'][0]['children'].pop()
+  raw['children'].append({'title':'不相关课程分支','children':[missing]})
+  self.assertTrue(audit_outline(raw,hints))
+ def test_details_or_examples_are_not_substitutes_for_category_nodes(self):
+  for target in ('details','examples'):
+   raw,hints=self.fixture();missing=raw['children'][0]['children'].pop()
+   if target=='details':raw['children'][0]['details']=[missing]
+   else:raw['examples']=[missing]
+   self.assertTrue(audit_outline(raw,hints))
+ def test_checker_never_moves_or_mutates_nodes(self):
+  raw,hints=self.fixture();before=copy.deepcopy((raw,hints))
+  audit_outline(raw,hints)
+  self.assertEqual((raw,hints),before)
+ def test_parent_label_without_image_binding_does_not_trigger_check(self):
+  raw,hints=self.fixture();hints[0]['imageId']='frame_other'
+  raw['children'][0]['children'].pop()
+  self.assertEqual(audit_outline(raw,hints),[])
+ def test_multiple_labels_on_one_slide_do_not_duplicate_missing_reports(self):
+  raw,hints=self.fixture();raw['children'][0]['children'].pop()
+  node=raw['children'][0]['children'][1]['children'][0]
+  node['children'].append({'title':'方法一：先减再加','imageIds':['frame_1182000'],'children':[]})
+  hints[0]['parentLabels'].append('方法一：先减再加')
+  self.assertEqual(len(audit_outline(raw,hints)),1)

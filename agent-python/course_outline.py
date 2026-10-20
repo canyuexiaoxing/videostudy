@@ -74,20 +74,36 @@ def outline_hints(visuals,root,regions):
     return hints
 
 def audit_outline(raw,hints):
+    """Audit classification coverage, without inventing edges from co-occurrence.
+
+    OCR hints list labels on a whole slide; parentLabels does not establish
+    which label owns each heading. Check the containing course branch once,
+    rather than requiring every matching submethod to own all slide headings.
+    """
     errors=[]
-    def titles(node):
+    def titles(node,depth=0):
+        if not isinstance(node,dict) or depth>12:return []
         result=[]
         for child in node.get('children',[]):
-            if isinstance(child,dict):result.append(_key(child.get('title','')));result.extend(titles(child))
+            if isinstance(child,dict):
+                result.append(_key(child.get('title','')))
+                result.extend(titles(child,depth+1))
         return result
-    def visit(node,depth=0):
-        if not isinstance(node,dict) or depth>12:return
+    def bound_to_branch(node,hint,depth=0):
+        if not isinstance(node,dict) or depth>12:return False
+        if (hint['imageId'] in node.get('imageIds',[]) and
+            any(_key(label)==_key(node.get('title','')) for label in hint['parentLabels'])):
+            return True
+        return any(bound_to_branch(child,hint,depth+1) for child in node.get('children',[]))
+    for branch in raw.get('children',[]):
+        if not isinstance(branch,dict):continue
+        visible=titles(branch)
         for hint in hints:
-            if hint['imageId'] not in node.get('imageIds',[]):continue
-            if not any(_key(label)==_key(node.get('title','')) for label in hint['parentLabels']):continue
-            visible=titles(node)
-            missing=[h for h in hint['headings'] if not any(_key(h)==t or (_key(h) and _key(h) in t) for t in visible)]
-            if missing:errors.append('课件分类待核对：'+str(node.get('title'))+' 缺少子节点 '+ '、'.join(missing)+'；依据 '+hint['imageId'])
-        for child in node.get('children',[]):visit(child,depth+1)
-    for node in raw.get('children',[]):visit(node)
+            if not bound_to_branch(branch,hint):continue
+            missing=[heading for heading in hint['headings']
+                     if not any(_key(heading)==title or (_key(heading) and _key(heading) in title)
+                                for title in visible)]
+            if missing:
+                errors.append('课件分类待核对：'+str(branch.get('title'))+' 缺少子节点 '+
+                              '、'.join(missing)+'；依据 '+hint['imageId'])
     return list(dict.fromkeys(errors))
