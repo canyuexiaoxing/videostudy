@@ -98,7 +98,9 @@ def parse_practice_reply(source,*,task=None):
  except (ValueError,RecursionError) as error:
   position=error.pos if isinstance(error,json.JSONDecodeError) else 0
   code=str(error) if str(error) in ('duplicate_field','json_nonfinite') else 'invalid_json'
-  raise PracticeReplyError(source,[code],position,normalized=normalized) from None
+  issue=PracticeReplyError(source,[code],position,normalized=normalized)
+  if isinstance(error,json.JSONDecodeError):issue.syntax_location=(error.lineno,error.colno,error.msg)
+  raise issue from None
  issues=shape_issues(value)
  if issues:raise PracticeReplyError(source,issues,normalized=normalized)
  if normalized!=source:record_event('stage_completed',task,operation='practice',stage='json_recovery',reason='practice_format_normalized',elapsed_ms=round((time.monotonic()-started)*1000))
@@ -130,14 +132,49 @@ def preserves_existing(source,after):
  return same(before,after)
 
 def readable_original_questions(error):
- """On failed correction, only salvage a readable batch with missing fields, never malformed JSON/control text."""
- if not error.issues or not all(issue.endswith(':missing') for issue in error.issues):return None
- try:value=_strict(error.source)
- except (ValueError,RecursionError):return None
- if isinstance(value,dict) and isinstance(value.get('questions'),list):return value
- return None
+ """Retain only independently complete strict question objects; never guess their contents."""
+ if error.issues and all(issue.endswith(':missing') for issue in error.issues):
+  try:value=_strict(error.source)
+  except (ValueError,RecursionError):return None
+  if isinstance(value,dict) and isinstance(value.get('questions'),list):return value
+ if error.issues!=['invalid_json']:return None
+ source=error.source
+ header=re.match(r'\s*\{\s*"questions"\s*:\s*\[',source)
+ if not header:return None
+ questions=[];bad=0;i=header.end();depth=0;start=None;inside=False;escaped=False;closed=False
+ while i<len(source):
+  char=source[i]
+  if inside:
+   if escaped:escaped=False
+   elif char=='\\':escaped=True
+   elif char=='"':inside=False
+  elif char=='"':inside=True
+  elif char=='{':
+   if depth==0:start=i
+   depth+=1
+  elif char=='}':
+   depth-=1
+   if depth<0:return None
+   if depth==0 and start is not None:
+    try:
+     item=_strict(source[start:i+1])
+     if not isinstance(item,dict) or shape_issues({'questions':[item]}):raise ValueError('invalid_question')
+     questions.append(item)
+    except (ValueError,RecursionError):bad+=1
+    if len(questions)+bad>20:return None
+    start=None
+  elif depth==0 and char==']':
+   closed=True
+   if source[i+1:].strip()!='}':return None
+   break
+  elif depth==0 and char not in ' \r\n\t,':return None
+  i+=1
+ if not closed or not questions:return None
+ return {'questions':questions,'unreadableCount':bad}
 
 def repair_instruction(error):
- return ('上一条出题回复未通过 JSON 格式检查。只修复格式，不重新出题，不增删题目，不改已有题干、公式、数字、选项顺序、answerIndex、sourceIds、算式和图结构。'
+ location=getattr(error,'syntax_location',None)
+ detail=('语法错误位于第'+str(location[0])+'行第'+str(location[1])+'列（'+location[2]+'）。' if location else '')
+ return (detail+'上一条出题回复未通过 JSON 格式检查。只修复格式，不重新出题，不增删题目，不改已有题干、公式、数字、选项顺序、answerIndex、sourceIds、算式和图结构。'
          '保留全部原请求材料与范围；一次处理以下全部格式问题：'+json.dumps(error.issues,ensure_ascii=False)+
-         '。返回完整的单个 JSON 对象，顶层 questions 数组；所有字符串按 JSON 标准转义，LaTeX 反斜杠双写。缺少格式字段时补全，已有字段不得重复，不加代码块和解释。')
+         '。返回完整的单个 JSON 对象，顶层 questions 数组；所有字符串按 JSON 标准转义，LaTeX 反斜杠双写。缺少格式字段时补全，已有字段不得重复。数值字段必须是计算后的JSON数字，不能写未加引号的1/2或2*3；将算式放expression字符串中，不改题意。不加代码块和解释。')

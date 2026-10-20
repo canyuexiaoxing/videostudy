@@ -10,7 +10,7 @@ import PracticeFigure, { type Diagram } from './PracticeFigure.vue'
 import { reviewTargets } from './practiceReview'
 import type { ReviewCitation } from './practiceReview'
 type Node={id:string;title:string;children?:Node[];details?:Node[]}
-type Question={id:string;nodeTitle:string;kind:string;title:string;prompt:string;options:string[];diagram?:Diagram|null;scenario?:string;validation?:{calculationMissing?:boolean;calculationChecked?:boolean}}
+type Question={id:string;nodeTitle:string;kind:string;title:string;prompt:string;options:string[];diagram?:Diagram|null;scenario?:string;validation?:{calculationMissing?:boolean;calculationChecked?:boolean;optionValuesChecked?:boolean}}
 type Citation=ReviewCitation
 type Feedback={questionId:string;selectedIndex:number;answerIndex:number;correct:boolean;explanation:string;takeaway:string;selectedReason:string;citations:Citation[]}
 type SetData={id:string;title:string;status:string;error?:string;questions?:Question[];rejectedCount?:number;requestedCount?:number;generatedCount?:number;shortfallCount?:number;fillAttempts?:number;fillStatus?:string;practiceMode?:string;historyRounds?:number;historyQuestions?:number}
@@ -128,14 +128,15 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
   <button v-if="!courseId&&!hasMedia" type="button" class="practice-secondary" @click="showDemo=!showDemo;feedback={};index=0">{{ demo?'关闭示例题':'查看示例题' }}</button>
   <div v-if="courseId&&!demo" class="practice-settings">
    <PracticeScopePicker v-model="scope" :root="mindMap?.root" :disabled="busy||pending"/>
-   <label>题量<select v-model.number="count" :disabled="busy"><option :value="0">智能推荐</option><option v-for="n in [3,5,10]" :key="n" :value="n">{{ n }} 道</option></select></label>
+   <label>题量<select v-model.number="count" :disabled="busy"><option :value="0">智能推荐</option><option :value="3">少量练习</option><option :value="5">适量练习</option><option :value="10">多一些练习</option></select></label>
    <label>难度<select aria-label="难度" v-model="difficulty" :disabled="busy||pending"><option value="basic">基础巩固</option><option value="application">应用练习</option><option value="advanced">进阶挑战</option></select></label>
    <button class="practice-primary" type="button" :disabled="busy||pending||!ready||!mindMap" @click="generate">{{ busy?'正在出题…':active&&(active.status==='failed'||(active.status==='completed'&&!questions.length))?'重新生成':'生成练习' }}</button>
   </div>
 
+  <p v-if="courseId" class="practice-intro">题量为大致参考，以实际生成的有效题目为准。</p>
   <label v-if="sets.length" class="saved-set">已保存的练习<select :value="active?.id" :disabled="busy||pending" @change="switchSet(($event.target as HTMLSelectElement).value)"><option v-for="set in sets" :key="set.id" :value="set.id">{{ set.title }} · {{ set.status==='completed'?'已生成':set.status==='failed'?'失败':'生成中' }} · {{ set.id.slice(0,6) }}</option></select></label>
   <p v-if="error" class="practice-error" role="alert">{{ error }}</p>
-   <p v-if="typeof active?.generatedCount === 'number'" class="practice-intro" role="status">要求 {{ active.requestedCount }} 题 · 模型共返回 {{ active.generatedCount }} 题 · 保留 {{ questions.length }} 题 · 剔除 {{ active.rejectedCount ?? 0 }} 题<span v-if="active.fillAttempts">（已补题一次）</span>。<span v-if="active.shortfallCount">仍缺 {{ active.shortfallCount }} 题，可重新生成；已有题目已保留。</span></p>
+   <p v-if="typeof active?.generatedCount === 'number'" class="practice-intro" role="status">本次保留 {{ questions.length }} 题 · 模型共返回 {{ active.generatedCount }} 题 · 剔除 {{ active.rejectedCount ?? 0 }} 题<span v-if="active.fillAttempts">（已补题一次）</span>。<span v-if="!questions.length">本次没有可用题目，可以重新生成。</span></p>
    <p v-else-if="active?.rejectedCount" class="practice-intro">{{ active.rejectedCount }} 道题未通过检查，已剔除。</p>
   <p v-if="busy" class="practice-intro" role="status">正在根据知识点出题并检查答案，完成后自动显示。</p>
   <div v-else-if="!questions.length" class="practice-empty">{{ !courseId&&!hasMedia?'请先选择并分析视频，或从历史记录打开课程，随后显示对应练习。':active?.status==='failed'?'本次出题失败，可点击重新生成重试。':active?.status==='completed'?'本次没有通过检查的题目，可点击重新生成，或调整范围和难度后再试。':!mindMap?'分析完成并生成思维导图后，就可以练习。':'选择范围、题量和难度，生成本课练习。' }}</div>
@@ -146,6 +147,7 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
    <div class="practice-track" role="progressbar" aria-label="练习完成进度" :aria-valuenow="answered" :aria-valuemin="0" :aria-valuemax="questions.length"><span :style="{width:`${answered/questions.length*100}%`}"/></div>
    <nav class="practice-steps" aria-label="选择题目"><button v-for="(q,i) in questions" :key="q.id" type="button" :disabled="pending" :class="{current:index===i,done:!!feedback[q.id]}" :aria-current="index===i?'step':undefined" @click="index=i">{{ String(i+1).padStart(2,'0') }}<span>{{ feedback[q.id]?'已答':'待答' }}</span></button></nav>
    <p v-if="question?.validation?.calculationMissing" class="practice-intro" role="note">本题未提供可自动核算的算式，请结合解析核对答案。</p>
+   <p v-if="question?.validation?.calculationChecked && question.validation.optionValuesChecked === false" class="practice-intro" role="note">算式已核算；文字选项与答案的对应关系未自动核验，请结合解析核对。</p>
    <article :key="question.id" class="practice-question">
     <div class="practice-question-meta"><span>第 {{ index+1 }} 题 · {{ question.kind==='true_false'?'判断':'单选' }}</span><span>{{ question.nodeTitle }}</span><span>{{ question.scenario==='adapted'?'应用题 · 设定数据':'课程知识题' }}</span></div>
     <fieldset><legend><MathText :text="question.prompt" /></legend>

@@ -104,3 +104,5 @@ def request_model_json(request,timeout,task,operation,*,transport=urlopen,image_
         if isinstance(error,json.JSONDecodeError):extra.update(reason='invalid_json',json_line=error.lineno,json_column=error.colno,json_position=error.pos)
         record_event('request_failed',task,**common,stage=stage,error_type=type(error).__name__,elapsed_ms=int((time.monotonic()-started)*1000),**extra)
         raise
+
+_SAFE_REASONS.update({'question_answer_conflict','practice_partial_questions_retained'})

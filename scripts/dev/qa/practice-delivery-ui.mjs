@@ -24,8 +24,8 @@ try{
   return route.fulfill({json:{status:'unsupported'}});
  });
  async function open(){await page.goto('http://127.0.0.1:5199/');await page.getByRole('tab',{name:'历史记录',exact:true}).click();await page.locator('.history-open').first().click();await page.getByRole('tab',{name:'AI 练习',exact:true}).click();}
- await open();await page.getByText('模型共返回 6 题',{exact:false}).waitFor();await page.getByText('仍缺 5 题',{exact:false}).waitFor();await page.getByText('本题未提供可自动核算的算式，请结合解析核对答案。',{exact:true}).waitFor();
- set={...set,questions:[],generatedCount:2,rejectedCount:2,shortfallCount:10};await open();await page.getByText('模型共返回 2 题',{exact:false}).waitFor();await page.getByText('仍缺 10 题',{exact:false}).waitFor();
+ await open();await page.getByText('模型共返回 6 题',{exact:false}).waitFor();await page.getByText('题量为大致参考，以实际生成的有效题目为准。',{exact:true}).waitFor();assert.equal(await page.getByText('仍缺',{exact:false}).count(),0);assert.equal(await page.getByRole('option',{name:'多一些练习',exact:true}).count(),1);await page.getByText('本题未提供可自动核算的算式，请结合解析核对答案。',{exact:true}).waitFor();
+ set={...set,questions:[],generatedCount:2,rejectedCount:2,shortfallCount:10};await open();await page.getByText('模型共返回 2 题',{exact:false}).waitFor();await page.getByText('本次没有可用题目，可以重新生成。',{exact:false}).waitFor();
  set={...set,questions:[q],generatedCount:null,requestedCount:null,rejectedCount:1};await open();await page.getByText('1 道题未通过检查，已剔除。',{exact:true}).waitFor();assert.equal(await page.getByText('模型共返回',{exact:false}).count(),0);
- assert.deepEqual(errors,[]);await fs.writeFile(path.join(root,'.local/qa/native-delivery/practice-ui-result.json'),JSON.stringify({checks:7,passed:true,paidModelCalls:0}));console.log('practice UI: 7 checks passed');
+ assert.deepEqual(errors,[]);await fs.writeFile(path.join(root,'.local/qa/native-delivery/practice-ui-result.json'),JSON.stringify({checks:9,passed:true,paidModelCalls:0}));console.log('practice UI: 9 checks passed');
 }finally{await browser.close();await server.close();}
