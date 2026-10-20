@@ -12,8 +12,12 @@ export function progressView(state:string, value:AnalysisProgress|null){
  }
  if(state==='completed')return {label:'分析完成',ratio:1,completed:5,indeterminate:false}
  if(state==='uploading')return {label:'正在上传视频…',ratio:0,completed:0,indeterminate:true}
+ if(state==='waiting_runtime')return {label:'本机服务启动中，正在等待读取课程…',ratio,completed:p?.completedStages??0,indeterminate:true}
+ if(state==='reconnecting')return {label:'课程连接暂时中断，正在重新读取…',ratio,completed:p?.completedStages??0,indeterminate:true}
+ if(state==='upload_failed')return {label:'视频上传未完成，请重试上传',ratio:0,completed:0,indeterminate:false}
+ if(state==='read_failed')return {label:'课程读取失败，请点击重试读取',ratio,completed:p?.completedStages??0,indeterminate:false}
  if(state==='reading')return {label:'正在读取分析进度…',ratio:0,completed:0,indeterminate:true}
  if(state==='queued')return {label:'等待分析任务…',ratio:0,completed:0,indeterminate:true}
- if(state==='failed'||state==='interrupted')return {label:(state==='failed'?'分析未完成':'进度查询或上传中断')+(p?` · ${label}`:''),ratio:Math.min(ratio,.95),completed:p?.completedStages??0,indeterminate:false}
+ if(state==='failed'||state==='interrupted')return {label:(state==='failed'?'分析未完成':'课程连接中断，请重试读取')+(p?` · ${label}`:''),ratio:Math.min(ratio,.95),completed:p?.completedStages??0,indeterminate:false}
  return {label,ratio:Math.min(ratio,.95),completed:p?.completedStages??0,indeterminate:!p}
 }

@@ -7,7 +7,7 @@ const view=computed(()=>progressView(props.state,props.progress))
 const steps=computed(()=>['转写与选图','补采检查','同页分组',props.progress?.totalGroups!=null||props.progress?.stage==='groups'?'组图文理解':'页面解读','思维导图'])
 </script>
 <template>
- <section v-if="state" class="analysis-progress" :class="{'progress-failed':['failed','interrupted'].includes(state)}" aria-label="视频分析进度">
+ <section v-if="state" class="analysis-progress" :class="{'progress-failed':['failed','interrupted','read_failed','upload_failed'].includes(state)}" aria-label="视频分析进度">
   <div class="progress-heading"><strong role="status" aria-live="polite">{{view.label}}</strong><span>已完成 {{view.completed}} / 5 个阶段</span></div>
   <div class="progress-track" :class="{'progress-indeterminate':view.indeterminate}" role="progressbar" aria-label="分析阶段完成情况" :aria-valuenow="view.indeterminate?undefined:view.ratio*5" :aria-valuemin="0" :aria-valuemax="5" :aria-valuetext="view.label"><div class="progress-fill" :style="{width:`${view.ratio*100}%`}"></div></div>
   <div class="progress-steps" aria-hidden="true"><span v-for="(step,index) in steps" :key="step" :class="{done:index<view.completed,current:index===view.completed&&state==='processing'}">{{step}}</span></div>

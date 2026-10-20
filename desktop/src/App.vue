@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import {waitForRuntimeReady,readCourseJson,readDelay} from './courseReadRecovery'
 import { unavailableAnalysisModules } from './nativeRuntime'
 import { API_ORIGIN, setApiOrigin } from './apiOrigin' 
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -125,18 +126,21 @@ const historyLoading = ref(false), historySynced = ref(false)
 let historyController:AbortController|null = null, historyGeneration = 0
 function cacheHistory(){try{localStorage.setItem('analysisHistory:v1',JSON.stringify(analysisHistory.value))}catch{/* Keep server results when storage is unavailable. */}}
 async function refreshHistory(){
- if(deletingHistoryId.value)return
+ if(deletingHistoryId.value||historyLoading.value)return
  const generation=++historyGeneration
  historyController?.abort();const controller=new AbortController();historyController=controller;historyLoading.value=true
- let timedOut=false;const timeout=setTimeout(()=>{timedOut=true;controller.abort()},15000)
+ let timedOut=false;let timeout:ReturnType<typeof setTimeout>|undefined
  try{
+  await waitForRuntimeReady(window.framewiseDesktop,{signal:controller.signal,current:()=>generation===historyGeneration&&!controller.signal.aborted},{expectedOrigin:API_ORIGIN})
+  if(controller.signal.aborted||generation!==historyGeneration)return
+  timeout=setTimeout(()=>{timedOut=true;controller.abort()},15000)
   const response=await fetch(`${apiBase}/transcriptions`,{signal:controller.signal})
   if(!response.ok)throw new Error(`HTTP ${response.status}`)
   const data=await response.json()
   if(controller.signal.aborted||generation!==historyGeneration)return
   const cached=analysisHistory.value.map(item=>({...item,name:savedMediaName(item.id)||item.name}))
   analysisHistory.value=serverHistory(data,cached);historySynced.value=true;historyError.value='';cacheHistory()
- }catch(e){if((timedOut||!controller.signal.aborted)&&generation===historyGeneration)historyError.value='无法同步服务器历史，当前显示上次缓存。请稍后刷新。'}
+ }catch(e){if((timedOut||!controller.signal.aborted)&&generation===historyGeneration)historyError.value=window.framewiseDesktop?'暂时无法读取本机历史记录，当前显示上次缓存。请在服务就绪后重试。':'无法同步服务器历史，当前显示上次缓存。请稍后刷新。'}
  finally{clearTimeout(timeout);if(generation===historyGeneration){historyLoading.value=false;historyController=null}}
 }
 watch(rightTab,tab=>{if(tab==='history')void refreshHistory()})
@@ -153,7 +157,8 @@ function nativeRuntimeState(event: Event) {
   runtimeSettingsOpen.value = true
   return
  }
- if (!existingJobId.value && !isAnalysisPending.value) void refreshHistory()
+ if (existingJobId.value && !isAnalysisPending.value && ['read_failed','interrupted'].includes(analysisState.value)) void loadExistingAnalysis()
+ else if (!existingJobId.value && !isAnalysisPending.value) void refreshHistory()
 }
 onMounted(()=>{void refreshHistory();window.addEventListener('focus',focusHistory);window.addEventListener('framewise-runtime-state',nativeRuntimeState);historyTimer=setInterval(()=>{if(rightTab.value==='history'&&!document.hidden&&!historyLoading.value)void refreshHistory()},15000)})
 onUnmounted(()=>{++historyGeneration;historyController?.abort();clearInterval(historyTimer);window.removeEventListener('focus',focusHistory);window.removeEventListener('framewise-runtime-state',nativeRuntimeState)})
@@ -354,6 +359,8 @@ const expandedMap = ref(false)
 const activeSegmentId = ref('')
 const generatingMindMap = ref(false)
 const isAnalysisPending = ref(false)
+const analysisReadOnly = ref(false)
+let loadedAnalysisId = ''
 const mindMapMode = ref<'grouped' | 'direct'>('direct')
 const groupedAnalysis = computed(() => mindMapMode.value === 'grouped')
 const mapModes = [{ value: 'direct', label: '整课图文直生成（默认）' }, { value: 'grouped', label: '分组后汇总' }] as const
@@ -627,6 +634,7 @@ function historyStatusLabel(status: HistoryStatus) {
 }
 
 function clearLoadedAnalysis() {
+  loadedAnalysisId = ''
   analysisState.value = ''
   analysisProgress.value = null
   clearSubtitleJob()
@@ -647,6 +655,7 @@ function invalidateAnalysisRequests() {
   analysisRequests.invalidate()
   mindMapRequests.invalidate()
   isAnalysisPending.value = false
+  analysisReadOnly.value = false
   generatingMindMap.value = false
 }
 async function chooseVideo(event: Event) {
@@ -705,13 +714,14 @@ async function chooseVideo(event: Event) {
 }
 
 async function waitForAnalysis(id: string, request: RequestTicket) {
+    const started=Date.now()
     for (let attempt = 0; attempt < 1800; attempt++) {
       if (!request.current() || existingJobId.value !== id) return
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await readDelay(1000,request.signal)
       if (!request.current() || existingJobId.value !== id) return
-      const query = await fetch(`${apiBase}/transcriptions/${id}`, { signal: request.signal })
-      if (!query.ok) throw new Error(`查询转写状态失败：HTTP ${query.status}`)
-      const job: TranscriptionJob = await query.json()
+      const job = await readCourseJson<TranscriptionJob>(`${apiBase}/transcriptions/${id}`,request,{onRetry:attempt=>{
+        if(request.current()&&existingJobId.value===id){analysisState.value='reconnecting';status.value='课程连接暂时中断，正在重新读取…';console.info('[framewise:course-read]',{taskId:id,stage:'retry',attempt,elapsedMs:Date.now()-started})}
+      }})
       if (!request.current() || existingJobId.value !== id) return
       if (['queued', 'processing', 'completed', 'failed', 'expired'].includes(job.status) &&
           analysisHistory.value.find(entry => entry.id === id)?.status !== job.status) {
@@ -729,6 +739,9 @@ async function waitForAnalysis(id: string, request: RequestTicket) {
         throw new Error(job.error || '分析失败')
       }
       if (job.status === 'completed') {
+        loadedAnalysisId = id
+        error.value = ''
+        console.info('[framewise:course-read]',{taskId:id,stage:'completed',elapsedMs:Date.now()-started})
         unavailableFrames.value = new Set()
         transcript.value = job.result?.segments ?? []
         sourceLanguage.value = job.result?.language || 'und'
@@ -823,18 +836,18 @@ async function runTranscription() {
     const created: TranscriptionJob = await response.json()
     if (!request.current()) return
     localStorage.setItem(`analysisMedia:${created.id}`, JSON.stringify({ name: file.name, size: file.size, fingerprint, bindingSource:'automatic_upload' }))
-    await readServerMedia(created.id,request.signal)
-    if(!request.current())return
     setAnalysisId(created.id)
     localStorage.setItem('lastAnalysisId', created.id)
     rememberAnalysis(created.id, 'queued', file.name)
+    await readServerMedia(created.id,request.signal)
+    if(!request.current())return
     readSubtitleJob(created.id)
     analysisState.value = created.status
     await waitForAnalysis(created.id, request)
   } catch (cause) {
     if (!request.current()) return
     error.value = cause instanceof Error ? cause.message : String(cause)
-    if (analysisState.value !== 'failed') analysisState.value = 'interrupted'
+    if (analysisState.value !== 'failed') analysisState.value = existingJobId.value ? 'read_failed' : 'upload_failed'
     status.value = '分析未完成'
   } finally {
     if (request.current()) isAnalysisPending.value = false
@@ -858,7 +871,7 @@ async function cancelAnalysis() {
 }
 
 async function loadExistingAnalysis() {
-  if (isAnalysisPending.value) return
+  if (isAnalysisPending.value && !analysisReadOnly.value) return
   const id = existingJobId.value.trim()
   if (!jobIdPattern.test(id)) {
     error.value = '请输入有效的分析编号'
@@ -867,14 +880,20 @@ async function loadExistingAnalysis() {
   selectionRequests.invalidate()
   checkingMedia.value = false
   const request = analysisRequests.begin()
+  const readStarted=Date.now()
   isAnalysisPending.value = true
+  analysisReadOnly.value = true
   if (!analysisHistory.value.some(entry => entry.id === id)) rememberAnalysis(id, 'unknown')
   error.value = ''
   status.value = '正在读取已保存的分析结果…'
-  clearLoadedAnalysis()
+  if(loadedAnalysisId!==id)clearLoadedAnalysis()
   analysisState.value = 'reading'
-  readSubtitleJob(id)
   try {
+    await waitForRuntimeReady(window.framewiseDesktop,request,{expectedOrigin:API_ORIGIN,onWaiting:()=>{if(request.current()&&existingJobId.value===id){analysisState.value='waiting_runtime';status.value='本机服务启动中，正在等待读取课程…'}}})
+    if(!request.current()||existingJobId.value!==id)return
+    analysisState.value='reading'
+    status.value='正在读取已保存的分析结果…'
+    readSubtitleJob(id)
     await restoreCourseMedia(id,request)
     if(!request.current())return
     await waitForAnalysis(id, request)
@@ -883,16 +902,17 @@ async function loadExistingAnalysis() {
     }
   } catch (cause) {
     if (!request.current()) return
+    console.warn('[framewise:course-read]',{taskId:id,stage:'failed',elapsedMs:Date.now()-readStarted,errorType:cause instanceof Error?cause.name:'Unknown'})
     error.value = cause instanceof Error ? cause.message : String(cause)
-    if (analysisState.value !== 'failed') analysisState.value = 'interrupted'
+    if (analysisState.value !== 'failed') analysisState.value = 'read_failed'
     status.value = '未能读取分析结果'
   } finally {
-    if (request.current()) isAnalysisPending.value = false
+    if (request.current()){isAnalysisPending.value=false;analysisReadOnly.value=false}
   }
 }
 
 async function openHistory(entry: HistoryEntry) {
-  if (isAnalysisPending.value) return
+  if (isAnalysisPending.value && !analysisReadOnly.value) return
   if (entry.status === 'expired') {historyError.value='此任务已过期，没有可读取的分析结果。可以删除这条记录，或重新选择视频分析。';return}
   if (existingJobId.value !== entry.id) {
     clearSubtitleJob()
@@ -969,7 +989,7 @@ async function retryAnalysis() {
   } catch (cause) {
     if (!request.current()) return
     error.value = cause instanceof Error ? cause.message : String(cause)
-    if (analysisState.value !== 'failed') analysisState.value = 'interrupted'
+    if (analysisState.value !== 'failed') analysisState.value = existingJobId.value ? 'read_failed' : 'upload_failed'
     status.value = '分析未完成'
   } finally {
     if (request.current()) isAnalysisPending.value = false
@@ -1219,7 +1239,7 @@ onUnmounted(() => {
         <p v-if="historyError" class="history-error" role="alert">{{ historyError }}</p>
         <div v-if="analysisHistory.length" class="history-list">
           <article v-for="entry in analysisHistory" :key="entry.id" class="history-item">
-            <button type="button" class="history-open" :disabled="isAnalysisPending || !!deletingHistoryId" @click="openHistory(entry)">
+            <button type="button" class="history-open" :disabled="(isAnalysisPending && !analysisReadOnly) || !!deletingHistoryId" @click="openHistory(entry)">
               <span class="history-item-top"><strong>{{ entry.name }}</strong><span>{{ historyStatusLabel(entry.status) }}</span></span>
               <small>创建于 {{ formatHistoryDate(entry.addedAt) }} · {{ entry.id }}</small>
             </button>
@@ -1271,6 +1291,7 @@ onUnmounted(() => {
         <div class="section-title"><h2>课程依据</h2><span>{{ transcript.length }} 段字幕 · {{ pageGroups.length ? `${pageGroups.length} 页课件` : `${visualEvidence.length} 张候选画面` }}</span></div>
         <p class="status" :class="{ 'is-processing': isAnalysisPending }" role="status"><span v-if="isAnalysisPending" class="activity-spinner" aria-hidden="true"></span>{{ status }}</p><p v-if="error" class="error">{{ error }}</p>
         <button v-if="isAnalysisPending && existingJobId && ['queued','processing'].includes(analysisState)" type="button" class="text-link" @click="cancelAnalysis">取消分析</button>
+        <button v-if="analysisState==='read_failed' && existingJobId && !isAnalysisPending" type="button" class="text-link" @click="loadExistingAnalysis">重试读取（不会重新分析）</button>
         <details class="analysis-settings" :open="!transcript.length">
           <summary>分析与任务设置</summary>
           <div class="analysis-settings-content">
