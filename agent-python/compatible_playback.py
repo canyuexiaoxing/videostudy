@@ -15,7 +15,7 @@ router = APIRouter(prefix='/compatibility')
 slot = threading.Lock()
 state_lock = threading.RLock()
 active = {}
-TTL_SECONDS = 24 * 3600
+TTL_SECONDS = 72 * 3600
 
 
 @router.on_event('startup')

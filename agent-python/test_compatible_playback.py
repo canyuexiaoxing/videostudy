@@ -80,5 +80,26 @@ class CompatiblePlaybackTests(unittest.TestCase):
             self.assertFalse(playback.slot.locked())
 
 
+class RetentionTests(unittest.TestCase):
+    def test_keep_48_hour_copy_and_expire_after_72_hours(self):
+        import os,time,uuid
+        self.assertEqual(playback.TTL_SECONDS,72*3600)
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);now=time.time()
+            fresh=root/str(uuid.uuid4());old=root/str(uuid.uuid4());fresh.mkdir();old.mkdir()
+            (fresh/'playback.mp4').write_bytes(b'fixture');(old/'playback.mp4').write_bytes(b'fixture')
+            os.utime(fresh,(now-48*3600,now-48*3600));os.utime(old,(now-73*3600,now-73*3600))
+            with patch.object(playback,'root',return_value=root):playback.cleanup_expired()
+            self.assertTrue(fresh.exists());self.assertFalse(old.exists())
+
+    def test_running_job_is_not_deleted_even_if_older_than_retention(self):
+        import os,time,uuid
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);identity=str(uuid.uuid4());job=root/identity;job.mkdir()
+            old=time.time()-100*3600;os.utime(job,(old,old))
+            with patch.object(playback,'root',return_value=root),patch.dict(playback.active,{identity:{}},clear=True):
+                playback.cleanup_expired()
+            self.assertTrue(job.exists())
+
 if __name__ == '__main__':
     unittest.main()

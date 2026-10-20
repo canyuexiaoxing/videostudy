@@ -32,6 +32,7 @@ import { uploadFile } from './nativeMedia'
 import type { SelectedMedia } from './nativeMedia'
 import { mediaBindingState, latestRequests } from './mediaBinding'
 import { resolveMediaIdentity } from './mediaIdentityCache'
+import {rememberCompatibility,lookupCompatibility,forgetCompatibility} from './compatibilityCache'
 import type { RequestTicket } from './mediaBinding'
 import type { MindMapNode as MindNode, MindMapResult } from './mindMap'
 
@@ -201,22 +202,41 @@ const compatibilityId = ref('')
 const compatibilityActive = ref(false)
 let originalVideoUrl = ''
 let compatibilityGeneration = 0
+const cancelledCompatibilityGenerations = new Set<number>()
 let compatibilityUpload: XMLHttpRequest | null = null
 
 function clearCompatibility() {
   compatibilityGeneration++
   compatibilityUpload?.abort()
   compatibilityUpload = null
-  const id = compatibilityId.value
   compatibilityId.value = ''
   compatibilityBusy.value = false
   compatibilityActive.value = false
   compatibilityMessage.value = ''
   if (originalVideoUrl && originalVideoUrl !== videoUrl.value) URL.revokeObjectURL(originalVideoUrl)
   originalVideoUrl = ''
-  if (id) void fetch(`${apiBase}/compatibility/${id}`, { method: 'DELETE', keepalive: true }).catch(() => {})
 }
-watch(selectedFile, clearCompatibility, { flush: 'sync' })
+// Navigation releases this player's state, never the server's reusable copy.
+watch(selectedFile, () => clearCompatibility(), { flush: 'sync' })
+function cancelCompatibility() {
+  if(compatibilityBusy.value)cancelledCompatibilityGenerations.add(compatibilityGeneration)
+  const id=compatibilityId.value,file=selectedFile.value
+  if(file&&selectedFingerprint.value)forgetCompatibility(localStorage,{size:file.size,fingerprint:selectedFingerprint.value},id||undefined)
+  clearCompatibility()
+  if(id)void fetch(`${apiBase}/compatibility/${id}`,{method:'DELETE'}).catch(()=>{})
+}
+async function restoreCompatibility() {
+  const file=selectedFile.value,fingerprint=selectedFingerprint.value,generation=compatibilityGeneration
+  if(!file||!fingerprint||compatibilityActive.value||compatibilityBusy.value||compatibilityId.value)return
+  try{
+    const cached=await lookupCompatibility(localStorage,{size:file.size,fingerprint},fetch,apiBase)
+    if(generation!==compatibilityGeneration||selectedFile.value!==file||!cached)return
+    if(cached.status!=='completed'){void generateCompatibility();return}
+    originalVideoUrl=videoUrl.value;compatibilityId.value=cached.id;compatibilityActive.value=true
+    await switchPlayback(`${apiBase}/compatibility/${cached.id}/video`)
+    if(generation===compatibilityGeneration)compatibilityMessage.value='已复用本视频的兼容副本（保留72小时）'
+  }catch{if(generation===compatibilityGeneration)compatibilityMessage.value='已有兼容副本暂时无法读取，点击兼容播放可重试'}
+}
 
 async function switchPlayback(src: string) {
   const player = video.value
@@ -250,30 +270,43 @@ async function generateCompatibility() {
   compatibilityBusy.value = true
   compatibilityMessage.value = '正在检查后台显卡编码能力…'
   try {
-    const capabilityResponse = await fetch(`${apiBase}/compatibility/capabilities`)
-    if (!capabilityResponse.ok) throw new Error('无法连接后台显卡转码服务')
-    const capability = await capabilityResponse.json()
-    if (generation !== compatibilityGeneration) return
-    if (!capability.available) throw new Error(capability.error || '后台显卡编码不可用')
-    const compatibilityFile=await uploadFile(file)
-    if(generation !== compatibilityGeneration)return
-    const job: { id: string } = await new Promise((resolve, reject) => {
-      const request = new XMLHttpRequest()
-      compatibilityUpload = request
-      request.open('POST', `${apiBase}/compatibility`)
-      request.responseType = 'json'
-      request.upload.onprogress = event => {
-        if (generation === compatibilityGeneration) compatibilityMessage.value = event.lengthComputable
-          ? `上传用于转码：${Math.round(event.loaded / event.total * 100)}%` : '正在上传用于转码…'
-      }
-      request.onerror = () => reject(new Error('上传失败，请检查后台连接'))
-      request.onabort = () => reject(new Error('已取消'))
-      request.onload = () => request.status === 202 ? resolve(request.response) : reject(new Error('无法创建转码任务，显卡可能正在处理其他任务'))
-      const form = new FormData(); form.append('file', compatibilityFile); request.send(form)
-    })
+    const identity={size:file.size,fingerprint:selectedFingerprint.value}
+    const cached=await lookupCompatibility(localStorage,identity,fetch,apiBase)
+    if(generation!==compatibilityGeneration)return
+    let job: {id:string}
+    if(cached){job=cached;compatibilityMessage.value='正在恢复已有兼容副本…'}
+    else {
+      const capabilityResponse = await fetch(`${apiBase}/compatibility/capabilities`)
+      if (!capabilityResponse.ok) throw new Error('无法连接后台转码服务')
+      const capability = await capabilityResponse.json()
+      if (generation !== compatibilityGeneration) return
+      if (!capability.available) throw new Error(capability.error || '后台编码不可用')
+      const compatibilityFile=await uploadFile(file)
+      if(generation !== compatibilityGeneration)return
+      job = await new Promise((resolve, reject) => {
+        const request = new XMLHttpRequest()
+        compatibilityUpload = request
+        request.open('POST', `${apiBase}/compatibility`)
+        request.responseType = 'json'
+        request.upload.onprogress = event => {
+          if (generation === compatibilityGeneration) compatibilityMessage.value = event.lengthComputable
+            ? `上传用于转码：${Math.round(event.loaded / event.total * 100)}%` : '正在上传用于转码…'
+        }
+        request.onerror = () => reject(new Error('上传失败，请检查后台连接'))
+        request.onabort = () => reject(new Error('已取消'))
+        request.onload = () => request.status === 202 ? resolve(request.response) : reject(new Error('无法创建转码任务，请检查后台是否忙碌'))
+        const form = new FormData(); form.append('file', compatibilityFile); request.send(form)
+      })
+      // Save before testing navigation generation, so a completed upload is not lost.
+      rememberCompatibility(localStorage,identity,job.id)
+    }
     compatibilityUpload = null
     if (generation !== compatibilityGeneration) {
-      void fetch(`${apiBase}/compatibility/${job.id}`, { method: 'DELETE' }); return
+      if(cancelledCompatibilityGenerations.has(generation)){
+        forgetCompatibility(localStorage,identity,job.id)
+        void fetch(`${apiBase}/compatibility/${job.id}`,{method:'DELETE'}).catch(()=>{})
+      }
+      return
     }
     compatibilityId.value = job.id
     for (;;) {
@@ -290,15 +323,16 @@ async function generateCompatibility() {
     originalVideoUrl = videoUrl.value
     compatibilityActive.value = true
     await switchPlayback(`${apiBase}/compatibility/${job.id}/video`)
-    compatibilityMessage.value = '正在使用 H.264 兼容副本（24 小时后自动清理）'
+    if(generation===compatibilityGeneration)compatibilityMessage.value = '正在使用 H.264 兼容副本（72 小时后自动清理）'
   } catch (cause) {
     if (generation === compatibilityGeneration) {
       compatibilityMessage.value = cause instanceof Error ? cause.message : '显卡转码失败'
-      const id = compatibilityId.value; compatibilityId.value = ''
-      if (id) void fetch(`${apiBase}/compatibility/${id}`, { method: 'DELETE' }).catch(() => {})
+      compatibilityId.value = ''
+      // A transient read failure must not destroy a successfully created copy.
     }
   } finally {
     if (generation === compatibilityGeneration) compatibilityBusy.value = false
+    cancelledCompatibilityGenerations.delete(generation)
   }
 }
 const filename = ref('')
@@ -361,7 +395,7 @@ async function restoreCourseMedia(id:string, request:RequestTicket) {
   }
   if(!request.current()||existingJobId.value!==id)return
   if(!media){playbackNotice.value='旧记录的原视频已清理，无法自动补回指纹；本记录暂不能联动视频。';return}
-  if(selectedFile.value && mediaBindingState(JSON.stringify(media),selectedFile.value.size,selectedFingerprint.value)==='matched')return
+  if(selectedFile.value && mediaBindingState(JSON.stringify(media),selectedFile.value.size,selectedFingerprint.value)==='matched'){void restoreCompatibility();return}
   if(!window.framewiseMedia){playbackNotice.value='请选择本课原视频，软件会自动核对。';return}
   const restored=await window.framewiseMedia.restore(media.fingerprint)
   if(!request.current()||existingJobId.value!==id)return
@@ -375,6 +409,7 @@ async function restoreCourseMedia(id:string, request:RequestTicket) {
   filename.value=restored.name
   currentPlaybackMs.value=0
   if(previousUrl.startsWith('blob:'))URL.revokeObjectURL(previousUrl)
+  void restoreCompatibility()
 }
 function setAnalysisId(id: string) {
   changingAnalysisId = true
@@ -648,6 +683,7 @@ async function chooseVideo(event: Event) {
       filename.value = file.name
       currentPlaybackMs.value = 0
       if (previousUrl.startsWith('blob:')) URL.revokeObjectURL(previousUrl)
+      void restoreCompatibility()
     }
     checkingMedia.value = false
     if (previousId && binding === 'matched') {
@@ -1197,7 +1233,7 @@ onUnmounted(() => {
     <WorkspaceDivider />
     <section class="workspace">
       <div class="panel player-panel">
-        <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button type="button" class="subtitle-toggle workspace-entry" @click="openVideoWorkspace"><StudyIcon name="slides" />视频工作台<span v-if="ignoredRegion||analysisRegion||personSelectionMode==='adjacent'" class="workspace-entry-dot" aria-label="已保存视频处理设置"></span></button><button v-if="selectedFile" type="button" class="subtitle-toggle" :disabled="compatibilityBusy" title="使用后台显卡生成 H.264 播放副本，需要上传原视频，不重新分析课程" @click="generateCompatibility">{{ compatibilityBusy ? '转换中…' : compatibilityActive ? '返回原视频' : compatibilityId ? '使用兼容副本' : '显卡兼容播放' }}</button><button v-if="compatibilityBusy" type="button" class="subtitle-toggle" @click="clearCompatibility">取消转码</button><button v-if="transcript.length && videoUrl && confirmedMedia" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>{{ compatibilityActive ? '兼容播放' : '本地播放' }} · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
+        <div class="section-title"><h2>课程视频</h2><div class="player-tools"><button type="button" class="subtitle-toggle workspace-entry" @click="openVideoWorkspace"><StudyIcon name="slides" />视频工作台<span v-if="ignoredRegion||analysisRegion||personSelectionMode==='adjacent'" class="workspace-entry-dot" aria-label="已保存视频处理设置"></span></button><button v-if="selectedFile" type="button" class="subtitle-toggle" :disabled="compatibilityBusy" title="使用后台显卡生成 H.264 播放副本，需要上传原视频，不重新分析课程" @click="generateCompatibility">{{ compatibilityBusy ? '转换中…' : compatibilityActive ? '返回原视频' : compatibilityId ? '使用兼容副本' : '显卡兼容播放' }}</button><button v-if="compatibilityBusy" type="button" class="subtitle-toggle" @click="cancelCompatibility">取消转码</button><button v-if="transcript.length && videoUrl && confirmedMedia" type="button" class="subtitle-toggle" :aria-pressed="subtitleEnabled" @click="subtitleEnabled = !subtitleEnabled"><StudyIcon name="transcript" />字幕{{ subtitleEnabled ? '已开启' : '已关闭' }}</button><span>{{ compatibilityActive ? '兼容播放' : '本地播放' }} · {{ videoUrl ? formatTime(currentPlaybackMs) : '尚未选择文件' }}</span></div></div>
         <p v-if="compatibilityMessage" class="empty-hint" role="status" aria-live="polite">{{ compatibilityMessage }}</p>
         <div v-if="associationVisible" class="media-association" :class="currentBinding" role="status">
           <strong>{{ checkingMedia ? '正在核对视频…' : confirmedMedia ? '已自动关联本课' : currentBinding === 'mismatch' ? '视频不匹配 · 未关联' : '无法自动关联' }}</strong>
@@ -1218,7 +1254,7 @@ onUnmounted(() => {
           <button v-if="subtitleCourseId" type="button" class="subtitle-generate" :disabled="!canGenerateSubtitles" @click="generateSubtitles">{{ requestingSubtitles || ['awaiting_source', 'queued', 'processing'].includes(subtitleJob?.status ?? '') ? '生成中…' : subtitleNeedsUpdate ? '更新 AI 字幕' : ['completed', 'partial'].includes(subtitleJob?.status ?? '') ? '重新生成 AI 字幕' : subtitleJob?.status === 'failed' ? '重试生成 AI 字幕' : '生成 AI 字幕' }}</button>
         </div>
         <p v-if="subtitleStatusMessage" class="subtitle-status" :class="{ 'subtitle-status-warning': subtitleRequestError || ['failed', 'partial', 'unsupported'].includes(subtitleJob?.status ?? '') }" role="status" aria-atomic="true">{{ subtitleStatusMessage }}</p>
-        <ChapterPlayer v-if="videoUrl" :src="videoUrl" :chapters="confirmedMedia ? videoChapters : []" :chapter-status="confirmedMedia ? chapterStatus : 'not_requested'" :preview-course-id="confirmedMedia && rawMindMap?.status === 'completed' ? existingJobId : undefined" :preview-fingerprint="confirmedMedia ? selectedFingerprint : undefined" :preview-blocked="isAnalysisPending || generatingMindMap || requestingSubtitles || compatibilityBusy" @ready="video = $event" @timeupdate="syncPlayback"><track v-if="subtitleUrl && confirmedMedia" :key="subtitleUrl" :src="subtitleUrl" kind="subtitles" :label="selectedSubtitles.mode === 'ai' ? 'AI 字幕' : '原文字幕'" :srclang="selectedSubtitles.language" default @load="syncSubtitleVisibility" /></ChapterPlayer>
+        <ChapterPlayer v-if="videoUrl" :src="videoUrl" :chapters="confirmedMedia ? videoChapters : []" :chapter-status="confirmedMedia ? chapterStatus : 'not_requested'" @ready="video = $event" @timeupdate="syncPlayback"><track v-if="subtitleUrl && confirmedMedia" :key="subtitleUrl" :src="subtitleUrl" kind="subtitles" :label="selectedSubtitles.mode === 'ai' ? 'AI 字幕' : '原文字幕'" :srclang="selectedSubtitles.language" default @load="syncSubtitleVisibility" /></ChapterPlayer>
         <div v-else class="empty-player">
           <div class="player-orbit orbit-one" aria-hidden="true"></div><div class="player-orbit orbit-two" aria-hidden="true"></div>
           <div class="player-welcome"><span class="player-play-mark"><StudyIcon name="play" /></span><span class="player-kicker">WATCH. UNDERSTAND. CONNECT.</span><h3>从一节课，连接每个知识点</h3><p>选择本地视频或录音，开启你的学习工作台</p><label class="player-file-picker"><StudyIcon name="upload" />选择课程文件<input type="file" accept="video/*,audio/*" @change="chooseVideo" /></label></div>
