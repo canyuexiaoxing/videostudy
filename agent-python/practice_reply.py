@@ -2,7 +2,7 @@
 import json,re,time,math
 from model_diagnostics import record_event
 MAX_REPLY=2_000_000
-FIELDS=('nodeId','sourceIds','kind','task','title','prompt','options','answerIndex','explanation','distractorReasons','takeaway')
+FIELDS=('nodeId','sourceIds','kind','task','prompt','options','answerIndex','explanation')
 TEXT_FIELDS={'title','prompt','explanation','takeaway','label','unit'}
 # JSON's b/f/n/r/t/u escapes overlap with these common LaTeX commands. Unknown overlaps remain ambiguous.
 ESCAPE_COMMANDS=set('bar barwedge backslash beta beth big bigl bigm bigr bigg biggl biggm biggr binom boldsymbol bot bowtie boxed breve bullet begin bmod frac fbox flat forall footnotesize ne neq neg nabla natural ncong ni not notin nparallel nsubseteq nsupseteq nu newcommand newline rangle rbrace rceil Re ref renewcommand rfloor rho right rightarrow rightharpoondown rightharpoonup rightleftharpoons rightleftarrows rm roman rule relax raisebox tan tanh tau tbinom text textbf textcolor textit textnormal textrm textsf textstyle texttt tfrac therefore theta thickspace thinspace tilde times tiny to top triangle triangleleft triangleright'.split())

@@ -24,7 +24,9 @@ _SAFE_REASONS.update({'invalid_chat_reply','unknown_chat_evidence'})
 _SAFE_REASONS.update({'practice_format_normalized','practice_format_invalid','practice_original_questions_retained'})
 _OPERATIONS.update({'question_chat','overview_chat','compatibility'})
 _STAGES.update({'diagram_validation','reply_validation','course_materials'})
-_NUMBERS.add('question_index')
+_NUMBERS.update({'question_index','returned_count','missing_count'})
+_STAGES.add('quantity_fill')
+_SAFE_REASONS.update({'practice_fill_failed','practice_calculation_unchecked'})
 
 def close_logs():
     global _file,_folder

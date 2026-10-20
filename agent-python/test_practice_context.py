@@ -66,7 +66,7 @@ class ContextTests(unittest.TestCase):
   calls=[]
   with patch.dict(os.environ,{'KEYFRAME_DIR':str(self.base)}),patch('practice.ask',side_effect=lambda p:calls.append(p) or {'questions':[]}):
    result=app.practice(app.PracticeRequest(nodes=[self.node],mode='related_materials',courseId=self.id,scopeNodeId='n',mindMap=self.map,sourceSegments=self.speech,pageGroups=self.pages,visualEvidence=self.visuals))
-  self.assertEqual(len(calls),1);self.assertEqual(result['practiceMode'],'related_materials');self.assertEqual(result['imageCount'],2)
+  self.assertEqual(len(calls),2);self.assertEqual(calls[1]['_messages'][:len(calls[0]['_messages'])],calls[0]['_messages']);self.assertEqual(result['practiceMode'],'related_materials');self.assertEqual(result['imageCount'],2)
   self.assertEqual(sum(c['type']=='image_url' for c in calls[0]['_messages'][1]['content']),2)
  def test_completed_direct_map_saves_context_and_java_null_details_match(self):
   from direct_course_map import build_direct_course_map
@@ -80,7 +80,7 @@ class ContextTests(unittest.TestCase):
   from practice import generate_practice
   save_map_conversation(self.root,{},[],{},self.map,'system');context=load_map_conversation(self.root,self.map)
   q=dict(nodeId='n',sourceIds=['frame_2000'],kind='single',task='concept',title='超出范围',prompt='不相关问题',options=['A','B','C','D'],answerIndex=0,explanation='解释',distractorReasons=['','原因','原因','原因'],takeaway='重点',diagram=None,calculation=None)
-  result=generate_practice([self.node],[],3,'basic',lambda _:{'questions':[q]},mode='map_context',context=context)
+  result=generate_practice([self.node],[],3,'basic',lambda _:{'questions':[q]},mode='map_context',context=context,fill_missing=False)
   self.assertEqual(result['rejectedCount'],1);self.assertEqual(result['questions'],[])
 
  def test_supplementary_frame_is_included_even_when_not_representative(self):

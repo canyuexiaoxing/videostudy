@@ -21,7 +21,7 @@ class PracticeReplyTests(unittest.TestCase):
    return io.BytesIO(json.dumps({'choices':[{'finish_reason':'stop','message':{'content':item}}]}).encode())
   return patch('practice.urlopen',side_effect=transport)
  def run_question(self,replies,q=None):
-  with self.wire(replies):return generate_practice(fixtures.PracticeTests.nodes,[],3,'basic')
+  with self.wire(replies):return generate_practice(fixtures.PracticeTests.nodes,[],3,'basic',fill_missing=False)
  def test_illegal_latex_escapes_are_repaired_without_another_call(self):
   raw=json.dumps({'questions':[self.question()]},ensure_ascii=False).replace('\\\\','\\')
   result=self.run_question([raw]);self.assertEqual(len(result['questions']),1);self.assertEqual(result['questions'][0]['prompt'],self.question()['prompt']);self.assertEqual(len(self.calls),1)
@@ -38,8 +38,8 @@ class PracticeReplyTests(unittest.TestCase):
   with self.wire([bad,raw]):value=ask({'_messages':initial,'_diagnosticTaskId':'course-test'})
   self.assertEqual(value['questions'][0]['prompt'],q['prompt']);self.assertEqual(len(self.calls),2);repair=self.calls[1]['messages'];self.assertEqual(repair[:len(initial)],initial);self.assertEqual(repair[-2],{'role':'assistant','content':bad});self.assertIn('JSON',repair[-1]['content']);self.assertEqual(initial[-1]['content'],'current request')
  def test_missing_fields_repaired_together_without_changing_existing_values(self):
-  q=self.question();bad=copy.deepcopy(q);del bad['takeaway'];del bad['distractorReasons']
-  result=self.run_question([json.dumps({'questions':[bad]}),json.dumps({'questions':[q]})]);self.assertEqual(len(result['questions']),1);self.assertEqual(len(self.calls),2);instruction=self.calls[1]['messages'][-1]['content'];self.assertIn('takeaway',instruction);self.assertIn('distractorReasons',instruction)
+  q=self.question();bad=copy.deepcopy(q);del bad['explanation'];del bad['prompt']
+  result=self.run_question([json.dumps({'questions':[bad]}),json.dumps({'questions':[q]})]);self.assertEqual(len(result['questions']),1);self.assertEqual(len(self.calls),2);instruction=self.calls[1]['messages'][-1]['content'];self.assertIn('explanation',instruction);self.assertIn('prompt',instruction)
  def test_repair_does_not_accept_changed_answers(self):
   q=self.question();bad=json.dumps({'questions':[q]}).replace('"questions":','"questions"',1);changed=copy.deepcopy(q);changed['answerIndex']=0
   with self.assertRaises(ValueError):self.run_question([bad,json.dumps({'questions':[changed]})])
@@ -105,7 +105,7 @@ class PracticeReplyTests(unittest.TestCase):
     self.calls=[];q=self.question();q.update(options=[str(v) for v in [value-1,value,value+1,value+2]],calculation={'expression':expression,'value':value,'optionValues':[value-1,value,value+1,value+2]},diagram=diagram)
     result=self.run_question([json.dumps({'questions':[q]}).replace('\\\\','\\')]);self.assertEqual(len(result['questions']),1);self.assertTrue(result['questions'][0]['validation']['calculationChecked']);self.assertTrue(result['questions'][0]['validation']['diagramChecked']);self.assertEqual(len(self.calls),1)
  def test_failed_correction_keeps_other_original_valid_questions(self):
-  bad=self.question();del bad['takeaway'];good=self.question();good['prompt']='另一道完整题目'
+  bad=self.question();del bad['explanation'];good=self.question();good['prompt']='另一道完整题目'
   result=self.run_question([json.dumps({'questions':[bad,good]}),'{"questions": ['])
   self.assertEqual(len(result['questions']),1);self.assertEqual(result['questions'][0]['prompt'],good['prompt']);self.assertEqual(result['rejectedCount'],1);self.assertEqual(len(self.calls),2)
  def test_endpoint_returns_specific_error_without_raw_reply(self):

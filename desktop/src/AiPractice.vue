@@ -10,10 +10,10 @@ import PracticeFigure, { type Diagram } from './PracticeFigure.vue'
 import { reviewTargets } from './practiceReview'
 import type { ReviewCitation } from './practiceReview'
 type Node={id:string;title:string;children?:Node[];details?:Node[]}
-type Question={id:string;nodeTitle:string;kind:string;title:string;prompt:string;options:string[];diagram?:Diagram|null;scenario?:string}
+type Question={id:string;nodeTitle:string;kind:string;title:string;prompt:string;options:string[];diagram?:Diagram|null;scenario?:string;validation?:{calculationMissing?:boolean;calculationChecked?:boolean}}
 type Citation=ReviewCitation
 type Feedback={questionId:string;selectedIndex:number;answerIndex:number;correct:boolean;explanation:string;takeaway:string;selectedReason:string;citations:Citation[]}
-type SetData={id:string;title:string;status:string;error?:string;questions?:Question[];rejectedCount?:number;practiceMode?:string;historyRounds?:number;historyQuestions?:number}
+type SetData={id:string;title:string;status:string;error?:string;questions?:Question[];rejectedCount?:number;requestedCount?:number;generatedCount?:number;shortfallCount?:number;fillAttempts?:number;fillStatus?:string;practiceMode?:string;historyRounds?:number;historyQuestions?:number}
 const props=defineProps<{courseId?:string;hasMedia?:boolean;playbackReady?:boolean;mindMap?:{root:Node}|null;selectedNodeId?:string;ready?:boolean}>()
 const emit=defineEmits<{seek:[timeMs:number,sourceId:string]}>()
 const base=API_ORIGIN + '/api/transcriptions'
@@ -135,14 +135,17 @@ const time=(ms:number)=>`${Math.floor(ms/60000).toString().padStart(2,'0')}:${Ma
 
   <label v-if="sets.length" class="saved-set">已保存的练习<select :value="active?.id" :disabled="busy||pending" @change="switchSet(($event.target as HTMLSelectElement).value)"><option v-for="set in sets" :key="set.id" :value="set.id">{{ set.title }} · {{ set.status==='completed'?'已生成':set.status==='failed'?'失败':'生成中' }} · {{ set.id.slice(0,6) }}</option></select></label>
   <p v-if="error" class="practice-error" role="alert">{{ error }}</p>
+   <p v-if="typeof active?.generatedCount === 'number'" class="practice-intro" role="status">要求 {{ active.requestedCount }} 题 · 模型共返回 {{ active.generatedCount }} 题 · 保留 {{ questions.length }} 题 · 剔除 {{ active.rejectedCount ?? 0 }} 题<span v-if="active.fillAttempts">（已补题一次）</span>。<span v-if="active.shortfallCount">仍缺 {{ active.shortfallCount }} 题，可重新生成；已有题目已保留。</span></p>
+   <p v-else-if="active?.rejectedCount" class="practice-intro">{{ active.rejectedCount }} 道题未通过检查，已剔除。</p>
   <p v-if="busy" class="practice-intro" role="status">正在根据知识点出题并检查答案，完成后自动显示。</p>
   <div v-else-if="!questions.length" class="practice-empty">{{ !courseId&&!hasMedia?'请先选择并分析视频，或从历史记录打开课程，随后显示对应练习。':active?.status==='failed'?'本次出题失败，可点击重新生成重试。':active?.status==='completed'?'本次没有通过检查的题目，可点击重新生成，或调整范围和难度后再试。':!mindMap?'分析完成并生成思维导图后，就可以练习。':'选择范围、题量和难度，生成本课练习。' }}</div>
   <template v-if="questions.length&&question&&!busy">
    <div class="practice-course"><span class="practice-course-icon"><StudyIcon name="practice"/></span><div><strong>{{ demo?'增长量与增长率':active?.title }}</strong><span>{{ questions.length }} 道题 · 按知识点生成 · 选择后自动判分</span></div></div>
-   <p v-if="active?.rejectedCount" class="practice-intro">{{ active.rejectedCount }} 道题未通过检查，已剔除。</p>
+
    <div class="practice-progress"><span>已完成 {{ answered }} / {{ questions.length }} 题</span><span>答对 {{ correct }} 题</span></div>
    <div class="practice-track" role="progressbar" aria-label="练习完成进度" :aria-valuenow="answered" :aria-valuemin="0" :aria-valuemax="questions.length"><span :style="{width:`${answered/questions.length*100}%`}"/></div>
    <nav class="practice-steps" aria-label="选择题目"><button v-for="(q,i) in questions" :key="q.id" type="button" :disabled="pending" :class="{current:index===i,done:!!feedback[q.id]}" :aria-current="index===i?'step':undefined" @click="index=i">{{ String(i+1).padStart(2,'0') }}<span>{{ feedback[q.id]?'已答':'待答' }}</span></button></nav>
+   <p v-if="question?.validation?.calculationMissing" class="practice-intro" role="note">本题未提供可自动核算的算式，请结合解析核对答案。</p>
    <article :key="question.id" class="practice-question">
     <div class="practice-question-meta"><span>第 {{ index+1 }} 题 · {{ question.kind==='true_false'?'判断':'单选' }}</span><span>{{ question.nodeTitle }}</span><span>{{ question.scenario==='adapted'?'应用题 · 设定数据':'课程知识题' }}</span></div>
     <fieldset><legend><MathText :text="question.prompt" /></legend>

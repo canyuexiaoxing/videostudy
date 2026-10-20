@@ -20,7 +20,7 @@ class PracticeHistoryTests(unittest.TestCase):
   old=fixtures.PracticeTests().question();new=copy.deepcopy(old);new['prompt']='另一种情景：从150增加到180，增长率是多少？'
   seen=[]
   def ask(payload):seen.append(payload);return {'questions':[old,new]}
-  result=generate_practice(fixtures.PracticeTests.nodes,[],3,'basic',ask,history=self.history())
+  result=generate_practice(fixtures.PracticeTests.nodes,[],3,'basic',ask,history=self.history(),fill_missing=False)
   self.assertEqual(len(result['questions']),1);self.assertEqual(result['rejectedCount'],1)
   self.assertIn('continuationInstruction',seen[0]);self.assertEqual(result['historyQuestions'],1)
  def test_long_history_is_bounded_and_old_rounds_are_summarized(self):
@@ -51,7 +51,7 @@ class PracticeHistoryTests(unittest.TestCase):
   from unittest.mock import patch
   seen=[]
   with patch('practice.record_event',side_effect=lambda *a,**kw:seen.append((a,kw))):
-   generate_practice(fixtures.PracticeTests.nodes,[],1,'basic',lambda _: {'questions':[]},history=self.history())
+   generate_practice(fixtures.PracticeTests.nodes,[],1,'basic',lambda _: {'questions':[]},history=self.history(),fill_missing=False)
   event=next(kwargs for args,kwargs in seen if kwargs.get('stage')=='history')
   self.assertEqual(event['history_questions'],1)
   self.assertNotIn(self.history()[0]['questions'][0]['prompt'],json.dumps(seen,ensure_ascii=False))

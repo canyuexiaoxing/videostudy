@@ -97,7 +97,7 @@ public class PracticeStore {
         result.put("status",set.status());result.put("error",set.error());
         result.put("count",set.source().get("count"));result.put("difficulty",set.source().get("difficulty"));
         result.put("practiceMode",set.source().getOrDefault("mode","legacy"));
-        if(set.result()!=null)for(String key:List.of("rejectedCount","requestedCount","modelId","promptVersion","historyRounds","historyQuestions","historySummarized"))result.put(key,set.result().get(key));
+        if(set.result()!=null)for(String key:List.of("rejectedCount","requestedCount","generatedCount","shortfallCount","fillAttempts","fillStatus","modelId","promptVersion","historyRounds","historyQuestions","historySummarized"))result.put(key,set.result().get(key));
         result.put("questions",questions(set).stream().map(q->{
             var publicQuestion=new LinkedHashMap<String,Object>();
             for(String key:List.of("id","nodeId","nodeTitle","kind","title","prompt","options","diagram","scenario","validation"))

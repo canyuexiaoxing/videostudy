@@ -35,6 +35,17 @@ class PracticeStoreTest {
         assertFalse(payload.contains("answerIndex")); assertFalse(payload.contains("explanation"));
         assertFalse(payload.contains("distractorReasons"));
     }
+    @Test void deliveryCountsAndUnverifiedCalculationArePublicWithoutAnswerLeak() throws Exception {
+        var set=store.request(course,"hash","counts","知识点",Map.of(),false);
+        var q=new LinkedHashMap<String,Object>();
+        q.put("id",questionId);q.put("title","计算题");q.put("prompt","请选择");q.put("options",List.of("错","对"));
+        q.put("answerIndex",1);q.put("explanation","解析");q.put("validation",Map.of("calculationMissing",true,"calculationChecked",false));
+        store.complete(store.claim(set.id()).orElseThrow(),Map.of("questions",List.of(q),"requestedCount",10,"generatedCount",6,"rejectedCount",1,"shortfallCount",5,"fillAttempts",1,"fillStatus","failed"));
+        var exposed=store.publicSet(course,set.id());
+        assertEquals(10,exposed.get("requestedCount"));assertEquals(6,exposed.get("generatedCount"));assertEquals(5,exposed.get("shortfallCount"));assertEquals(1,exposed.get("fillAttempts"));
+        var payload=new ObjectMapper().writeValueAsString(exposed);
+        assertTrue(payload.contains("calculationMissing"));assertFalse(payload.contains("answerIndex"));assertFalse(payload.contains("explanation"));
+    }
     @Test void clickGradesOnceAndSurvivesReload() {
         String set = completed(), session = store.createSession(course,set,client);
         var first = store.answer(course,set,session,client,questionId,0);

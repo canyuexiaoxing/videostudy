@@ -39,7 +39,7 @@ class PracticeTests(unittest.TestCase):
         bad = self.question(); bad['answerIndex'] = 3
         calls = []
         def ask(payload): calls.append(payload); return {'questions': [bad, self.question()]}
-        result = generate_practice(self.nodes, [], 3, 'basic', ask_json=ask)
+        result = generate_practice(self.nodes, [], 3, 'basic', ask_json=ask, fill_missing=False)
         self.assertEqual(len(result['questions']), 1)
         self.assertEqual(result['rejectedCount'], 1)
         self.assertEqual(len(calls), 1)
