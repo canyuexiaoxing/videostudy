@@ -361,10 +361,9 @@ const generatingMindMap = ref(false)
 const isAnalysisPending = ref(false)
 const analysisReadOnly = ref(false)
 let loadedAnalysisId = ''
-const mindMapMode = ref<'grouped' | 'direct'>('direct')
-const groupedAnalysis = computed(() => mindMapMode.value === 'grouped')
-const mapModes = [{ value: 'direct', label: '整课图文直生成（默认）' }, { value: 'grouped', label: '分组后汇总' }] as const
-watch(mindMapMode, () => { visualAnalysisMode.value = 'both' })
+// Only whole-course image/text synthesis is exposed for new/manual generation.
+const mindMapMode = 'direct' as const
+const groupedAnalysis = false
 const visualAnalysisMode = ref<'ocr_only' | 'both'>('both')
 const coarseChangePercent = ref('3')
 const coarseSampleSeconds = ref(2)
@@ -826,8 +825,8 @@ async function runTranscription() {
     form.append('coarseChangePercent', coarseChangePercent.value)
     form.append('coarseSampleSeconds', String(coarseSampleSeconds.value))
     form.append('personSelectionMode',personSelectionMode.value)
-    form.append('groupedAnalysis', String(groupedAnalysis.value))
-    form.append('mindMapMode', mindMapMode.value)
+    form.append('groupedAnalysis', String(groupedAnalysis))
+    form.append('mindMapMode', mindMapMode)
     if (analysisRegion.value||ignoredRegion.value) form.append('ignoredRegion',JSON.stringify(analysisRegion.value?{analysisRegion:analysisRegion.value,ignoredRegion:ignoredRegion.value}:ignoredRegion.value))
     form.append('aiSubtitles', 'false')
     form.append('subtitleTargetLanguage', subtitleTargetLanguage.value)
@@ -1002,9 +1001,9 @@ async function generateExistingMindMap(refresh = false) {
   const request = mindMapRequests.begin()
   generatingMindMap.value = true
   error.value = ''
-  status.value = mindMapMode.value === 'direct' ? '正在将全部代表图和有效转写一起生成整课导图…' : '正在从已保存的课程资料生成可回溯导图…'
+  status.value = '正在将全部代表图和有效转写一起生成整课导图…'
   try {
-    const response = await fetch(`${apiBase}/transcriptions/${id}/mind-map?refresh=${refresh}&mindMapMode=${mindMapMode.value}&groupedAnalysis=${groupedAnalysis.value}`, { method: 'POST', signal: request.signal })
+    const response = await fetch(`${apiBase}/transcriptions/${id}/mind-map?refresh=${refresh}&mindMapMode=${mindMapMode}&groupedAnalysis=${groupedAnalysis}`, { method: 'POST', signal: request.signal })
     if (!response.ok) throw new Error(`导图生成失败：HTTP ${response.status}`)
     const result = await response.json() as MindMapResult
     if (!request.current() || existingJobId.value !== id) return
@@ -1301,13 +1300,10 @@ onUnmounted(() => {
           <div v-if="advancedOpen" id="advanced-settings" class="advanced-fields">
           <div class="advanced-row map-mode-row">
             <span id="mind-map-mode-label">导图生成方式</span>
-            <div class="sampling-options" role="group" aria-labelledby="mind-map-mode-label">
-              <button v-for="mode in mapModes" :key="mode.value" type="button" :aria-pressed="mindMapMode === mode.value" :disabled="isAnalysisPending || generatingMindMap" @click="mindMapMode = mode.value">{{ mode.label }}</button>
-            </div>
+            <span class="map-mode-value" aria-labelledby="mind-map-mode-label">整课图文直生成</span>
           </div>
-          <p class="advanced-help" v-if="mindMapMode === 'direct'">保留覆盖检查与缺失截图补采，等全部代表图和语音转写就绪后，将代表图与有效转写一起交给思维导图模型，跳过逐组内容解读。图片较多时，请求可能达到模型上限；不会自动删图或改成分批。</p>
-          <p class="advanced-help" v-else-if="mindMapMode === 'grouped'">先按组并行解读图文，再统一汇总整课导图；增加模型请求。</p>
-          <p class="advanced-help">选择用于新分析和手动生成导图；重试整次分析沿用原任务设置。图文模式会将课件图片发送到已配置的模型服务。</p>
+          <p class="advanced-help">保留覆盖检查与缺失截图补采，等全部代表图和语音转写就绪后，将代表图与有效转写一起交给思维导图模型，跳过逐组内容解读。图片较多时，请求可能达到模型上限；不会自动删图或改成分批。</p>
+          <p class="advanced-help">新分析和手动生成导图均使用整课图文直生成；重试整次分析沿用原任务设置。课件图片会发送到已配置的模型服务。</p>
           <div class="advanced-row">
             <span id="coarse-sample-label">粗选采样间隔</span>
             <div class="sampling-options" role="group" aria-labelledby="coarse-sample-label">

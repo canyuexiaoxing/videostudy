@@ -26,6 +26,10 @@ _OPERATIONS.update({'question_chat','overview_chat','compatibility'})
 _STAGES.update({'diagram_validation','reply_validation','course_materials'})
 _NUMBERS.update({'question_index','returned_count','missing_count'})
 _STAGES.add('quantity_fill')
+_STAGES.add('outline_validation')
+_STAGES.add('failure_capture')
+_SAFE_REASONS.update({'failure_capture_saved','failure_capture_unavailable','failure_capture_too_large','json_repair_unchanged'})
+_NUMBERS.update({'outline_missing_count','outline_review_count','outline_ignored_count'})
 _SAFE_REASONS.update({'practice_fill_failed','practice_calculation_unchecked'})
 
 def close_logs():
@@ -75,7 +79,7 @@ def record_event(event,task='unbound',**fields):
     log.info(text)
 
 def request_model_json(request,timeout,task,operation,*,transport=urlopen,image_count=0,input_characters=0,model=None,output_limit=None,error_prefix='Incomplete model response',content_parser=None):
-    started=time.monotonic();request_id=str(uuid.uuid4());stage='request'
+    started=time.monotonic();request_id=str(uuid.uuid4());stage='request';content=None;reason='missing'
     common={'request_id':request_id,'operation':operation,'model':model}
     record_event('request_started',task,**common,image_count=image_count,input_characters=input_characters,request_bytes=len(request.data or b''),max_output_tokens=output_limit,timeout_seconds=timeout)
     try:
@@ -102,6 +106,12 @@ def request_model_json(request,timeout,task,operation,*,transport=urlopen,image_
     except Exception as error:
         extra={'http_status':error.code} if isinstance(error,HTTPError) else {}
         if isinstance(error,json.JSONDecodeError):extra.update(reason='invalid_json',json_line=error.lineno,json_column=error.colno,json_position=error.pos)
+        if operation=='course_map' and isinstance(content,str) and (isinstance(error,json.JSONDecodeError) and stage=='model_json' or stage=='finish_check'):
+            from course_failure_capture import save_failure
+            authorization=request.get_header('Authorization','')
+            secret=authorization[7:] if authorization.lower().startswith('bearer ') else ''
+            failure=error if isinstance(error,json.JSONDecodeError) else json.JSONDecodeError('incomplete_response',content,len(content))
+            save_failure(failure,task=task,request_id=request_id,stage=stage,finish_reason=reason,secrets=(secret,))
         record_event('request_failed',task,**common,stage=stage,error_type=type(error).__name__,elapsed_ms=int((time.monotonic()-started)*1000),**extra)
         raise
 

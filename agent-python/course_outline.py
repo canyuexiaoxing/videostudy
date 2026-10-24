@@ -73,37 +73,88 @@ def outline_hints(visuals,root,regions):
         if len(headings)>=2 and parents:hints.append(dict(imageId=f'frame_{ms}',parentLabels=parents,headings=headings))
     return hints
 
-def audit_outline(raw,hints):
-    """Audit classification coverage, without inventing edges from co-occurrence.
+# Audit rules only: OCR hints sent to the model and node normalization above are
+# deliberately unchanged. A slide-level OCR co-occurrence is not a proven edge.
+_AUDIT_NUMBER = re.compile(r'^\s*(?:(\d{1,2})[.．、](?!\d)|(\d{1,2})[)）]|[（(](\d{1,2})[)）])\s*')
+_AUDIT_CHINESE = re.compile(r'^\s*([一二三四五六七八九十]+)[、.．]\s*')
+_CHINESE_ORDINALS = {word:index for index,word in enumerate(('一','二','三','四','五','六','七','八','九','十'),1)}
+_CALCULATION = re.compile(r'[=＝→⇒×÷^{}]|\\(?:frac|times|begin)|\d+\.\d+')
+_UNCLEAR = re.compile(r'[?？�□]|\.{3,}|…')
+_EXPLICIT_CLASSIFICATION = re.compile(r'分类|类型|种类|类别|分为|classification|types|kinds',re.I)
 
-    OCR hints list labels on a whole slide; parentLabels does not establish
-    which label owns each heading. Check the containing course branch once,
-    rather than requiring every matching submethod to own all slide headings.
+def _audit_label(text):
+    if not isinstance(text,str):return None
+    match=_AUDIT_NUMBER.match(text)
+    number=next((int(v) for v in match.groups() if v),None) if match else None
+    if match:body=text[match.end():].strip()
+    else:
+        chinese=_AUDIT_CHINESE.match(text)
+        number=_CHINESE_ORDINALS.get(chinese.group(1)) if chinese else None
+        body=text[chinese.end():].strip() if chinese else text.strip()
+    if (not body or _EXAMPLE.search(body) or _CALCULATION.search(body)
+        or re.search(r'步骤|第.+步|答案|^解[：:]',body)
+        or not re.search(r'[\u4e00-\u9fff]{2}|[A-Za-z]{2}',body)):
+        return None
+    return number,body
+
+def audit_outline_report(raw,hints):
+    """Return clear omissions separately from uncertain OCR review notes.
+
+    Only a clean consecutive numbered list under an explicit classification
+    label is strong enough to fail validation. Missing/OCR-corrupt numbering or
+    a generic method/calculation heading remains a visible review note. This is
+    a conservative textual audit, never a claim of visual relationship proof.
     """
-    errors=[]
-    def titles(node,depth=0):
-        if not isinstance(node,dict) or depth>12:return []
-        result=[]
-        for child in node.get('children',[]):
-            if isinstance(child,dict):
-                result.append(_key(child.get('title','')))
-                result.extend(titles(child,depth+1))
-        return result
-    def bound_to_branch(node,hint,depth=0):
-        if not isinstance(node,dict) or depth>12:return False
-        if (hint['imageId'] in node.get('imageIds',[]) and
-            any(_key(label)==_key(node.get('title','')) for label in hint['parentLabels'])):
-            return True
-        return any(bound_to_branch(child,hint,depth+1) for child in node.get('children',[]))
-    for branch in raw.get('children',[]):
+    errors=[];warnings=[];ignored=0
+    def nodes(node,depth=0):
+        if not isinstance(node,dict) or depth>12:return
+        yield node
+        children=node.get('children',[])
+        if isinstance(children,list):
+            for child in children:yield from nodes(child,depth+1)
+    def bound_to_branch(branch,hint):
+        return any(hint.get('imageId') in node.get('imageIds',[]) and
+                   any(_key(label)==_key(node.get('title','')) for label in hint.get('parentLabels',[]))
+                   for node in nodes(branch))
+    def covered(label,visible):
+        # Descriptive labels such as category: member A, member B may already
+        # appear as the category heading or the enumerated members in this same
+        # knowledge branch. Details/examples/other branches are not substitutes.
+        head,*tail=re.split(r'[：:]',label,maxsplit=1)
+        key=_key(head).lower()
+        def matches(value):
+            candidate=_key(value).lower()
+            return bool(key) and (candidate==key or (key in candidate and not re.search(r'非|不是|不属于',value)))
+        if any(matches(value) for value in visible):return True
+        if not tail:return False
+        members=[p.strip() for p in re.split(r'[、，,；;]|以及|和|与|及',tail[0]) if p.strip()]
+        if len(members)<2:return False
+        return all(any(_key(member).lower()==_key(value).lower() for value in visible) for member in members)
+    branches=raw.get('children',[]) if isinstance(raw,dict) else []
+    for branch in branches:
         if not isinstance(branch,dict):continue
-        visible=titles(branch)
+        visible=[str(node.get('title','')) for node in nodes(branch) if node is not branch]
         for hint in hints:
-            if not bound_to_branch(branch,hint):continue
-            missing=[heading for heading in hint['headings']
-                     if not any(_key(heading)==title or (_key(heading) and _key(heading) in title)
-                                for title in visible)]
-            if missing:
-                errors.append('课件分类待核对：'+str(branch.get('title'))+' 缺少子节点 '+
-                              '、'.join(missing)+'；依据 '+hint['imageId'])
-    return list(dict.fromkeys(errors))
+            if not isinstance(hint,dict) or not bound_to_branch(branch,hint):continue
+            headings=hint.get('headings',[])
+            if not isinstance(headings,list):continue
+            labels=[]
+            for heading in headings:
+                label=_audit_label(heading)
+                if label is None:ignored+=1
+                else:labels.append((heading,*label))
+            if not labels:continue
+            missing=[original for original,_,label in labels if not covered(label,visible)]
+            if not missing:continue
+            numbering=[number for _,number,_ in labels]
+            clean_sequence=(len(labels)>=2 and len(labels)==len(headings) and numbering==list(range(1,len(labels)+1)))
+            explicit=any(_EXPLICIT_CLASSIFICATION.search(str(label)) for label in hint.get('parentLabels',[]))
+            clear=clean_sequence and explicit and not any(_UNCLEAR.search(label) for _,_,label in labels)
+            message='课件分类待核对：'+str(branch.get('title'))+' 缺少子节点 '+'、'.join(missing)+'；依据 '+str(hint.get('imageId',''))
+            (errors if clear else warnings).append(message if clear else message+'（OCR分类关系不确定，仅供核对）')
+    return {'errors':list(dict.fromkeys(errors)),'warnings':list(dict.fromkeys(warnings)),'ignored':ignored}
+
+def audit_outline(raw,hints):
+    """Compatibility view for callers displaying all classification findings."""
+    report=audit_outline_report(raw,hints)
+    return report['errors']+report['warnings']

@@ -14,7 +14,7 @@ class MapFormatTests(unittest.TestCase):
   self.assertIn('Organize the whole course once',course.INSTRUCTIONS)
   self.assertIn('One complete concept or',course.INSTRUCTIONS)
   self.assertIn('12 levels',course.INSTRUCTIONS)
-  self.assertIn('JSON_OUTPUT_FORMAT_V1',course.INSTRUCTIONS)
+  self.assertIn('JSON_OUTPUT_FORMAT_V2',course.INSTRUCTIONS)
   self.assertNotIn('Return JSON {topic, children:',course.INSTRUCTIONS)
   self.assertNotIn('children:[{title:模块',course.INSTRUCTIONS)
   semantic=STRUCTURE_INSTRUCTIONS.split('递归结构示意')[0]
@@ -55,7 +55,9 @@ class ExistingHierarchyExampleTests(unittest.TestCase):
   self.assertEqual([module['title'],method['title'],formula['title']],['模块','分类方法','独立公式'])
   self.assertEqual([module['kind'],method['kind'],formula['kind']],['category','method','formula'])
   self.assertEqual(method['details'][0]['title'],'条件')
-  self.assertIn(json.dumps(HIERARCHY_EXAMPLE,ensure_ascii=False),course.INSTRUCTIONS)
+  from course_map_format import UNIFIED_EXAMPLE
+  self.assertEqual(UNIFIED_EXAMPLE['children'],HIERARCHY_EXAMPLE['children'])
+  self.assertIn(json.dumps(UNIFIED_EXAMPLE,ensure_ascii=False,indent=2),course.INSTRUCTIONS)
 
 
 class SyntaxClassificationTests(unittest.TestCase):
@@ -67,3 +69,41 @@ class SyntaxClassificationTests(unittest.TestCase):
     with self.assertRaises(ReplyStructureError) as failure:parse_map_reply(text)
     self.assertEqual(failure.exception.issues[0]['syntaxReason'],reason)
     self.assertNotIn('PRIVATE',json.dumps(failure.exception.issues))
+
+class CompletionBoundaryTests(unittest.TestCase):
+ def test_initial_prompt_checks_one_complete_root_without_changing_outline(self):
+  import course_mind_map as course
+  self.assertIn('JSON_COMPLETION_CHECK_V2',course.INSTRUCTIONS)
+  self.assertIn('Do not close the root object',course.INSTRUCTIONS)
+  self.assertIn('Do not truncate',course.INSTRUCTIONS)
+  self.assertIn('Do not omit, merge, shorten or reclassify',course.INSTRUCTIONS)
+
+class UnifiedFormatContractTests(unittest.TestCase):
+ def test_single_complete_example_and_recursive_schema(self):
+  import course_mind_map as course
+  from course_map_format import OUTPUT_SCHEMA,UNIFIED_EXAMPLE
+  self.assertEqual(course.INSTRUCTIONS.count('BEGIN_COMPLETE_JSON_EXAMPLE'),1)
+  example=json.loads(course.INSTRUCTIONS.split('BEGIN_COMPLETE_JSON_EXAMPLE\n')[1].split('\nEND_COMPLETE_JSON_EXAMPLE')[0])
+  self.assertEqual(example,UNIFIED_EXAMPLE)
+  self.assertEqual(set(example),{'topic','children','examples','uncertainties'})
+  self.assertEqual(OUTPUT_SCHEMA['$defs']['node']['properties']['children']['items'],{'$ref':'#/$defs/node'})
+  self.assertTrue(OUTPUT_SCHEMA['additionalProperties'])
+  self.assertNotIn('maxItems',json.dumps(OUTPUT_SCHEMA))
+  self.assertNotIn('maxLength',json.dumps(OUTPUT_SCHEMA))
+ def test_repair_context_is_bounded_and_untrusted(self):
+  from course_reply_repair import parse_map_reply,repair_instruction
+  text='{"topic":"PRIVATE","children":[],"examples":[]}'+' ,'+('PRIVATE_TAIL'*200)
+  try:parse_map_reply(text)
+  except ValueError as error:instruction=repair_instruction(error)
+  context=instruction['formatErrorContext']
+  self.assertTrue(context['untrustedData'])
+  self.assertLessEqual(len(context['before']),160);self.assertLessEqual(len(context['after']),160)
+  self.assertIn('Do not return the unchanged',instruction['task'])
+ def test_repair_reports_unclosed_required_root_fields_without_content(self):
+  from course_reply_repair import parse_map_reply,repair_instruction
+  text='{"topic":"PRIVATE","children":[]} , {"title":"PRIVATE_TAIL"}'
+  try:parse_map_reply(text)
+  except ValueError as error:info=repair_instruction(error)['trailingContentRepair']
+  self.assertEqual(info['completedRootFields'],['topic','children'])
+  self.assertIn('examples',info['missingRootFields'])
+  self.assertNotIn('PRIVATE',json.dumps(info))

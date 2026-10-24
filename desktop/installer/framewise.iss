@@ -1,4 +1,4 @@
-#ifndef AppSource
+﻿#ifndef AppSource
   #error AppSource is required
 #endif
 #ifndef OutputDirectory
@@ -34,7 +34,11 @@ AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 VersionInfoVersion={#NumericVersion}
 VersionInfoProductName={#AppName}
+#ifdef OnlineArchiveInclude
+VersionInfoDescription={#AppName} verified online installation core
+#else
 VersionInfoDescription={#AppName} per-user offline installer
+#endif
 AppComments=Uninstall preserves your Framewise courses, notes, settings and models stored outside this program folder.
 DefaultDirName={localappdata}\Programs\Framewise
 DefaultGroupName={#AppName}
@@ -56,9 +60,14 @@ OutputBaseFilename={#OutputName}
 Compression={#CompressionMethod}
 SolidCompression=no
 CompressionThreads=2
+#ifdef OnlineArchiveInclude
+DiskSpanning=no
+ArchiveExtraction=full
+#else
 DiskSpanning=yes
 DiskSliceSize=1000000000
 SlicesPerDisk=1
+#endif
 ExtraDiskSpaceRequired=536870912
 WizardStyle=modern
 CloseApplications=no
@@ -83,7 +92,11 @@ zh.ConfirmUninstall=确定卸载 %1？用户数据文件夹中的课程、笔记
 Name: "desktopicon"; Description: "Create a desktop shortcut"; Flags: unchecked
 
 [Files]
+#ifdef OnlineArchiveInclude
+#include OnlineArchiveInclude
+#else
 Source: "{#AppSource}\*"; DestDir: "{app}\versions\{#AppVersion}"; Flags: ignoreversion recursesubdirs createallsubdirs
+#endif
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\versions\{#AppVersion}\Framewise.exe"; WorkingDir: "{app}\versions\{#AppVersion}"
@@ -152,6 +165,15 @@ begin
     end;
   end;
 end;
+
+#ifdef OnlineArchiveInclude
+function OnlineCache(Param: String): String;
+begin
+  Result := ExpandConstant('{param:DOWNLOADCACHE|}');
+  if (Length(Result) < 4) or (ExtractFileDrive(Result) = '') or ReparseAncestor(Result) then
+    RaiseException('Invalid or linked download cache. Start the Framewise online installer.');
+end;
+#endif
 
 function PreviousExecutable(Param: String): String;
 begin

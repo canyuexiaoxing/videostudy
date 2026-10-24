@@ -183,4 +183,66 @@ class ReplyRepairTests(unittest.TestCase):
    self.assertNotIn('temperature',body)
   logs=(self.root/'logs/model-events.jsonl').read_text()
   self.assertIn('syntax_expected_comma',logs);self.assertNotIn('PRIVATE',logs)
+ def test_trailing_separator_repair_receives_explicit_boundary_and_is_lossless(self):
+  raw=self.good();prefix=json.dumps(raw,ensure_ascii=False);text=prefix+'  ,'
+  calls,mock=self.invoke([text,json.dumps(raw)])
+  with mock:self.assertEqual(course._deepseek_course_json(self.payload,[]),raw)
+  instruction=json.loads(calls[1]['messages'][-1]['content'])
+  self.assertIn('trailingContentRepair',instruction)
+  tail=instruction['trailingContentRepair']
+  self.assertEqual(tail['firstTrailingCharacter'],len(prefix)+3)
+  self.assertEqual(tail['completedRootEndCharacter'],len(prefix))
+  self.assertEqual(tail['trailingCharacters'],1)
+  self.assertIn('Do not truncate',tail['instruction'])
+  self.assertEqual(calls[1]['messages'][:2],calls[0]['messages'])
+  self.assertEqual(calls[1]['messages'][2]['content'],text)
+ def test_unreadable_tail_guidance_never_authorizes_prefix_only_acceptance(self):
+  raw=self.good();text=json.dumps(raw)+' PRIVATE_UNKNOWN_TAIL'
+  calls,mock=self.invoke([text,json.dumps(raw)])
+  with mock:
+   with self.assertRaises(CourseJsonFormatError):course._deepseek_course_json(self.payload,[])
+  self.assertEqual(len(calls),2)
+  instruction=json.loads(calls[1]['messages'][-1]['content'])
+  self.assertIn('trailingContentRepair',instruction)
+  self.assertIn('lossless',instruction['trailingContentRepair']['instruction'])
+  self.assertNotIn('PRIVATE',json.dumps(instruction['trailingContentRepair']))
+ def test_repaired_reply_diagnostic_records_its_own_bad_position_without_text(self):
+  prefix=json.dumps(self.good());first=prefix+' ,';second=prefix+'   ,'
+  calls,mock=self.invoke([first,second])
+  with mock:
+   with self.assertRaises(CourseJsonFormatError):course._deepseek_course_json(self.payload,[])
+  events=[json.loads(line) for line in (self.root/'logs/model-events.jsonl').read_text().splitlines()]
+  failures=[e for e in events if e.get('event')=='diagnostic_check' and e.get('stage')=='reply_repair' and e.get('status')=='failed']
+  self.assertTrue(any(e.get('json_position')==len(prefix)+3 and e.get('reason')=='syntax_trailing_content' for e in failures))
+  self.assertNotIn('PRIVATE',json.dumps(events))
+
+ def test_extra_closer_repair_is_accepted_without_any_node_or_formula_change(self):
+  raw=self.good();raw['children'][0]['title']=r'x=\frac{1}{2}'
+  text=json.dumps(raw)+' } ] ,';calls,mock=self.invoke([text,json.dumps(raw)])
+  with mock:self.assertEqual(course._deepseek_course_json(self.payload,[]),raw)
+  self.assertEqual(len(calls),2);self.assertEqual(calls[1]['messages'][:2],calls[0]['messages'])
+  self.assertEqual(json.loads(calls[1]['messages'][-1]['content'])['trailingContentRepair']['trailingKind'],'extra_closing_delimiters')
+ def test_rejected_repair_body_is_captured_with_its_own_request_id(self):
+  raw=self.good();del raw['examples'];changed=self.good();changed['children'][0]['title']='WRONG_CHANGED_FORMULA'
+  calls,mock=self.invoke([json.dumps(raw),json.dumps(changed)])
+  with mock:
+   with self.assertRaises(CourseJsonFormatError):course._deepseek_course_json(self.payload,[])
+  captures=[json.loads(p.read_text()) for p in (self.root/'logs/private-model-failures').glob('*.json')]
+  self.assertEqual(len(captures),2)
+  rejected=next(c for c in captures if c['errorCode']=='json_content_changed')
+  self.assertIn('WRONG_CHANGED_FORMULA',rejected['response'])
+  events=[json.loads(l) for l in (self.root/'logs/model-events.jsonl').read_text().splitlines()]
+  self.assertIn(rejected['requestId'],[e['request_id'] for e in events if e['event']=='request_failed'])
+  self.assertNotIn('WRONG_CHANGED_FORMULA',json.dumps(events))
+
+ def test_identical_repair_has_explicit_failure_and_no_additional_call(self):
+  text=json.dumps(self.good())+' ,';calls,mock=self.invoke([text,text])
+  with mock:
+   with self.assertRaises(CourseJsonFormatError) as failure:course._deepseek_course_json(self.payload,[])
+  self.assertEqual(len(calls),2)
+  self.assertEqual(failure.exception.repair_outcome,'unchanged')
+  self.assertIn('原样返回',str(failure.exception))
+  logs=(self.root/'logs/model-events.jsonl').read_text()
+  self.assertIn('json_repair_unchanged',logs);self.assertNotIn('PRIVATE',logs)
+
 if __name__=='__main__':unittest.main()

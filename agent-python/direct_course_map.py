@@ -10,7 +10,7 @@ import re
 import course_mind_map as course
 from ignored_region import normalize_setting, filter_frame
 
-PROMPT_VERSION = 'whole-course-group-evidence-direct-v12'
+PROMPT_VERSION = 'whole-course-group-evidence-direct-v14-unified-json-contract'
 INSTRUCTIONS = course.INSTRUCTIONS + '''
 DIRECT MODE: There are no prior candidates or group analyses. Read ALL attached
 final representative original images, page context/OCR and the full effective

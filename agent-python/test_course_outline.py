@@ -49,7 +49,7 @@ class OutlineTests(unittest.TestCase):
    self.assertEqual(len(direct['root']['children'][0]['children']),3);self.assertEqual(len(direct['examples']),1)
    incomplete=copy.deepcopy(raw);incomplete['children'][0]['children']=[]
    result=build_direct_course_map(segments,pages,visuals,root,ask_json=lambda *_:incomplete)
-   self.assertEqual(result['status'],'failed');self.assertTrue(any('缺少子节点' in x for x in result['uncertainties']))
+   self.assertEqual(result['status'],'completed');self.assertTrue(any('缺少子节点' in x and '仅供核对' in x for x in result['uncertainties']))
 
  def test_formula_parentheses_are_preserved(self):
   raw={'children':[{'title':'公式','children':[],'details':[{'title':'公式三：增长量=现期/(1+r)×r（已知现期、增长率）','sourceIds':['s']}]}]}

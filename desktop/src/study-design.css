@@ -549,3 +549,5 @@ body { background:#f3f6ff; }
 .media-association.mismatch { border-color:#ebc7bc; background:#fff5f0; color:#8d483a; }
 .media-association.unverified { border-color:#e5d7ac; background:#fffbee; color:#756036; }
 .study-app .playback-notice { padding:9px 12px; border-radius:8px; color:#855038; background:#fff5e9; }
+
+.map-mode-value { display:inline-block; padding:7px 12px; border:1px solid #9eb6ff; border-radius:7px; color:#244fe0; background:#edf2ff; }
