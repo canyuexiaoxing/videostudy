@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parents[3];q=ROOT/'.local/qa/aic-report-2026-10-25
 r=PdfReader(p);d=pdfium.PdfDocument(str(p));text='\n'.join(x.extract_text() or '' for x in r.pages)
 assert len(r.pages)==31
 assert p.stat().st_size<10_000_000
-for value in ['AIC-2026-60885194','40173c8','697','696','163','207','150.044','163.452','25.485','37.676','21,429','37.891','463','101','79','45','队长','队员（2名）','① 转写与选图','④ 页面／组图文理解','当前跳过独立调用','AST最多70节点','repair_used','AGPL-3.0-only','附录E 实际界面与操作核验','SOURCE_MANIFEST.json','已可匿名访问']:
+for value in ['AIC-2026-60885194','40173c8','697','696','163','207','150.044','163.452','25.485','37.676','140.527','264.228','21,429','37.891','463','101','79','45','队长','队员（2名）','① 转写与选图','④ 页面／组图文理解','当前跳过独立调用','AST最多70节点','repair_used','AGPL-3.0-only','附录E 实际界面与操作核验','SOURCE_MANIFEST.json','已可匿名访问']:
  assert ''.join(value.split()) in ''.join(text.split()),value
 private_policy=q/'restricted-identifiers.json'
 private_identifiers=json.loads(private_policy.read_text(encoding='utf8')) if private_policy.exists() else []
@@ -36,7 +36,8 @@ for spec in body:
   cells=str(spec['blocks'])
   for stale in ['部分随包','分发待核验','分发核验待闭环','分发审查待闭环','全部传递组件许可待核','分发说明待核']:
    assert stale not in cells,stale
-assert 'aic-2026-review-20261025-r2' in text
+assert 'aic-2026-review-20261025-r3' in text
+assert 'aic-2026-review-20261025-r2' not in text
 thumbs=[]
 for i in range(len(d)):
  im=d[i].render(scale=1.35).to_pil().convert('RGB');im.save(q/f'page-{i+1:02}.png')
