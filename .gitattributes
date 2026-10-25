@@ -3,3 +3,5 @@
 *.png binary
 *.ico binary
 *.mp4 binary
+# Preserve upstream license notice bytes and line endings.
+docs/aic-review-2026-10-25/licenses/* binary

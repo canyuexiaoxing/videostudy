@@ -10,6 +10,19 @@ QA=ROOT/'.local/qa/aic-report-2026-10-25';OUT=ROOT/'cailiao';BODY=json.loads((QA
 ST['p'].fontSize=10.8;ST['p'].leading=18;ST['p'].spaceAfter=8;ST['p'].firstLineIndent=21.6
 # Use light gray visible borders for all tables.
 orig_tab=tab
+license_entries=json.loads((ROOT/'docs/aic-review-2026-10-25/license-links.json').read_text(encoding='utf8'))['entries']
+license_urls={item['id']:item['url'] for item in license_entries}
+def para(t,style='p'):
+ text=escape(str(t)).replace('\n','<br/>')
+ def direct(match):
+  ident=match.group(0)[1:-1]
+  if ident not in license_urls:raise ValueError('unknown_license_link:'+ident)
+  return ' <link href="'+escape(license_urls[ident],{'"':'&quot;'})+'" color="#2452a1"><u><nobr>'+match.group(0)+'</nobr></u></link> '
+ text=re.sub(r'\[L\d{2}\]',direct,text)
+ selected=ST[style]
+ if re.search(r'\[L\d{2}\]',str(t)):
+  selected=ParagraphStyle('license-'+style,parent=selected,wordWrap=None)
+ return Paragraph(text,selected)
 def tab(heads,rows,widths=None):
  t=orig_tab(heads,rows,widths);t.setStyle(TableStyle([('GRID',(0,0),(-1,-1),.45,colors.HexColor('#D9D9D9'))]));return t
 tree=ast.parse(old);resources=None;refs=None
@@ -29,7 +42,7 @@ _rev.revise_resources(resources)
 APP=[]
 for i in range(3):
  APP.append({'title':f'附录A 开源及第三方资源使用清单 {i+1}/3','sub':'资源声明、本次源码包范围与后续安装包事项分列','blocks':[
- ['small','版本取自实际环境、锁文件与模型声明。本次仅提交自主源码、配置、文档、测试及自制样例；不含第三方安装依赖、运行库和模型权重。当前状态与后续安装包事项逐项说明。'],
+ ['small','版本取自实际环境、锁文件与模型声明。本次仅提交自主源码、配置、文档、测试及自制样例；不含第三方安装依赖、运行库和模型权重。蓝色[Lxx]可点击直达许可原文／模型卡／条款；完整网址见源码包docs/aic-review-2026-10-25/LICENSE_LINKS.md。'],
  ['table',['名称与类型','版本与来源','许可与本次包含范围','自主内容、当前状态与后续事项'],resources[i*5:i*5+5],[82,126,137,136]]]})
 # Evidence is self-contained enough to explain the measurements; raw logs are not asserted public.
 APP.append({'title':'附录B 验证证据与复现说明','sub':'当前离线验证与历史模型样本分开归档','blocks':[
@@ -82,7 +95,7 @@ c.setFont('Song',10);c.drawString(57,H-108,'正文与附录分别编号：正文
 rows=[]
 for title,start in [('一、作品概述',1),('二、需求分析与总体方案',2),('三、AI技术与开源资源选择',3),('四、设计与实现过程',4),('五、成果展示与效果验证',10),('六、创新性与开放价值',13),('七、合规、安全与风险说明',14),('八、总结与展望',15)]:
  rows.append([title,str(start)])
-flow=[tab(['正文章节','正文页码'],rows,[399,82]),Spacer(1,20),para('附录A：第三方资源清单（附录第1～3页）；B：证据与运行说明（第4页）；C：参考资料（第5～6页）；D：关键实现细节（第7～10页）。E：四页真实界面截图（第11～14页）。正文第5页说明五阶段，第15页说明团队分工。'),para('自主代码采用AGPL-3.0-only；评审源码包包含声明、测试摘要与运行说明，不含第三方运行库、用户课程或密钥。截图使用自制课件与预置数据；真实课程与模型抽样分列。成果版本固定为aic-2026-review-20261025-r4标签，访问和下载入口见附录B。')]
+flow=[tab(['正文章节','正文页码'],rows,[399,82]),Spacer(1,20),para('附录A：第三方资源清单（附录第1～3页）；B：证据与运行说明（第4页）；C：参考资料（第5～6页）；D：关键实现细节（第7～10页）。E：四页真实界面截图（第11～14页）。正文第5页说明五阶段，第15页说明团队分工。'),para('自主代码采用AGPL-3.0-only；评审源码包包含声明、测试摘要与运行说明，不含第三方运行库、用户课程或密钥。截图使用自制课件与预置数据；真实课程与模型抽样分列。成果版本固定为aic-2026-review-20261025-r5标签，访问和下载入口见附录B。')]
 Frame(57,90,481,H-225,leftPadding=0,rightPadding=0,topPadding=0,bottomPadding=0).addFromList(flow,c)
 assert not flow
 c.showPage()

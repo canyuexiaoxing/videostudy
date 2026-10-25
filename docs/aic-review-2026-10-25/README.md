@@ -11,7 +11,7 @@
 调用第三方依赖时仍须遵守原许可证。旧OBS安装器另属二进制分发，本包不替它作完整许可认证。
 
 固定参赛版本：
-https://github.com/canyuexiaoxing/videostudy/tree/aic-2026-review-20261025-r4
+https://github.com/canyuexiaoxing/videostudy/tree/aic-2026-review-20261025-r5
 
 标签内cailiao目录提供最新版技术报告与源码核验ZIP；本目录提供运行说明、测试摘要和自制界面样例。
 把固定标签地址填入作品其他材料链接。评审期保持可访问；有条件时另备一份网盘或OBS镜像。
@@ -97,3 +97,7 @@ course-effective-timings.json按原始计时保存全流程有效耗时。两条
 ## 同类案例对照
 
 course-comparison-evidence.json记录用户留存的两组同课导图与一组百度网盘导图／出题截图，共8张的哈希和可见事实，并关联本项目历史指标、四次模拟出题记录与真实组件交互核验。报告6.2据此说明题型、解法组织与循证学习流程；第三方截图原图不随源码核验包分发。
+
+## 许可证直达链接
+
+LICENSE_LINKS.md与license-links.json逐项列出37个许可文件、模型声明及服务条款地址。报告附录A的蓝色[Lxx]可以直接点击。正文只概述用途；本清单区分开源许可证、公共领域声明、专有运行库EULA与在线服务条款，安装版本声明副本保存在licenses目录。

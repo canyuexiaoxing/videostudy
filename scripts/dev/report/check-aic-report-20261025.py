@@ -36,11 +36,22 @@ for spec in body:
   cells=str(spec['blocks'])
   for stale in ['部分随包','分发待核验','分发核验待闭环','分发审查待闭环','全部传递组件许可待核','分发说明待核']:
    assert stale not in cells,stale
-assert 'aic-2026-review-20261025-r4' in text
-assert 'aic-2026-review-20261025-r3' not in text
+assert 'aic-2026-review-20261025-r5' in text
+assert 'aic-2026-review-20261025-r4' not in text
 assert '6.2同类产品案例对照与本项目特色' in ''.join(text.split())
 assert '有限的同类产品对照' not in text
 assert 'course-comparison-evidence.json' in text
+# Check actual clickable PDF annotations, not just printed license names.
+license_data=json.loads((ROOT/'docs/aic-review-2026-10-25/license-links.json').read_text(encoding='utf8'))['entries']
+uris=[]
+for leaf in r.pages:
+ for ref in leaf.get('/Annots',[]):
+  action=ref.get_object().get('/A',{})
+  if action.get('/S')=='/URI':uris.append(str(action.get('/URI')))
+for item in license_data:
+ assert item['url'] in uris,('license_annotation_missing',item['id'])
+ assert '['+item['id']+']' in text,('license_label_missing',item['id'])
+assert 'LICENSE_LINKS.md' in text
 thumbs=[]
 for i in range(len(d)):
  im=d[i].render(scale=1.35).to_pil().convert('RGB');im.save(q/f'page-{i+1:02}.png')

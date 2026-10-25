@@ -17,7 +17,26 @@ def revise_resources(resources):
  resources[10][:]=['11 GPU及解释器','CPython；CUDA 12.6.77；cuDNN 9.5.1.17；[R14]','CUDA/cuDNN按NVIDIA条款，不归本项目AGPL授权；本包不含DLL、驱动或完整工具包。解释器、运行库另行取得。','自研：设备探测、解释器隔离、GPU/CPU策略。已明确排除二进制再分发；后续安装包单独核对。']
  resources[11][:]=['12 远程模型服务','DeepSeek兼容API；历史配置deepseek-flash；[R15]','服务调用不等于分发权重；实际端点按实际服务方条款。用户自备密钥并拥有输入处理权限，公开AI输出按适用要求标识。','自研：资料组织、提示、引用与恢复。服务适用条款已列；不提供账户密钥，不承诺服务能力或额度。']
  resources[13][:]=['14 课件和测试素材','自制增长率课件、确定性界面样例；历史课程汇总；[E2][E3]','自制文字、数值与图表随包用于操作核验；界面预置数据明确标识。第三方原视频、声音及整套课件不随包公开。','已用自制素材生成四张实际界面图；不把预置导图/练习记为模型实测。历史API抽样另列。']
- resources[14][:]=['15 自主代码与开放成果','基于40173c8的2026-10-25参赛源码快照；[R3]','自主代码AGPL-3.0-only；根LICENSE/NOTICE/THIRD_PARTY_NOTICES.md。源码、测试、构建及说明以逐文件SHA-256固定。','许可选择、声明文件和源码ZIP已落实；未改变第三方许可。成果固定标签aic-2026-review-20261025-r4；公开自主源码与核验ZIP，第三方安装包分发另行核对。']
+ resources[14][:]=['15 自主代码与开放成果','基于40173c8的2026-10-25参赛源码快照；[R3]','自主代码AGPL-3.0-only；根LICENSE/NOTICE/THIRD_PARTY_NOTICES.md。源码、测试、构建及说明以逐文件SHA-256固定。','许可选择、声明文件和源码ZIP已落实；未改变第三方许可。成果固定标签aic-2026-review-20261025-r5；公开自主源码与核验ZIP，第三方安装包分发另行核对。']
+ # Direct license links remain separate from the older general source references.
+ resources[0][2]='faster-whisper MIT[L01]；CTranslate2 MIT[L02]；small模型卡MIT[L03]。本次不含安装依赖或权重；后续再分发保留版权及许可文本。'
+ resources[1][2]='PaddleOCR Apache-2.0[L04]；PaddlePaddle同许可[L05]；det/rec模型卡[L06][L07]。本次不含程序和权重；再分发保留LICENSE/NOTICE及修改说明。'
+ resources[2][2]='程序AGPL-3.0[L08]；人物模型许可记录及上游政策[L09]。选择AGPL路线，提供自主源码及构建说明；不含模型和安装包。'
+ resources[3][1]='Torch 2.6.0+cu126；opencv-contrib-python 4.10.0.84 / OpenCV 4.10.0；NumPy 1.26.4；PyAV 18.1.0；[R7]'
+ resources[3][2]='Torch BSD-3-Clause[L10]；OpenCV Python封装MIT[L11]、底层Apache-2.0[L12]；NumPy与PyAV主包BSD-3-Clause[L13][L14]。本次不含二进制；附带库分别适用其声明。'
+ resources[4][2]='原构建LGPL-3.0-or-later原文[L15]；构建／再分发要求[L16]。源码包不带FFmpeg；后续分发二进制须提供匹配源码与构建信息并履行相关义务。'
+ resources[5][2]='FastAPI MIT[L17]；Uvicorn BSD-3-Clause[L18]。本次不含第三方安装依赖，仅提供接口和requirements；后续分发保留版权及许可文本。'
+ resources[6][2]='Vue MIT[L19]；SimpleMindMap MIT声明[L20]；KaTeX MIT[L21]。本次只含自主界面与npm锁文件；后续构建保留实际第三方版权与许可。'
+ resources[7][2]='Electron主包MIT[L22]；Vite MIT[L23]；TypeScript Apache-2.0[L24]。本次不含运行时或工具安装依赖；Chromium等附带组件保留各自声明。'
+ resources[8][2]='OpenJDK GPL-2.0原文[L25]及Classpath例外[L37]；Spring Boot Apache-2.0[L26]。本次不含JDK/JAR；后续二进制另保留发行物声明。'
+ resources[9][1]='SQLite；sqlite-jdbc 3.49.1.0；Flyway 11.7.2；可选Connector/J 9.2.0；版本由pom及Boot 3.5.0依赖管理固定。[R13]'
+ resources[9][2]='SQLite公共领域[L27]；JDBC：Apache-2.0[L28]；Flyway：Apache-2.0[L29]；Connector/J：GPLv2＋通用FOSS例外[L30]。本次不含驱动、数据库程序或用户数据。'
+ resources[10][1]='CPython 3.11.17；CUDA 12.6.77；cuDNN 9.5.1.17；[R14]'
+ resources[10][2]='Python PSF及历史许可[L31]；CUDA EULA[L32]、cuDNN EULA[L33]为NVIDIA专有条款，不归AGPL授权。本次不含解释器、GPU DLL或驱动。'
+ resources[11][2]='服务条款[L34]，不是开源权重许可证。按实际服务方、端点及账户条件调用；用户自备密钥并拥有输入处理权限。'
+ resources[12][2]='AI工具适用服务条款入口[L35]，不把服务使用权当作开源许可；按实际账户类型核对。开发、调试、测试和文档参与范围已披露。'
+ resources[14][2]='自主代码AGPL-3.0-only全文[L36]；根NOTICE与第三方声明说明边界。源码、测试、构建及运行文档以逐文件SHA-256固定；不覆盖第三方权利。'
+
 def apply_appendices(app):
  package=json.loads((ROOT/'.local/qa/aic-open-release-2026-10-25/source-package.json').read_text(encoding='utf8'))
  app[3]={'title':'附录B 成果访问、证据与复核入口','sub':'源码核验包内提供证据；本机私有目录不作为评委入口','blocks':[
@@ -30,7 +49,7 @@ def apply_appendices(app):
  ['E3 真实模型',DOC+'model-synthetic-summary.json：历史四次合成文字材料API抽样，日期、返回/保留数量及核算状态。'],
  ['E4 源码与界面','包根SOURCE_MANIFEST.json；'+DOC+'interface-verification.json与assets/。本次许可随包复制回归2项通过。'],
  ['E5 同类案例',DOC+'course-comparison-evidence.json：八张留存截图的哈希、课程与可见内容；以本项目历史及交互核验补充学习流程。']],[94,387]],
- ['small','固定版本：https://github.com/canyuexiaoxing/videostudy/tree/aic-2026-review-20261025-r4'],
+ ['small','固定版本：https://github.com/canyuexiaoxing/videostudy/tree/aic-2026-review-20261025-r5'],
  ['small','成果下载：该固定版本的cailiao目录提供本报告和源码核验ZIP。运行说明与可分享证据见docs/aic-review-2026-10-25/；请勿使用开发者本机私有路径。'],
  ['p','固定参赛标签包含本次AGPL许可证、第三方声明、测试摘要与运行说明；核心算法基线为40173c8，后续许可与核验文件由源码包清单固定。既有OBS安装器和清单可读取，但本次源码材料不替其完成安装及二进制分发许可验收。'],
  ['p','评委可先离线阅读包内代码、声明、测试摘要和截图，再按README启动源码：Node/npm前端、Java21+SQLite、独立Python和自行取得的FFmpeg/模型。完整AI分析需自己的可用API；离线测试与预置数据界面核验不需付费请求。Windows GPU路线、可选同步与各阶段限制在运行说明中单列。']]}
@@ -38,7 +57,7 @@ def apply_appendices(app):
   if spec['title'].startswith('附录C'):
    for block in spec['blocks']:
     if block[0]=='small':
-     block[1]=block[1].replace('外部评审访问权限需提交前核验。','2026-10-25仓库及固定提交已可匿名访问；新增许可与核验资料固定在aic-2026-review-20261025-r4标签，见附录B。').replace('具体服务条款需团队核实。','工具参与范围见3.3节；实际适用服务条款按账户与工具核对。')
+     block[1]=block[1].replace('外部评审访问权限需提交前核验。','2026-10-25仓库及固定提交已可匿名访问；新增许可与核验资料固定在aic-2026-review-20261025-r5标签，见附录B。').replace('具体服务条款需团队核实。','工具参与范围见3.3节；实际适用服务条款按账户与工具核对。')
  shots=[
  ('01-workspace-detail.png','E.1 视频工作台：区域设置','图E1 在真实视频工作台拖动保存分析区域。','使用自制30秒课件，拖动绿色框后界面显示已设置1个时间节点；区域在新分析时生效，已有历史任务不被改写。该图验证区域交互与保存，不演示模型识别结果。'),
  ('02-map-detail.png','E.2 导图画布：知识组织','图E2 实际导图组件显示预置的增长量、增长率和基期选择三个主题。','这是来自实际组件的渲染截图，数据由自制样例预置；用于展示画布布局、缩放与节点操作。端到端课程生成的技术链与既有实测另见正文4.2、4.4及5.2，本图不纳入生成成功率。'),

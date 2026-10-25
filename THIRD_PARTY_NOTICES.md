@@ -44,3 +44,7 @@ old installation packages. The existing OBS installer is not a newly audited
 release. Exact FFmpeg source delivery, NVIDIA redistributables and all bundled
 notices require a separate binary-release review. No installed user component is
 deleted or disabled by this documentation work.
+
+## Direct license texts and terms
+
+See [LICENSE_LINKS.md](docs/aic-review-2026-10-25/LICENSE_LINKS.md) for 37 direct license/model-card/terms links, version scope and content checksums. The report embeds the same links as clickable L01-L37 references. OpenCV Python packaging is MIT; the underlying OpenCV 4.10 library is Apache-2.0. Torch, NumPy and PyAV main-project notices are BSD-3-Clause, with bundled libraries separately licensed. Exact installed notices retained under the review directory remain unchanged.
