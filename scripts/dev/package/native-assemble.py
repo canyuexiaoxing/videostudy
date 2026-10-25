@@ -52,7 +52,13 @@ def assemble(root=ROOT):
         shutil.copytree(source, runtime / name, dirs_exist_ok=True)
     licenses = runtime / 'licenses'
     licenses.mkdir(exist_ok=True)
-    (licenses / 'THIRD-PARTY-NOTICES.txt').write_text('Framewise bundles Python (PSF), OpenJDK/Temurin (GPLv2 with Classpath Exception), FFmpeg LGPL build, PaddleOCR/PaddlePaddle (Apache-2.0), faster-whisper/CTranslate2 (MIT), PyTorch (BSD-style) and Ultralytics/YOLO (AGPL-3.0 or Enterprise). Original license files remain in each runtime and Python distribution metadata. Model license declarations and pinned upstream sources are in models-NOTICE.json and model-sources. This inventory does not grant commercial redistribution rights. Review all terms, including YOLO and NVIDIA CUDA/cuDNN redistribution terms, before external distribution. No Framewise application source license has been selected.\n', encoding='utf-8')
+    for name in ('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md'):
+        source = root / name
+        plain(source)
+        if not source.is_file():
+            raise ValueError('license_notice_missing:' + name)
+        shutil.copy2(source, licenses / name)
+    (licenses / 'THIRD-PARTY-NOTICES.txt').write_text('Framewise first-party code: AGPL-3.0-only. See LICENSE, NOTICE and THIRD_PARTY_NOTICES.md. Components retain original licenses. Source-only review does not certify runtime redistribution.\n', encoding='utf-8')
     critical_names = list(REQUIRED)
     critical_names += [f'agent/{file.name}' for file in sources]
     critical_names += ['models-manifest.json', 'models-NOTICE.json']

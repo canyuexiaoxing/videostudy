@@ -1,0 +1,117 @@
+{
+  "materials": "synthetic_only_no_user_courses_or_images",
+  "startedAt": "2026-10-20T12:29:36+0800",
+  "model": "deepseek-flash",
+  "attemptedCalls": 4,
+  "recordsWritten": false,
+  "cases": [
+    {
+      "case": "growth_basic",
+      "requested": 10,
+      "difficulty": "basic",
+      "mode": "related_materials",
+      "status": "completed",
+      "firstReturned": 10,
+      "accepted": 10,
+      "rejected": 0,
+      "missing": 0,
+      "fillAttempts": 0,
+      "fillStatus": "not_needed",
+      "calculationChecked": 5,
+      "calculationUnchecked": 2,
+      "diagrams": {},
+      "questionKinds": {
+        "single": 8,
+        "true_false": 2
+      },
+      "historyQuestions": 0,
+      "usage": {
+        "prompt_tokens": 2421,
+        "completion_tokens": 1985,
+        "total_tokens": 4406,
+        "prompt_cache_hit_tokens": 0
+      }
+    },
+    {
+      "case": "growth_context_application",
+      "requested": 10,
+      "difficulty": "application",
+      "mode": "map_context",
+      "status": "completed",
+      "firstReturned": 10,
+      "accepted": 10,
+      "rejected": 0,
+      "missing": 0,
+      "fillAttempts": 0,
+      "fillStatus": "not_needed",
+      "calculationChecked": 8,
+      "calculationUnchecked": 2,
+      "diagrams": {},
+      "questionKinds": {
+        "single": 10
+      },
+      "historyQuestions": 10,
+      "usage": {
+        "prompt_tokens": 4856,
+        "completion_tokens": 2580,
+        "total_tokens": 7436,
+        "prompt_cache_hit_tokens": 128
+      }
+    },
+    {
+      "case": "function_advanced",
+      "requested": 10,
+      "difficulty": "advanced",
+      "mode": "related_materials",
+      "status": "completed",
+      "firstReturned": 8,
+      "accepted": 8,
+      "rejected": 0,
+      "missing": 2,
+      "fillAttempts": 0,
+      "fillStatus": "not_needed",
+      "calculationChecked": 4,
+      "calculationUnchecked": 1,
+      "diagrams": {},
+      "questionKinds": {
+        "single": 7,
+        "true_false": 1
+      },
+      "historyQuestions": 0,
+      "usage": {
+        "prompt_tokens": 2467,
+        "completion_tokens": 2231,
+        "total_tokens": 4698,
+        "prompt_cache_hit_tokens": 1408
+      }
+    },
+    {
+      "case": "circuit_application",
+      "requested": 10,
+      "difficulty": "application",
+      "mode": "related_materials",
+      "status": "completed",
+      "firstReturned": 9,
+      "accepted": 8,
+      "rejected": 1,
+      "missing": 2,
+      "fillAttempts": 0,
+      "fillStatus": "not_needed",
+      "calculationChecked": 6,
+      "calculationUnchecked": 0,
+      "diagrams": {},
+      "questionKinds": {
+        "single": 6,
+        "true_false": 2
+      },
+      "historyQuestions": 0,
+      "usage": {
+        "prompt_tokens": 2506,
+        "completion_tokens": 2383,
+        "total_tokens": 4889,
+        "prompt_cache_hit_tokens": 1408
+      }
+    }
+  ],
+  "note": "Historical synthetic text-only API tests; not a new test or image-input benchmark."
+}

@@ -1,0 +1,48 @@
+{
+  "checkedAtUtc": "2026-10-25T09:39:38.656001+00:00",
+  "anonymous": true,
+  "sourceArchivePublished": false,
+  "requests": [
+    {
+      "name": "source_repository",
+      "url": "https://api.github.com/repos/canyuexiaoxing/videostudy",
+      "status": 206,
+      "sampleBytes": 5388,
+      "sampleSha256": "123f318a5532ad91683f346e221f4cb1730c9399478b7d405f7ecbd6889a3b10",
+      "private": false,
+      "sha": null,
+      "license": null
+    },
+    {
+      "name": "source_baseline",
+      "url": "https://api.github.com/repos/canyuexiaoxing/videostudy/git/commits/40173c8462cbfeeeb53ff44ebd70111e14c6db04",
+      "status": 206,
+      "sampleBytes": 1184,
+      "sampleSha256": "378b65fbe1403c08dcba9e556f77ef6979fde3c1a5347c7360bc8d03c13efae8",
+      "private": null,
+      "sha": "40173c8462cbfeeeb53ff44ebd70111e14c6db04",
+      "license": null
+    },
+    {
+      "name": "remote_license",
+      "url": "https://api.github.com/repos/canyuexiaoxing/videostudy/license",
+      "status": 404,
+      "errorType": "HTTPError"
+    },
+    {
+      "name": "old_installer",
+      "url": "https://framewise-download-2026.obs.cn-east-3.myhuaweicloud.com/releases/Framewise-0.3.1-Online-Setup.exe",
+      "status": 206,
+      "sampleBytes": 41472,
+      "sampleSha256": "6c9a4459483a92f23b21bae65815de866774a11d31aba042a18850cc3aa4b21c"
+    },
+    {
+      "name": "old_manifest",
+      "url": "https://framewise-download-2026.obs.cn-east-3.myhuaweicloud.com/releases/0.3.1-r20261020181422/release.json",
+      "status": 206,
+      "sampleBytes": 5178,
+      "sampleSha256": "e2963d002c747cb4ffcdf26caec5d8cd57464b9edef0f279fa9e857b964ce7af"
+    }
+  ],
+  "scope": "small range GET only; no full installer execution or verification"
+}

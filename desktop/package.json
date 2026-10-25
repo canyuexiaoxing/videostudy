@@ -28,5 +28,6 @@
     "vue-tsc": "^3.0.0"
   },
   "productName": "Framewise",
-  "description": "Framewise classroom learning workspace"
+  "description": "Framewise classroom learning workspace",
+  "license": "AGPL-3.0-only"
 }

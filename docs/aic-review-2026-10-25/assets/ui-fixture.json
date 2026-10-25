@@ -1,0 +1,549 @@
+{
+  "identity": {
+    "size": 226307,
+    "fingerprint": "9f422106f73378c7c385f02a6040b6d96536d19b8ded961c823e8ecac1301a06"
+  },
+  "job": {
+    "id": "00000000-0000-4000-8000-000000000025",
+    "status": "completed",
+    "result": {
+      "language": "zh",
+      "segments": [
+        {
+          "id": "s1",
+          "startMs": 0,
+          "endMs": 10000,
+          "text": "基期量：100 件；现期量：120 件；增长量 = 现期量 - 基期量"
+        },
+        {
+          "id": "s2",
+          "startMs": 10000,
+          "endMs": 20000,
+          "text": "增长量 = 120 - 100 = 20 件；增长率 = 增长量 / 基期量；20 / 100 = 20%"
+        },
+        {
+          "id": "s3",
+          "startMs": 20000,
+          "endMs": 30000,
+          "text": "从 80 件增加到 100 件；增长量 = 20 件；增长率 = 20 / 80 = 25%"
+        }
+      ],
+      "visualEvidence": [
+        {
+          "frameTimeMs": 0,
+          "ocrBlocks": [
+            {
+              "text": "基期量：100 件",
+              "score": 1,
+              "polygon": [
+                [
+                  76,
+                  225
+                ],
+                [
+                  740,
+                  225
+                ],
+                [
+                  740,
+                  275
+                ],
+                [
+                  76,
+                  275
+                ]
+              ]
+            },
+            {
+              "text": "现期量：120 件",
+              "score": 1,
+              "polygon": [
+                [
+                  76,
+                  308
+                ],
+                [
+                  740,
+                  308
+                ],
+                [
+                  740,
+                  358
+                ],
+                [
+                  76,
+                  358
+                ]
+              ]
+            },
+            {
+              "text": "增长量 = 现期量 - 基期量",
+              "score": 1,
+              "polygon": [
+                [
+                  76,
+                  391
+                ],
+                [
+                  740,
+                  391
+                ],
+                [
+                  740,
+                  441
+                ],
+                [
+                  76,
+                  441
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "frameTimeMs": 10000,
+          "ocrBlocks": [
+            {
+              "text": "增长量 = 120 - 100 = 20 件",
+              "score": 1,
+              "polygon": [
+                [
+                  76,
+                  225
+                ],
+                [
+                  740,
+                  225
+                ],
+                [
+                  740,
+                  275
+                ],
+                [
+                  76,
+                  275
+                ]
+              ]
+            },
+            {
+              "text": "增长率 = 增长量 / 基期量",
+              "score": 1,
+              "polygon": [
+                [
+                  76,
+                  308
+                ],
+                [
+                  740,
+                  308
+                ],
+                [
+                  740,
+                  358
+                ],
+                [
+                  76,
+                  358
+                ]
+              ]
+            },
+            {
+              "text": "20 / 100 = 20%",
+              "score": 1,
+              "polygon": [
+                [
+                  76,
+                  391
+                ],
+                [
+                  740,
+                  391
+                ],
+                [
+                  740,
+                  441
+                ],
+                [
+                  76,
+                  441
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "frameTimeMs": 20000,
+          "ocrBlocks": [
+            {
+              "text": "从 80 件增加到 100 件",
+              "score": 1,
+              "polygon": [
+                [
+                  76,
+                  225
+                ],
+                [
+                  740,
+                  225
+                ],
+                [
+                  740,
+                  275
+                ],
+                [
+                  76,
+                  275
+                ]
+              ]
+            },
+            {
+              "text": "增长量 = 20 件",
+              "score": 1,
+              "polygon": [
+                [
+                  76,
+                  308
+                ],
+                [
+                  740,
+                  308
+                ],
+                [
+                  740,
+                  358
+                ],
+                [
+                  76,
+                  358
+                ]
+              ]
+            },
+            {
+              "text": "增长率 = 20 / 80 = 25%",
+              "score": 1,
+              "polygon": [
+                [
+                  76,
+                  391
+                ],
+                [
+                  740,
+                  391
+                ],
+                [
+                  740,
+                  441
+                ],
+                [
+                  76,
+                  441
+                ]
+              ]
+            }
+          ]
+        }
+      ],
+      "pageGroups": [
+        {
+          "pageIndex": 1,
+          "firstFrameTimeMs": 0,
+          "lastFrameTimeMs": 10000,
+          "memberFrameTimesMs": [
+            0
+          ],
+          "representativeFrameTimesMs": [
+            0
+          ],
+          "decision": "new",
+          "decisionReason": "authored demo page",
+          "ocrLines": [
+            {
+              "text": "基期量：100 件",
+              "sourceFrameTimeMs": 0,
+              "sourceBlockIndex": 0
+            },
+            {
+              "text": "现期量：120 件",
+              "sourceFrameTimeMs": 0,
+              "sourceBlockIndex": 1
+            },
+            {
+              "text": "增长量 = 现期量 - 基期量",
+              "sourceFrameTimeMs": 0,
+              "sourceBlockIndex": 2
+            }
+          ]
+        },
+        {
+          "pageIndex": 2,
+          "firstFrameTimeMs": 10000,
+          "lastFrameTimeMs": 20000,
+          "memberFrameTimesMs": [
+            10000
+          ],
+          "representativeFrameTimesMs": [
+            10000
+          ],
+          "decision": "new",
+          "decisionReason": "authored demo page",
+          "ocrLines": [
+            {
+              "text": "增长量 = 120 - 100 = 20 件",
+              "sourceFrameTimeMs": 10000,
+              "sourceBlockIndex": 0
+            },
+            {
+              "text": "增长率 = 增长量 / 基期量",
+              "sourceFrameTimeMs": 10000,
+              "sourceBlockIndex": 1
+            },
+            {
+              "text": "20 / 100 = 20%",
+              "sourceFrameTimeMs": 10000,
+              "sourceBlockIndex": 2
+            }
+          ]
+        },
+        {
+          "pageIndex": 3,
+          "firstFrameTimeMs": 20000,
+          "lastFrameTimeMs": 30000,
+          "memberFrameTimesMs": [
+            20000
+          ],
+          "representativeFrameTimesMs": [
+            20000
+          ],
+          "decision": "new",
+          "decisionReason": "authored demo page",
+          "ocrLines": [
+            {
+              "text": "从 80 件增加到 100 件",
+              "sourceFrameTimeMs": 20000,
+              "sourceBlockIndex": 0
+            },
+            {
+              "text": "增长量 = 20 件",
+              "sourceFrameTimeMs": 20000,
+              "sourceBlockIndex": 1
+            },
+            {
+              "text": "增长率 = 20 / 80 = 25%",
+              "sourceFrameTimeMs": 20000,
+              "sourceBlockIndex": 2
+            }
+          ]
+        }
+      ],
+      "mindMap": {
+        "status": "completed",
+        "provider": "demo-fixture",
+        "modelId": "preloaded-demo-not-model-output",
+        "promptVersion": "authored-interface-demo-v1",
+        "createdAt": "2026-10-25T00:00:00Z",
+        "root": {
+          "id": "root",
+          "title": "增长量与增长率",
+          "startMs": 0,
+          "endMs": 10000,
+          "evidenceRefs": [
+            {
+              "sourceType": "transcript",
+              "sourceId": "s1",
+              "startMs": 0,
+              "endMs": 10000,
+              "quote": "基期量：100 件；现期量：120 件；增长量 = 现期量 - 基期量"
+            },
+            {
+              "sourceType": "image",
+              "sourceId": "frame_0",
+              "startMs": 0,
+              "endMs": 0,
+              "quote": "自制课程截图"
+            }
+          ],
+          "children": [
+            {
+              "id": "n1",
+              "title": "增长量",
+              "startMs": 0,
+              "endMs": 10000,
+              "evidenceRefs": [
+                {
+                  "sourceType": "transcript",
+                  "sourceId": "s1",
+                  "startMs": 0,
+                  "endMs": 10000,
+                  "quote": "基期量：100 件；现期量：120 件；增长量 = 现期量 - 基期量"
+                },
+                {
+                  "sourceType": "image",
+                  "sourceId": "frame_0",
+                  "startMs": 0,
+                  "endMs": 0,
+                  "quote": "自制课程截图"
+                }
+              ],
+              "children": [],
+              "details": [
+                {
+                  "id": "d1",
+                  "title": "增长量 = 现期量 - 基期量",
+                  "startMs": 0,
+                  "endMs": 10000,
+                  "evidenceRefs": [
+                    {
+                      "sourceType": "transcript",
+                      "sourceId": "s1",
+                      "startMs": 0,
+                      "endMs": 10000,
+                      "quote": "基期量：100 件；现期量：120 件；增长量 = 现期量 - 基期量"
+                    },
+                    {
+                      "sourceType": "image",
+                      "sourceId": "frame_0",
+                      "startMs": 0,
+                      "endMs": 0,
+                      "quote": "自制课程截图"
+                    }
+                  ],
+                  "children": [],
+                  "details": []
+                }
+              ]
+            },
+            {
+              "id": "n2",
+              "title": "增长率",
+              "startMs": 10000,
+              "endMs": 20000,
+              "evidenceRefs": [
+                {
+                  "sourceType": "transcript",
+                  "sourceId": "s2",
+                  "startMs": 10000,
+                  "endMs": 20000,
+                  "quote": "增长量 = 120 - 100 = 20 件；增长率 = 增长量 / 基期量；20 / 100 = 20%"
+                },
+                {
+                  "sourceType": "image",
+                  "sourceId": "frame_10000",
+                  "startMs": 10000,
+                  "endMs": 10000,
+                  "quote": "自制课程截图"
+                }
+              ],
+              "children": [],
+              "details": [
+                {
+                  "id": "d2",
+                  "title": "增长率 = 增长量 / 基期量",
+                  "startMs": 10000,
+                  "endMs": 20000,
+                  "evidenceRefs": [
+                    {
+                      "sourceType": "transcript",
+                      "sourceId": "s2",
+                      "startMs": 10000,
+                      "endMs": 20000,
+                      "quote": "增长量 = 120 - 100 = 20 件；增长率 = 增长量 / 基期量；20 / 100 = 20%"
+                    },
+                    {
+                      "sourceType": "image",
+                      "sourceId": "frame_10000",
+                      "startMs": 10000,
+                      "endMs": 10000,
+                      "quote": "自制课程截图"
+                    }
+                  ],
+                  "children": [],
+                  "details": []
+                },
+                {
+                  "id": "d3",
+                  "title": "先求增长量，再除以基期量",
+                  "startMs": 10000,
+                  "endMs": 20000,
+                  "evidenceRefs": [
+                    {
+                      "sourceType": "transcript",
+                      "sourceId": "s2",
+                      "startMs": 10000,
+                      "endMs": 20000,
+                      "quote": "增长量 = 120 - 100 = 20 件；增长率 = 增长量 / 基期量；20 / 100 = 20%"
+                    },
+                    {
+                      "sourceType": "image",
+                      "sourceId": "frame_10000",
+                      "startMs": 10000,
+                      "endMs": 10000,
+                      "quote": "自制课程截图"
+                    }
+                  ],
+                  "children": [],
+                  "details": []
+                }
+              ]
+            },
+            {
+              "id": "n3",
+              "title": "基期选择",
+              "startMs": 20000,
+              "endMs": 30000,
+              "evidenceRefs": [
+                {
+                  "sourceType": "transcript",
+                  "sourceId": "s3",
+                  "startMs": 20000,
+                  "endMs": 30000,
+                  "quote": "从 80 件增加到 100 件；增长量 = 20 件；增长率 = 20 / 80 = 25%"
+                },
+                {
+                  "sourceType": "image",
+                  "sourceId": "frame_20000",
+                  "startMs": 20000,
+                  "endMs": 20000,
+                  "quote": "自制课程截图"
+                }
+              ],
+              "children": [],
+              "details": [
+                {
+                  "id": "d4",
+                  "title": "从80到100的增长率为25%",
+                  "startMs": 20000,
+                  "endMs": 30000,
+                  "evidenceRefs": [
+                    {
+                      "sourceType": "transcript",
+                      "sourceId": "s3",
+                      "startMs": 20000,
+                      "endMs": 30000,
+                      "quote": "从 80 件增加到 100 件；增长量 = 20 件；增长率 = 20 / 80 = 25%"
+                    },
+                    {
+                      "sourceType": "image",
+                      "sourceId": "frame_20000",
+                      "startMs": 20000,
+                      "endMs": 20000,
+                      "quote": "自制课程截图"
+                    }
+                  ],
+                  "children": [],
+                  "details": []
+                }
+              ]
+            }
+          ],
+          "details": []
+        },
+        "examples": []
+      },
+      "review": {
+        "status": "not_applicable",
+        "resampledTimesMs": [],
+        "concerns": []
+      }
+    }
+  }
+}

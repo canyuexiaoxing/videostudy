@@ -1,0 +1,982 @@
+Picked up JAVA_TOOL_OPTIONS: -Djava.net.preferIPv4Stack=true -Djdk.net.unixdomain.tmpdir=<local>\.local\qa\aic-report-2026-10-25\selector-tcp
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] ---------------------< cn.videostudy:backend-java >---------------------
+[INFO] Building backend-java 0.1.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ backend-java ---
+[INFO] Copying 3 resources from src\main\resources to target\classes
+[INFO] Copying 37 resources from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.14.0:compile (default-compile) @ backend-java ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ backend-java ---
+[INFO] Copying 1 resource from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.14.0:testCompile (default-testCompile) @ backend-java ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO] 
+[INFO] --- surefire:3.5.3:test (default-test) @ backend-java ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+Picked up JAVA_TOOL_OPTIONS: -Djava.net.preferIPv4Stack=true -Djdk.net.unixdomain.tmpdir=<local>\.local\qa\aic-report-2026-10-25\selector-tcp
+[INFO] Running cn.videostudy.api.AnalysisProgressTest
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build as described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org.mockito/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (<local-path>)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+15:54:05.305 [main] INFO org.hibernate.validator.internal.util.Version -- HV000001: Hibernate Validator 8.0.2.Final
+15:54:05.906 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:05.906 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:05.908 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 2 ms
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.629 s -- in cn.videostudy.api.AnalysisProgressTest
+[INFO] Running cn.videostudy.api.AnalysisRegionTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.113 s -- in cn.videostudy.api.AnalysisRegionTest
+[INFO] Running cn.videostudy.api.ChapterControllerTest
+15:54:06.721 [main] INFO cn.videostudy.api.ChapterController -- Job request task=c1f838c3-f905-4ac9-9e45-0a2fb9f3a98e request=1f5b3284-100a-4ec6-a187-9629c6d82b40 stage=reuse result=existing elapsedMs=7
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.556 s -- in cn.videostudy.api.ChapterControllerTest
+[INFO] Running cn.videostudy.api.CloudSyncTest
+15:54:07.056 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:07.099 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:07.104 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.030s)
+15:54:07.109 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:07.140 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:07.148 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:07.158 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:07.164 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:07.168 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:07.173 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:07.178 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:07.181 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:07.187 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:07.191 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:07.196 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:07.200 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:07.204 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:07.208 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:07.212 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:07.216 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:07.220 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:07.223 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:07.232 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:07.236 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:07.243 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.006s)
+15:54:07.324 [main] WARN cn.videostudy.api.LocalSyncService -- Local sync task=all request=ec8a2fd5-581e-4198-a8c8-f831dd8f58b2 stage=connection result=sync_unavailable type=ResourceAccessException elapsed_ms=39
+15:54:07.491 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:07.500 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:07.501 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.006s)
+15:54:07.501 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:07.504 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:07.505 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:07.508 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:07.511 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:07.513 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:07.517 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:07.520 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:07.523 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:07.526 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:07.530 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:07.534 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:07.537 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:07.540 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:07.544 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:07.550 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:07.553 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:07.556 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:07.561 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:07.565 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:07.568 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:07.571 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.007s)
+15:54:07.592 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:07.602 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:07.602 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.007s)
+15:54:07.603 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:07.605 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:07.607 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:07.610 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:07.613 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:07.615 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:07.618 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:07.622 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:07.625 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:07.628 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:07.632 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:07.635 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:07.637 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:07.640 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:07.643 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:07.645 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:07.648 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:07.651 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:07.654 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:07.657 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:07.660 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:07.664 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.002s)
+15:54:07.740 [main] INFO cn.videostudy.api.LocalSyncService -- Local sync task=all request=cb167c5b-5a73-473d-b1ab-1d103147c5ec stage=connection result=completed elapsed_ms=53
+15:54:07.790 [main] INFO cn.videostudy.api.LocalSyncService -- Local sync task=52b11be1-4f1c-411e-aed8-c4db017a7705 request=2148cf51-f4eb-45b8-b327-ce0071d5450c stage=upload result=completed elapsed_ms=49
+15:54:07.818 [main] INFO cn.videostudy.api.LocalSyncService -- Local sync task=52b11be1-4f1c-411e-aed8-c4db017a7705 request=5f285c98-4e20-4c08-8829-91a4fc0c45df stage=upload result=completed elapsed_ms=28
+15:54:07.835 [main] INFO cn.videostudy.api.LocalSyncService -- Local sync task=52b11be1-4f1c-411e-aed8-c4db017a7705 request=868aeceb-4c81-4b61-9541-db44923f68e9 stage=download result=completed elapsed_ms=16
+15:54:07.873 [main] INFO cn.videostudy.api.LocalSyncService -- Local sync task=52b11be1-4f1c-411e-aed8-c4db017a7705 request=cfa9b354-233c-4185-abb0-ac6577f253a1 stage=upload result=completed elapsed_ms=26
+15:54:07.890 [main] WARN cn.videostudy.api.LocalSyncService -- Local sync task=52b11be1-4f1c-411e-aed8-c4db017a7705 request=0f130c1e-debd-4c1f-889f-2af1a554919c stage=download result=local_changes type=IllegalArgumentException elapsed_ms=13
+15:54:07.911 [main] WARN cn.videostudy.api.LocalSyncService -- Local sync task=52b11be1-4f1c-411e-aed8-c4db017a7705 request=987a03fc-3f84-40ae-8dd1-39e1164e8313 stage=upload result=sync_conflict type=Conflict elapsed_ms=19
+15:54:08.006 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:08.006 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:08.006 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:08.032 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:08.038 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:08.039 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.004s)
+15:54:08.040 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:08.043 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:08.043 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:08.046 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:08.048 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:08.050 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:08.052 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:08.055 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:08.057 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:08.060 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:08.062 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:08.064 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:08.066 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:08.068 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:08.072 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:08.073 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:08.075 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:08.078 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:08.081 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:08.084 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:08.087 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:08.090 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.379 s -- in cn.videostudy.api.CloudSyncTest
+[INFO] Running cn.videostudy.api.CompatibilityControllerTest
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.023 s -- in cn.videostudy.api.CompatibilityControllerTest
+[INFO] Running cn.videostudy.api.CourseSnapshotTest
+15:54:08.186 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:08.193 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:08.193 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.004s)
+15:54:08.193 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:08.195 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:08.196 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:08.198 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:08.201 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:08.204 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:08.206 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:08.208 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:08.212 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:08.215 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:08.217 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:08.220 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:08.222 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:08.224 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:08.227 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:08.228 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:08.231 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:08.233 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:08.235 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:08.238 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:08.240 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:08.242 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.001s)
+15:54:08.282 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:08.288 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:08.288 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.003s)
+15:54:08.288 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:08.291 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:08.292 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:08.295 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:08.297 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:08.299 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:08.301 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:08.304 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:08.306 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:08.308 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:08.310 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:08.313 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:08.315 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:08.317 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:08.318 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:08.321 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:08.323 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:08.325 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:08.328 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:08.330 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:08.333 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:08.335 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+15:54:08.353 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:08.359 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:08.360 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.004s)
+15:54:08.360 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:08.363 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:08.364 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:08.366 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:08.368 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:08.370 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:08.373 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:08.376 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:08.379 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:08.382 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:08.385 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:08.388 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:08.391 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:08.395 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:08.398 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:08.400 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:08.402 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:08.405 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:08.407 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:08.410 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:08.413 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:08.414 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.324 s -- in cn.videostudy.api.CourseSnapshotTest
+[INFO] Running cn.videostudy.api.DesktopCorsTest
+15:54:08.754 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:08.755 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:08.755 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.273 s -- in cn.videostudy.api.DesktopCorsTest
+[INFO] Running cn.videostudy.api.GroupedAnalysisTest
+15:54:08.833 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=1e46e80d-880c-4177-95ec-a62e324a293a stage=upload result=saved elapsedMs=1
+15:54:08.853 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=ac9acbd4-a465-47c7-a45a-682d8a004769 stage=upload result=saved elapsedMs=0
+15:54:09.020 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=cdd5e598-9646-444f-b0f0-e1db1eb05cfb stage=upload result=saved elapsedMs=1
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.289 s -- in cn.videostudy.api.GroupedAnalysisTest
+[INFO] Running cn.videostudy.api.HistoryControllerTest
+15:54:09.081 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:09.081 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:09.081 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.040 s -- in cn.videostudy.api.HistoryControllerTest
+[INFO] Running cn.videostudy.api.HistoryStoreTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in cn.videostudy.api.HistoryStoreTest
+[INFO] Running cn.videostudy.api.IgnoredRegionTest
+15:54:09.159 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:09.159 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:09.159 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:09.175 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=bcbdfa6b-7bd4-48e0-a864-edac87ffcada stage=upload result=saved elapsedMs=0
+15:54:09.177 [pool-8-thread-1] WARN cn.videostudy.api.TranscriptionController -- Transcription job bcbdfa6b-7bd4-48e0-a864-edac87ffcada failed
+java.lang.IllegalStateException: Agent returned no transcription result
+	at cn.videostudy.api.TranscriptionController.process(TranscriptionController.java:285)
+	at cn.videostudy.api.TranscriptionController.lambda$queueAnalysis$2(TranscriptionController.java:273)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+15:54:09.190 [pool-8-thread-1] WARN cn.videostudy.api.TranscriptionController -- Transcription job 57ceac60-7519-479f-89ea-460591ed03a5 failed
+java.lang.IllegalStateException: Agent returned no transcription result
+	at cn.videostudy.api.TranscriptionController.process(TranscriptionController.java:285)
+	at cn.videostudy.api.TranscriptionController.lambda$queueAnalysis$2(TranscriptionController.java:273)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+15:54:09.232 [main] INFO org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseFactory -- Starting embedded database: url='jdbc:h2:mem:f72bcd17-b8a9-4750-bebf-5bc178809058;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false', username='sa'
+15:54:09.252 [main] INFO org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseFactory -- Shutting down embedded database: url='jdbc:h2:mem:f72bcd17-b8a9-4750-bebf-5bc178809058;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false'
+15:54:09.271 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:09.271 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:09.271 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.171 s -- in cn.videostudy.api.IgnoredRegionTest
+[INFO] Running cn.videostudy.api.IgnoreRegionTimelineTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in cn.videostudy.api.IgnoreRegionTimelineTest
+[INFO] Running cn.videostudy.api.KeyframeControllerTest
+15:54:09.311 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:09.311 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:09.311 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:09.317 [main] WARN org.springframework.web.servlet.PageNotFound -- No mapping for GET /api/transcriptions/../etc/frames/28000
+15:54:09.317 [main] WARN org.springframework.web.servlet.PageNotFound -- No endpoint GET /api/transcriptions/../etc/frames/28000.
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.028 s -- in cn.videostudy.api.KeyframeControllerTest
+[INFO] Running cn.videostudy.api.MediaIdentityTest
+15:54:09.354 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=490a1fb0-76be-48bd-931f-07a510f902cd stage=cache_migration source=legacy_auto result=matched elapsedMs=0
+15:54:09.354 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=490a1fb0-76be-48bd-931f-07a510f902cd stage=cache_migration source=legacy_auto result=conflict elapsedMs=0
+15:54:09.386 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=0c20360c-4925-4a6d-b291-7a92c1bcd2ed stage=backfill result=original_unavailable elapsedMs=0
+15:54:09.388 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=0c20360c-4925-4a6d-b291-7a92c1bcd2ed stage=backfill result=completed elapsedMs=0
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.065 s -- in cn.videostudy.api.MediaIdentityTest
+[INFO] Running cn.videostudy.api.MindMapControllerTest
+15:54:09.405 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:09.406 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:09.406 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:09.431 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:09.431 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:09.431 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:09.444 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:09.444 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:09.444 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:09.459 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:09.459 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:09.459 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:09.474 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:09.474 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:09.474 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:09.483 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:09.483 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:09.483 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.092 s -- in cn.videostudy.api.MindMapControllerTest
+[INFO] Running cn.videostudy.api.MindMapExamplesTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in cn.videostudy.api.MindMapExamplesTest
+[INFO] Running cn.videostudy.api.MindMapModeTest
+15:54:09.602 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=56548bc4-dbb9-4e8e-b5f9-21b7f6ac1cd6 stage=upload result=saved elapsedMs=0
+15:54:09.604 [pool-12-thread-1] WARN cn.videostudy.api.TranscriptionController -- Overview dispatch deferred for 56548bc4-dbb9-4e8e-b5f9-21b7f6ac1cd6
+15:54:09.639 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=ba8c84b5-a721-4604-96c9-c25906a5e001 stage=upload result=saved elapsedMs=0
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.169 s -- in cn.videostudy.api.MindMapModeTest
+[INFO] Running cn.videostudy.api.NativeAgentHeaderTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.057 s -- in cn.videostudy.api.NativeAgentHeaderTest
+[INFO] Running cn.videostudy.api.NativeRuntimeControllerTest
+15:54:09.733 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:09.739 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:09.739 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.003s)
+15:54:09.740 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:09.742 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:09.743 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:09.746 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:09.750 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:09.753 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:09.757 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:09.759 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:09.762 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:09.764 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:09.767 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:09.770 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:09.772 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:09.774 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:09.776 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:09.778 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:09.780 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:09.783 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:09.785 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:09.788 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:09.790 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:09.791 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.001s)
+15:54:09.812 [main] WARN cn.videostudy.api.NativeRuntimeController -- Native runtime request=d706b5ed-ace7-4de6-ae65-0097d324c6b5 stage=activity result=failed error_type=UncategorizedSQLException elapsed_ms=11
+15:54:09.819 [main] WARN cn.videostudy.api.NativeRuntimeController -- Native runtime request=d8d32c55-2ccf-4fda-926e-fc8a12bc23f7 stage=activity result=failed error_type=UncategorizedSQLException elapsed_ms=6
+15:54:09.835 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:09.842 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:09.842 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.004s)
+15:54:09.842 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:09.845 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:09.846 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:09.850 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:09.853 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:09.855 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:09.857 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:09.859 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:09.860 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:09.862 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:09.864 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:09.867 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:09.868 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:09.871 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:09.873 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:09.876 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:09.878 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:09.880 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:09.883 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:09.885 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:09.887 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:09.888 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+15:54:09.903 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:09.908 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:09.908 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.002s)
+15:54:09.908 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:09.913 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:09.913 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:09.916 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:09.918 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:09.919 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:09.923 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:09.925 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:09.927 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:09.929 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:09.933 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:09.936 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:09.937 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:09.939 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:09.941 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:09.942 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:09.944 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:09.946 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:09.948 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:09.952 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:09.954 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:09.955 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.001s)
+15:54:10.132 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:10.137 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:10.137 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.003s)
+15:54:10.138 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:10.139 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:10.140 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:10.142 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:10.143 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:10.145 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:10.146 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:10.148 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:10.150 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:10.152 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:10.154 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:10.156 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:10.158 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:10.159 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:10.161 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:10.163 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:10.164 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:10.166 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:10.168 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:10.170 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:10.172 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:10.173 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+15:54:10.175 [main] INFO cn.videostudy.api.NativeRuntimeController -- Native runtime request=ef03e80a-66b3-4c36-a03f-ddb2c03c22a5 stage=shutdown result=accepted
+15:54:10.337 [ForkJoinPool.commonPool-worker-1] INFO cn.videostudy.api.NativeRuntimeController -- Native runtime request=ef03e80a-66b3-4c36-a03f-ddb2c03c22a5 stage=shutdown result=completed elapsed_ms=0
+15:54:10.349 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:10.355 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:10.356 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.004s)
+15:54:10.356 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:10.360 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:10.362 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:10.364 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:10.366 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:10.370 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:10.372 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:10.374 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:10.376 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:10.378 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:10.381 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:10.383 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:10.385 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:10.388 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:10.390 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:10.392 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:10.394 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:10.396 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:10.398 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:10.401 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:10.403 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:10.404 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.001s)
+15:54:10.487 [main] WARN cn.videostudy.api.NativeRuntimeController -- Native runtime request=a8675cfa-b543-4ec2-a25f-bcdb46e1fa2b stage=activity result=failed error_type=JsonParseException elapsed_ms=17
+15:54:10.504 [main] WARN cn.videostudy.api.NativeRuntimeController -- Native runtime request=829d6c28-d332-4628-b312-cc05bf8ff3b3 stage=activity result=failed error_type=JsonParseException elapsed_ms=16
+15:54:10.523 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:10.529 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:10.529 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.003s)
+15:54:10.529 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:10.531 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:10.531 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:10.533 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:10.535 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:10.537 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:10.540 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:10.542 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:10.544 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:10.546 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:10.548 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:10.550 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:10.552 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:10.554 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:10.556 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:10.565 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:10.567 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:10.570 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:10.572 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:10.575 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:10.576 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:10.578 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.007s)
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.888 s -- in cn.videostudy.api.NativeRuntimeControllerTest
+[INFO] Running cn.videostudy.api.NativeRuntimeFilterTest
+15:54:10.616 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:10.616 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:10.616 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:10.624 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:10.624 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:10.624 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:10.630 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:10.630 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:10.630 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in cn.videostudy.api.NativeRuntimeFilterTest
+[INFO] Running cn.videostudy.api.OverviewChatTest
+15:54:10.660 [main] INFO cn.videostudy.api.OverviewChatController -- overview_chat course=df2f66c8-57ed-4a80-b333-80347cec4f26 request=a80b765d-d522-4f75-84cc-d3483eec0a61 stage=started
+15:54:10.673 [main] INFO cn.videostudy.api.OverviewChatController -- overview_chat course=df2f66c8-57ed-4a80-b333-80347cec4f26 request=a80b765d-d522-4f75-84cc-d3483eec0a61 stage=saved elapsedMs=13
+15:54:10.678 [main] INFO cn.videostudy.api.OverviewChatController -- overview_chat course=df2f66c8-57ed-4a80-b333-80347cec4f26 request=516d9261-e4f2-49b0-b3e5-874dd4993177 stage=started
+15:54:10.681 [main] WARN cn.videostudy.api.OverviewChatController -- overview_chat course=df2f66c8-57ed-4a80-b333-80347cec4f26 request=516d9261-e4f2-49b0-b3e5-874dd4993177 stage=validation error=IllegalArgumentException elapsedMs=2
+15:54:10.707 [main] INFO cn.videostudy.api.OverviewChatController -- overview_chat course=a9053464-9746-4b76-a3da-38dd020ed4e4 request=f54e1e9c-e125-4b19-a40b-367b4c2fd57f stage=started
+15:54:10.710 [main] INFO cn.videostudy.api.OverviewChatController -- overview_chat course=a9053464-9746-4b76-a3da-38dd020ed4e4 request=f54e1e9c-e125-4b19-a40b-367b4c2fd57f stage=saved elapsedMs=3
+15:54:10.741 [main] INFO cn.videostudy.api.OverviewChatController -- overview_chat course=11957ee0-d262-4195-a727-33f649d8c8a8 request=1be5800c-01de-4320-bf19-27ad6ba4641c stage=started
+15:54:10.743 [main] WARN cn.videostudy.api.OverviewChatController -- overview_chat course=11957ee0-d262-4195-a727-33f649d8c8a8 request=1be5800c-01de-4320-bf19-27ad6ba4641c stage=provider error=IllegalStateException elapsedMs=1
+15:54:10.748 [main] INFO cn.videostudy.api.OverviewChatController -- overview_chat course=11957ee0-d262-4195-a727-33f649d8c8a8 request=1be5800c-01de-4320-bf19-27ad6ba4641c stage=started
+15:54:10.752 [main] INFO cn.videostudy.api.OverviewChatController -- overview_chat course=11957ee0-d262-4195-a727-33f649d8c8a8 request=1be5800c-01de-4320-bf19-27ad6ba4641c stage=saved elapsedMs=2
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.124 s -- in cn.videostudy.api.OverviewChatTest
+[INFO] Running cn.videostudy.api.OverviewControllerTest
+15:54:10.781 [pool-16-thread-1] INFO cn.videostudy.api.OverviewController -- Overview start task=d59c1da6-2fa7-4724-b841-0941502a89bd run=1e89bc8e-c701-4ee9-b0cd-b7dd6a31a4e6 attempt=1
+15:54:10.788 [pool-16-thread-1] INFO cn.videostudy.api.OverviewController -- Overview completed task=d59c1da6-2fa7-4724-b841-0941502a89bd run=1e89bc8e-c701-4ee9-b0cd-b7dd6a31a4e6 attempt=1 elapsed_ms=7
+15:54:10.803 [main] INFO cn.videostudy.api.OverviewController -- Job request task=d59c1da6-2fa7-4724-b841-0941502a89bd request=954ce2cd-141b-48cc-88c0-392e135e1985 stage=reuse result=existing elapsedMs=1
+15:54:10.855 [pool-17-thread-1] INFO cn.videostudy.api.OverviewController -- Overview start task=f205c783-47f4-4323-87b5-e442ae5378d6 run=8f130039-033b-401f-9a46-0235b9065bef attempt=1
+15:54:10.862 [pool-17-thread-1] WARN cn.videostudy.api.OverviewController -- Overview failed task=f205c783-47f4-4323-87b5-e442ae5378d6 run=8f130039-033b-401f-9a46-0235b9065bef attempt=1 stage=summary_validation type=IllegalArgumentException reason=Ungrounded citation http_status=0 elapsed_ms=8 retry=false error_code=overview_failed
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.111 s -- in cn.videostudy.api.OverviewControllerTest
+[INFO] Running cn.videostudy.api.PageGroupResultTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 s -- in cn.videostudy.api.PageGroupResultTest
+[INFO] Running cn.videostudy.api.PersonSelectionTest
+15:54:10.894 [main] INFO org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseFactory -- Starting embedded database: url='jdbc:h2:mem:b1c0d205-f721-4b73-86d4-a92af60f0981;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false', username='sa'
+15:54:10.903 [main] INFO org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseFactory -- Shutting down embedded database: url='jdbc:h2:mem:b1c0d205-f721-4b73-86d4-a92af60f0981;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false'
+15:54:10.932 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:10.932 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:10.932 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:10.936 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=f8e66caa-ebbd-4916-bfb5-94115f7a4c79 stage=upload result=saved elapsedMs=1
+15:54:10.937 [pool-18-thread-1] INFO cn.videostudy.api.TranscriptionController -- Analysis f8e66caa-ebbd-4916-bfb5-94115f7a4c79 person filtering adjacent
+15:54:10.944 [pool-18-thread-1] INFO cn.videostudy.api.TranscriptionController -- Analysis c0d51748-0d6a-4a59-89c6-7c33d05e548b person filtering adjacent
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.059 s -- in cn.videostudy.api.PersonSelectionTest
+[INFO] Running cn.videostudy.api.PracticeControllerTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in cn.videostudy.api.PracticeControllerTest
+[INFO] Running cn.videostudy.api.PracticeDiagramValidationTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.071 s -- in cn.videostudy.api.PracticeDiagramValidationTest
+[INFO] Running cn.videostudy.api.PracticeEmptyRetryTest
+15:54:11.181 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:11.188 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:11.188 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.005s)
+15:54:11.188 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:11.192 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:11.193 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:11.195 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:11.197 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:11.199 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:11.201 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:11.203 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:11.205 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:11.208 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:11.211 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:11.216 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:11.218 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:11.222 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:11.225 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:11.227 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:11.229 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:11.231 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:11.233 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:11.235 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:11.237 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:11.238 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.002s)
+15:54:11.305 [pool-19-thread-3] INFO cn.videostudy.api.PracticeStore -- Practice task=d224b10e-d228-42e7-a338-a49a6d0eae55 course=f7b2b085-0dce-4cb4-8f33-da76a3266c85 request=07f90b04-b096-40a0-9828-7d03cb89a4e6 stage=explicit_retry result=queued previous=empty_completed elapsed_ms=1
+15:54:11.330 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:11.334 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:11.334 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.003s)
+15:54:11.334 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:11.336 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:11.337 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:11.338 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:11.340 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:11.342 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:11.344 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:11.346 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:11.347 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:11.350 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:11.352 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:11.354 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:11.357 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:11.358 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:11.360 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:11.362 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:11.364 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:11.366 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:11.369 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:11.370 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:11.373 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:11.374 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+15:54:11.416 [pool-20-thread-4] INFO cn.videostudy.api.PracticeStore -- Practice task=84e707dc-0816-4906-8e0b-544bd14b9207 course=18776a57-11ad-4db1-ae27-075b57bb00a0 request=465fdd87-d2ba-40c5-9617-a8a3171eb344 stage=explicit_retry result=queued previous=empty_completed elapsed_ms=5
+15:54:11.538 [main] INFO cn.videostudy.api.PracticeStore -- Practice task=97ba0f0c-66c9-412a-ae72-36a993b5d4d9 course=b345609a-588d-4b9c-af5c-986d055f76df request=aefaadb7-6b7b-420e-ac9f-75cf647301af stage=explicit_retry result=queued previous=empty_completed elapsed_ms=1
+15:54:11.557 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:11.563 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:11.563 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.004s)
+15:54:11.563 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:11.566 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:11.567 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:11.568 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:11.571 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:11.573 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:11.575 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:11.577 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:11.579 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:11.580 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:11.583 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:11.585 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:11.587 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:11.589 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:11.591 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:11.593 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:11.595 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:11.597 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:11.599 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:11.601 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:11.603 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:11.604 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+15:54:11.653 [main] INFO cn.videostudy.api.PracticeStore -- Practice task=32c8f017-1310-46f3-b4d9-ef8ed0df5470 course=97dee688-926f-42cd-88ae-f423b36233da request=528540a0-82bf-490d-bce8-6ecd7a7ce899 stage=explicit_retry result=queued previous=empty_completed elapsed_ms=9
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.648 s -- in cn.videostudy.api.PracticeEmptyRetryTest
+[INFO] Running cn.videostudy.api.PracticeModesTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.082 s -- in cn.videostudy.api.PracticeModesTest
+[INFO] Running cn.videostudy.api.PracticeStoreTest
+15:54:11.835 [pool-22-thread-1] INFO cn.videostudy.api.PracticeController -- practice_history task=a746566a-8fd2-4039-aca4-c949de0c747d course=null rounds=0
+15:54:11.835 [pool-22-thread-1] WARN cn.videostudy.api.PracticeController -- practice_failed task=a746566a-8fd2-4039-aca4-c949de0c747d type=HttpServerErrorException code=practice_format_repair_failed retry=false
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.155 s -- in cn.videostudy.api.PracticeStoreTest
+[INFO] Running cn.videostudy.api.PreviewGateControllerTest
+15:54:11.933 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=526246cf-a53c-4801-b756-6da0686c8b97 stage=idle_check result=idle elapsed_ms=2
+15:54:11.935 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=526246cf-a53c-4801-b756-6da0686c8b97 stage=idle_check result=map_not_completed elapsed_ms=0
+15:54:11.936 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=526246cf-a53c-4801-b756-6da0686c8b97 stage=idle_check result=overview_not_completed elapsed_ms=0
+15:54:11.945 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=266abba6-ee39-4110-8147-1bd8a9de46b6 stage=idle_check result=foreground_request elapsed_ms=0
+15:54:11.947 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=266abba6-ee39-4110-8147-1bd8a9de46b6 stage=idle_check result=idle elapsed_ms=1
+15:54:11.962 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=3d45d0ed-0e07-419d-89e9-c21de2aebd2c stage=idle_check result=foreground_conversion elapsed_ms=4
+15:54:11.965 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=3d45d0ed-0e07-419d-89e9-c21de2aebd2c stage=idle_check result=idle elapsed_ms=2
+15:54:11.970 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=3d45d0ed-0e07-419d-89e9-c21de2aebd2c stage=idle_check result=idle_check_unavailable elapsed_ms=3
+15:54:11.984 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=foreground_job elapsed_ms=1
+15:54:11.986 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=idle elapsed_ms=2
+15:54:11.987 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=foreground_job elapsed_ms=0
+15:54:11.989 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=idle elapsed_ms=1
+15:54:11.991 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=foreground_job elapsed_ms=1
+15:54:11.993 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=idle elapsed_ms=1
+15:54:11.995 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=foreground_job elapsed_ms=2
+15:54:11.997 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=idle elapsed_ms=1
+15:54:11.999 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=foreground_job elapsed_ms=1
+15:54:12.000 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=idle elapsed_ms=1
+15:54:12.002 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=cf198059-60b1-45a9-bfa0-37d59251fbe2 stage=idle_check result=foreground_chat elapsed_ms=1
+15:54:12.010 [main] INFO cn.videostudy.api.PreviewGateController -- Preview permission task=33e29827-1b18-4fcd-8552-d3e5a7e66179 stage=idle_check result=map_not_completed elapsed_ms=0
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.090 s -- in cn.videostudy.api.PreviewGateControllerTest
+[INFO] Running cn.videostudy.api.QuestionChatTest
+15:54:12.065 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=0fbb5778-5fa2-49c8-a4a8-d27bc70920b2 request=4499501a-37c7-4ca5-92ff-02cb943c5a8a stage=request_started
+15:54:12.065 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=0fbb5778-5fa2-49c8-a4a8-d27bc70920b2 request=4499501a-37c7-4ca5-92ff-02cb943c5a8a stage=request_completed elapsed_ms=0
+15:54:12.113 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=725786fd-5716-4b9a-ab00-60b5b4935764 request=c735340a-d314-4a31-8414-2eb33e850fe1 stage=request_started
+15:54:12.113 [main] WARN cn.videostudy.api.QuestionChatController -- question_chat course=725786fd-5716-4b9a-ab00-60b5b4935764 request=c735340a-d314-4a31-8414-2eb33e850fe1 stage=request_failed type=IllegalStateException elapsed_ms=0
+15:54:12.119 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=725786fd-5716-4b9a-ab00-60b5b4935764 request=c735340a-d314-4a31-8414-2eb33e850fe1 stage=request_started
+15:54:12.119 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=725786fd-5716-4b9a-ab00-60b5b4935764 request=c735340a-d314-4a31-8414-2eb33e850fe1 stage=request_completed elapsed_ms=0
+15:54:12.188 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:12.188 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:12.188 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:12.206 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=d5c15b15-115b-4d01-9ce3-57cc6c2706e9 request=9d4badbd-6741-425f-87ba-cd5db7b4f15c stage=request_started
+15:54:12.206 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=d5c15b15-115b-4d01-9ce3-57cc6c2706e9 request=9d4badbd-6741-425f-87ba-cd5db7b4f15c stage=request_completed elapsed_ms=0
+15:54:12.257 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=5662c0d2-cb05-402b-9e3c-d1367f63fe37 stage=request_started
+15:54:12.257 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=5662c0d2-cb05-402b-9e3c-d1367f63fe37 stage=request_completed elapsed_ms=0
+15:54:12.261 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=e504df97-84c7-4764-a5f9-00aa03b33d18 stage=request_started
+15:54:12.261 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=e504df97-84c7-4764-a5f9-00aa03b33d18 stage=request_completed elapsed_ms=0
+15:54:12.265 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=e77d6068-245c-4095-87f3-09649b3b5b7a stage=request_started
+15:54:12.265 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=e77d6068-245c-4095-87f3-09649b3b5b7a stage=request_completed elapsed_ms=0
+15:54:12.268 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=a177e471-8cfc-4c34-97de-0728c419e2a1 stage=request_started
+15:54:12.268 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=a177e471-8cfc-4c34-97de-0728c419e2a1 stage=request_completed elapsed_ms=0
+15:54:12.271 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=bdff442c-df96-4dda-9925-a6967f72a9d6 stage=request_started
+15:54:12.272 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=bdff442c-df96-4dda-9925-a6967f72a9d6 stage=request_completed elapsed_ms=0
+15:54:12.276 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=a4d79a3a-38a0-45eb-b6e4-01724974d09f stage=request_started
+15:54:12.276 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=a4d79a3a-38a0-45eb-b6e4-01724974d09f stage=request_completed elapsed_ms=0
+15:54:12.280 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=476cbf2d-5a3c-48fc-b29a-465969b81ee3 stage=request_started
+15:54:12.280 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=476cbf2d-5a3c-48fc-b29a-465969b81ee3 stage=request_completed elapsed_ms=0
+15:54:12.283 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=47338776-0a6c-4fda-9109-55bae77f5d61 stage=request_started
+15:54:12.283 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=47338776-0a6c-4fda-9109-55bae77f5d61 stage=request_completed elapsed_ms=0
+15:54:12.287 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=15452b39-9804-4364-8875-776c25d46199 stage=request_started
+15:54:12.287 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=15452b39-9804-4364-8875-776c25d46199 stage=request_completed elapsed_ms=0
+15:54:12.291 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=6078fb9d-e703-4da1-9ba7-2f236571dab6 stage=request_started
+15:54:12.291 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=6078fb9d-e703-4da1-9ba7-2f236571dab6 stage=request_completed elapsed_ms=0
+15:54:12.294 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=b9887d3f-d67e-4891-b942-8d4f8932af60 stage=request_started
+15:54:12.295 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=b9887d3f-d67e-4891-b942-8d4f8932af60 stage=request_completed elapsed_ms=0
+15:54:12.299 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=3c3a290a-3373-4ec5-b985-0bd2fbc80a2c stage=request_started
+15:54:12.299 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=3c3a290a-3373-4ec5-b985-0bd2fbc80a2c stage=request_completed elapsed_ms=0
+15:54:12.303 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=0a487664-4f77-4132-8d94-17a9b15ab595 stage=request_started
+15:54:12.303 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=0a487664-4f77-4132-8d94-17a9b15ab595 stage=request_completed elapsed_ms=0
+15:54:12.306 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=505aaa85-17e0-49e6-90b2-245e39029641 stage=request_started
+15:54:12.307 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=505aaa85-17e0-49e6-90b2-245e39029641 stage=request_completed elapsed_ms=0
+15:54:12.310 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=33a5d71a-ae0f-426b-a4b9-e0bfec74f979 stage=request_started
+15:54:12.310 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=33a5d71a-ae0f-426b-a4b9-e0bfec74f979 stage=request_completed elapsed_ms=0
+15:54:12.314 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=4fae6e5c-29db-4f94-a8ac-b99eb17cd03b stage=request_started
+15:54:12.314 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=4fae6e5c-29db-4f94-a8ac-b99eb17cd03b stage=request_completed elapsed_ms=0
+15:54:12.318 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=788fc267-2b6e-4678-8886-35792d4880d0 stage=request_started
+15:54:12.318 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=788fc267-2b6e-4678-8886-35792d4880d0 stage=request_completed elapsed_ms=0
+15:54:12.324 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=16ff6215-bbce-47e5-97a5-6b3aa367179a stage=request_started
+15:54:12.324 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=16ff6215-bbce-47e5-97a5-6b3aa367179a stage=request_completed elapsed_ms=0
+15:54:12.330 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=f31f5eeb-2bc6-4a80-aeb8-d0256016adde stage=request_started
+15:54:12.330 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=f31f5eeb-2bc6-4a80-aeb8-d0256016adde stage=request_completed elapsed_ms=0
+15:54:12.333 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=378fd29d-5e86-46e3-a790-cd4887a13ca6 stage=request_started
+15:54:12.334 [main] INFO cn.videostudy.api.QuestionChatController -- question_chat course=dfdda847-c5e1-49d2-8208-3c57e355faf5 request=378fd29d-5e86-46e3-a790-cd4887a13ca6 stage=request_completed elapsed_ms=0
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.320 s -- in cn.videostudy.api.QuestionChatTest
+[INFO] Running cn.videostudy.api.SamplingIntervalTest
+15:54:12.358 [main] INFO org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseFactory -- Starting embedded database: url='jdbc:h2:mem:b7d26f12-0337-4058-88fb-a2270dffbc9e;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false', username='sa'
+15:54:12.363 [main] INFO org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseFactory -- Shutting down embedded database: url='jdbc:h2:mem:b7d26f12-0337-4058-88fb-a2270dffbc9e;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false'
+15:54:12.378 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:12.378 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:12.378 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:12.381 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=c23a3cb8-0689-4e2f-bca6-7dbef8121ecc stage=upload result=saved elapsedMs=0
+15:54:12.383 [pool-23-thread-1] WARN cn.videostudy.api.TranscriptionController -- Transcription job c23a3cb8-0689-4e2f-bca6-7dbef8121ecc failed
+java.lang.IllegalStateException: Agent returned no transcription result
+	at cn.videostudy.api.TranscriptionController.process(TranscriptionController.java:285)
+	at cn.videostudy.api.TranscriptionController.lambda$queueAnalysis$2(TranscriptionController.java:273)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+15:54:12.389 [pool-23-thread-1] WARN cn.videostudy.api.TranscriptionController -- Transcription job 6162a287-e1fb-4747-aa31-10568bd1d529 failed
+java.lang.IllegalStateException: Agent returned no transcription result
+	at cn.videostudy.api.TranscriptionController.process(TranscriptionController.java:285)
+	at cn.videostudy.api.TranscriptionController.lambda$queueAnalysis$2(TranscriptionController.java:273)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.061 s -- in cn.videostudy.api.SamplingIntervalTest
+[INFO] Running cn.videostudy.api.SQLiteStoreTest
+15:54:12.412 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:12.420 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:12.420 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.004s)
+15:54:12.420 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:12.423 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:12.424 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:12.426 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:12.428 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:12.430 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:12.432 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:12.435 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:12.437 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:12.439 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:12.441 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:12.443 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:12.445 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:12.447 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:12.450 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:12.452 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:12.455 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:12.457 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:12.460 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:12.463 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:12.466 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:12.467 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.001s)
+15:54:12.544 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:12.548 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:12.548 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.003s)
+15:54:12.548 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:12.551 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:12.552 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:12.554 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:12.556 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:12.558 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:12.560 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:12.562 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:12.563 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:12.565 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:12.567 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:12.570 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:12.571 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:12.574 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:12.577 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:12.580 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:12.581 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:12.583 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:12.586 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:12.588 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:12.590 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:12.592 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+15:54:12.618 [main] INFO cn.videostudy.api.OverviewController -- Job request task=237d686b-d539-4798-adc5-ebefba19614f request=370cf4aa-f87c-4d3b-881b-f4182e530a2e stage=reuse result=existing elapsedMs=3
+15:54:12.621 [main] INFO cn.videostudy.api.ChapterController -- Job request task=237d686b-d539-4798-adc5-ebefba19614f request=3ac1d162-1bdf-4151-855c-868e07f993d5 stage=reuse result=existing elapsedMs=3
+15:54:12.642 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:12.647 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:12.647 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.002s)
+15:54:12.647 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:12.650 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:12.652 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:12.654 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:12.655 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:12.657 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:12.659 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:12.661 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:12.663 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:12.665 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:12.667 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:12.670 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:12.673 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:12.675 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:12.677 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:12.679 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:12.681 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:12.683 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:12.686 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:12.688 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:12.690 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:12.691 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+15:54:12.725 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:12.730 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.004s)
+15:54:12.730 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": 19
+15:54:12.730 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Schema "main" is up to date. No migration necessary.
+15:54:12.763 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:12.767 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:12.767 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.002s)
+15:54:12.767 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:12.768 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:12.770 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:12.771 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:12.773 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:12.775 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:12.776 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:12.778 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:12.779 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:12.780 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:12.782 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:12.784 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:12.785 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:12.787 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:12.788 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:12.790 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:12.791 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:12.793 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:12.795 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:12.796 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:12.798 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:12.800 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+15:54:12.872 [main] INFO org.flywaydb.core.FlywayExecutor -- Database: jdbc:sqlite:<local-path> (SQLite 3.49)
+15:54:12.877 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Schema history table "main"."flyway_schema_history" does not exist yet
+15:54:12.877 [main] INFO org.flywaydb.core.internal.command.DbValidate -- Successfully validated 19 migrations (execution time 00:00.002s)
+15:54:12.877 [main] INFO org.flywaydb.core.internal.schemahistory.JdbcTableSchemaHistory -- Creating Schema History table "main"."flyway_schema_history" ...
+15:54:12.880 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Current version of schema "main": << Empty Schema >>
+15:54:12.880 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "1 - create transcription jobs"
+15:54:12.882 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "2 - index job cleanup"
+15:54:12.884 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "3 - visual analysis mode"
+15:54:12.886 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "4 - coarse change percent"
+15:54:12.888 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "5 - subtitle jobs"
+15:54:12.890 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "6 - chapter jobs"
+15:54:12.892 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "7 - overview jobs"
+15:54:12.894 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "8 - practice"
+15:54:12.896 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "9 - question chat"
+15:54:12.898 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "10 - coarse sample seconds"
+15:54:12.900 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "11 - ignored region"
+15:54:12.902 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "12 - history filename"
+15:54:12.904 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "13 - grouped analysis"
+15:54:12.905 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "14 - mind map mode"
+15:54:12.907 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "15 - person selection mode"
+15:54:12.908 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "16 - media identity"
+15:54:12.910 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "17 - overview chat"
+15:54:12.912 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "18 - sqlite updated timestamps"
+15:54:12.913 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Migrating schema "main" to version "19 - local sync state"
+15:54:12.915 [main] INFO org.flywaydb.core.internal.command.DbMigrate -- Successfully applied 19 migrations to schema "main", now at version v19 (execution time 00:00.000s)
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.570 s -- in cn.videostudy.api.SQLiteStoreTest
+[INFO] Running cn.videostudy.api.StudyControllerTest
+15:54:12.975 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:12.975 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:12.975 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.065 s -- in cn.videostudy.api.StudyControllerTest
+[INFO] Running cn.videostudy.api.SubtitleTransportTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in cn.videostudy.api.SubtitleTransportTest
+[INFO] Running cn.videostudy.api.SubtitleUploadTest
+15:54:13.105 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:13.105 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:13.105 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:13.108 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=e58a216b-451a-4e89-bc37-f261c71fd0eb stage=upload result=saved elapsedMs=0
+15:54:13.126 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:13.126 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:13.126 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:13.186 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=6dba7d89-409b-4c8a-9523-cb50deffdb14 stage=upload result=saved elapsedMs=0
+15:54:13.213 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=01091d32-fd33-4d07-bce7-fd20f8e501cd stage=upload result=saved elapsedMs=0
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.194 s -- in cn.videostudy.api.SubtitleUploadTest
+[INFO] Running cn.videostudy.api.SubtitleWorkflowTest
+15:54:13.388 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:13.388 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:13.388 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:13.464 [pool-34-thread-1] WARN cn.videostudy.api.SubtitleService -- Subtitle job 1f752fce-36cc-430c-811e-a1f82eedcb38 failed (ResourceAccessException)
+15:54:13.544 [pool-34-thread-2] WARN cn.videostudy.api.SubtitleService -- Subtitle job 1f752fce-36cc-430c-811e-a1f82eedcb38 failed (ResourceAccessException)
+15:54:13.621 [pool-34-thread-1] WARN cn.videostudy.api.SubtitleService -- Subtitle job 1f752fce-36cc-430c-811e-a1f82eedcb38 failed (ResourceAccessException)
+15:54:13.752 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:13.752 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:13.752 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:13.783 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:13.783 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:13.783 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:13.865 [pool-39-thread-1] WARN cn.videostudy.api.SubtitleService -- Subtitle job a3918307-aaf9-43da-953f-48a6558e4edd failed (IllegalArgumentException)
+[INFO] Tests run: 16, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.781 s -- in cn.videostudy.api.SubtitleWorkflowTest
+[INFO] Running cn.videostudy.api.TranscriptionControllerTest
+15:54:14.037 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:14.037 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:14.037 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:14.040 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=1b04bfeb-3ca8-4fd6-be5c-dd85905b3f3d stage=upload result=saved elapsedMs=0
+15:54:14.041 [pool-42-thread-1] WARN cn.videostudy.api.TranscriptionController -- Job 1b04bfeb-3ca8-4fd6-be5c-dd85905b3f3d automatically resuming after attempt 1: IllegalStateException
+15:54:14.044 [pool-42-thread-1] WARN cn.videostudy.api.TranscriptionController -- Transcription job 1b04bfeb-3ca8-4fd6-be5c-dd85905b3f3d failed
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleep0(Native Method)
+	at java.base/java.lang.Thread.sleep(Thread.java:509)
+	at cn.videostudy.api.TranscriptionController.analyzeWithResume(TranscriptionController.java:353)
+	at cn.videostudy.api.TranscriptionController.process(TranscriptionController.java:284)
+	at cn.videostudy.api.TranscriptionController.lambda$queueAnalysis$2(TranscriptionController.java:273)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+15:54:14.058 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:14.058 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:14.058 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:14.075 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:14.075 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:14.076 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+15:54:14.088 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=354416c4-202f-4c58-a1c6-cb2d75815d24 stage=upload result=saved elapsedMs=0
+15:54:14.088 [pool-45-thread-1] WARN cn.videostudy.api.TranscriptionController -- Job 354416c4-202f-4c58-a1c6-cb2d75815d24 automatically resuming after attempt 1: IllegalStateException
+15:54:14.615 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=b601196b-1b48-4f1f-b744-4eb2f8ec78c1 stage=upload result=saved elapsedMs=0
+15:54:14.615 [pool-46-thread-1] WARN cn.videostudy.api.TranscriptionController -- Job b601196b-1b48-4f1f-b744-4eb2f8ec78c1 automatically resuming after attempt 1: IllegalStateException
+15:54:15.122 [pool-46-thread-1] WARN cn.videostudy.api.TranscriptionController -- Transcription job b601196b-1b48-4f1f-b744-4eb2f8ec78c1 failed
+java.lang.IllegalStateException: agent unavailable
+	at cn.videostudy.api.TranscriptionControllerTest.lambda$failedAnalysisKeepsUploadForRetry$6(TranscriptionControllerTest.java:163)
+	at cn.videostudy.api.MediaAnalyzer.analyze(MediaAnalyzer.java:24)
+	at cn.videostudy.api.MediaAnalyzer.analyze(MediaAnalyzer.java:29)
+	at cn.videostudy.api.MediaAnalyzer.analyze(MediaAnalyzer.java:39)
+	at cn.videostudy.api.TranscriptionController.analyzeWithResume(TranscriptionController.java:337)
+	at cn.videostudy.api.TranscriptionController.process(TranscriptionController.java:284)
+	at cn.videostudy.api.TranscriptionController.lambda$queueAnalysis$2(TranscriptionController.java:273)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+15:54:15.146 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.146 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.146 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:15.161 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=c1bc4bed-f884-457a-843c-be4b94941bd9 stage=upload result=saved elapsedMs=1
+15:54:15.196 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.196 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.196 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:15.200 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=2a1b016d-2f8b-4fc2-920a-0d41d9d9a6b0 stage=upload result=saved elapsedMs=1
+15:54:15.213 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.214 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.214 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:15.217 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=14487408-499e-4689-b5bf-bbbb82b66e5d stage=upload result=saved elapsedMs=0
+15:54:15.230 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.230 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.230 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:15.233 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=ad618d60-e64b-4361-a374-eae75a8fd7f7 stage=upload result=saved elapsedMs=0
+15:54:15.245 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.245 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.246 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+15:54:15.249 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=049562e1-3999-4093-81b3-ee05272ba01a stage=upload result=saved elapsedMs=0
+15:54:15.262 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.262 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.262 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:15.265 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=2094aee6-4e1e-4eb9-9c6d-e0304dc579f1 stage=upload result=saved elapsedMs=0
+15:54:15.278 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.278 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.278 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:15.282 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=0834a2aa-47ee-4e16-ae0b-2185db0415b0 stage=upload result=saved elapsedMs=0
+15:54:15.291 [main] INFO cn.videostudy.api.TranscriptionController -- Media identity task=e7519c86-5b0e-4804-802f-f54236eb041b stage=upload result=saved elapsedMs=0
+15:54:15.292 [pool-56-thread-1] WARN cn.videostudy.api.TranscriptionController -- Transcription job e7519c86-5b0e-4804-802f-f54236eb041b failed
+java.lang.IllegalStateException: Full analysis has not completed Agent review
+	at cn.videostudy.api.TranscriptionController.process(TranscriptionController.java:290)
+	at cn.videostudy.api.TranscriptionController.lambda$queueAnalysis$2(TranscriptionController.java:273)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+15:54:15.340 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.340 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.341 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+15:54:15.357 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.357 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.357 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.336 s -- in cn.videostudy.api.TranscriptionControllerTest
+[INFO] Running cn.videostudy.api.TranscriptionDeletionControllerTest
+15:54:15.375 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.375 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.375 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:15.393 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.393 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.393 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+15:54:15.414 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+15:54:15.414 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+15:54:15.414 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.062 s -- in cn.videostudy.api.TranscriptionDeletionControllerTest
+[INFO] Running cn.videostudy.api.VideoRegionControllerTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.069 s -- in cn.videostudy.api.VideoRegionControllerTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 163, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  14.990 s
+[INFO] Finished at: 2026-10-25T15:54:15+08:00
+[INFO] ------------------------------------------------------------------------

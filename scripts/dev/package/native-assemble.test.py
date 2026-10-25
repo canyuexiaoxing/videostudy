@@ -10,6 +10,7 @@ spec.loader.exec_module(module)
 
 class AssemblyTests(unittest.TestCase):
     def fixture(self, root):
+        for name in ('LICENSE','NOTICE','THIRD_PARTY_NOTICES.md'):(root/name).write_text('AGPL review fixture: '+name)
         (root/'desktop').mkdir()
         (root/'desktop/package.json').write_text('{"version":"0.3.0"}')
         for name in module.REQUIRED + ('python/python311.dll','person/python311.dll','java/lib/modules'):
@@ -30,6 +31,8 @@ class AssemblyTests(unittest.TestCase):
             manifest=json.loads((runtime/'runtime-manifest.json').read_text())
             for entry in manifest['critical']:self.assertEqual(module.digest(runtime/entry['path']),entry['sha256'])
             self.assertTrue((runtime/'licenses/THIRD-PARTY-NOTICES.txt').is_file())
+            for name in ('LICENSE','NOTICE','THIRD_PARTY_NOTICES.md'):
+                self.assertEqual((root/name).read_bytes(),(runtime/'licenses'/name).read_bytes())
     def test_missing_runtime_fails_before_manifest(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);self.fixture(root);(root/'.local/native/runtime/python/python.exe').unlink()

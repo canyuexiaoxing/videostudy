@@ -111,7 +111,7 @@ def compile_installer(app_folder, output_dir, compiler=DEFAULT_COMPILER, version
         'Courses, SQLite data, API key credentials, notes and downloaded models remain in the external application user data folder. Uninstall keeps these files.\n\n'
         'Before an upgrade, use Framewise Settings > Backup to export a complete application backup, including note images. The installer retains the previous binary version under the versions folder.\n\n'
         'If a new version fails, close Framewise, restore the pre-upgrade application backup using a compatible version, and launch PreviousExecutable from install-state.ini. Do not open a newer SQLite schema with an older binary without restoring the matching backup.\n\n'
-        'All setup .exe and .bin files must stay in the same folder. The bundled third-party license notices are included with the application; no application source license is selected by this installer.\n', encoding='utf-8')
+        'All setup .exe and .bin files must stay in the same folder. The bundled third-party license notices are included with the application; first-party application code is AGPL-3.0-only; third-party components retain their own licenses.\n', encoding='utf-8')
     compile_output = output / ('.compile-' + uuid.uuid4().hex)
     compile_output.mkdir()
     command = [str(compiler), '/Qp', '/DCompressionMethod=' + compression, '/DAppSource=' + str(folder), '/DOutputDirectory=' + str(compile_output), '/DAppVersion=' + version, '/DNumericVersion=' + numeric, '/DAppName=' + app_name, '/DProductGuid=' + product_id, '/DPayloadBytes=' + str(details['bytes']), '/DOutputName=' + output_name, '/DUpgradeInfo=' + str(information), str(ROOT / 'desktop/installer/framewise.iss')]

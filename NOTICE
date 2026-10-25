@@ -1,0 +1,12 @@
+Framewise - course evidence-based learning workspace
+Copyright (c) 2026 Framewise contributors.
+
+First-party application code: GNU Affero General Public License version 3 only
+(SPDX: AGPL-3.0-only), except files with a separate notice. See LICENSE.
+This selection was confirmed by the project owner on 2026-10-25.
+
+Third-party code, weights, runtimes, services and teaching materials retain their
+own licenses and rights. See THIRD_PARTY_NOTICES.md. They are not relicensed by
+this notice; NVIDIA software and remote services are not licensed under our AGPL.
+Generative AI assisted implementation, debugging, tests and documentation.
+The team reviews, modifies and validates adopted content and checks sources.

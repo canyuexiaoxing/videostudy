@@ -1,0 +1,34 @@
+....................s.Unable to publish analysis progress
+.......................................................................................................model_diagnostics_file_unavailable
+model_diagnostics_file_unavailable
+model_diagnostics_file_unavailable
+model_diagnostics_file_unavailable
+model_diagnostics_file_unavailable
+...........................................................................................................................................................................................................................Mind-map attempt 1/3 failed at HTTP request/response JSON: HTTPError
+.Mind-map attempt 1/3 failed at HTTP request/response JSON: HTTPError
+Mind-map attempt 2/3 failed at HTTP request/response JSON: JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+..Mind-map chunk 1 failed: RuntimeError
+.Mind-map attempt 1/3 failed at model content JSON: JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+Mind-map attempt 2/3 failed at model content JSON: JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+Mind-map attempt 3/3 failed at model content JSON: JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+Mind-map chunk 1 failed: JSONDecodeError
+..Mind-map attempt 1/3 failed at model content JSON: JSONDecodeError: Expecting value: line 1 column 10 (char 9)
+.Mind-map attempt 1/3 failed at chapter schema: MindMapResponseError: Required topic string and children array are missing or invalid
+...Mind-map chunk 1 failed: RuntimeError
+...............................................overview_failed task=unbound attempt=1 stage=section_summary type=ValueError reason=Unknown evidence elapsed_ms=0 retry=True
+overview_failed task=unbound attempt=2 stage=section_summary type=ValueError reason=Unknown evidence elapsed_ms=0 retry=True
+overview_failed task=unbound attempt=3 stage=section_summary type=ValueError reason=Unknown evidence elapsed_ms=15 retry=False
+..overview_failed task=unbound attempt=1 stage=provider_request type=HTTPError reason=http_402 http_status=402 elapsed_ms=0 retry=False
+............overview_failed task=unbound attempt=1 stage=notes_validation type=ValueError reason=Missing course notes elapsed_ms=0 retry=True
+..overview_failed task=unbound attempt=1 stage=notes_validation type=ValueError reason=Missing course notes elapsed_ms=0 retry=True
+overview_failed task=unbound attempt=2 stage=notes_validation type=ValueError reason=Missing course notes elapsed_ms=0 retry=True
+overview_failed task=unbound attempt=3 stage=notes_validation type=ValueError reason=Missing course notes elapsed_ms=0 retry=False
+.overview_failed task=unbound attempt=1 stage=notes_validation type=ValueError reason=Missing note content elapsed_ms=0 retry=True
+overview_failed task=unbound attempt=2 stage=notes_validation type=ValueError reason=Missing note content elapsed_ms=0 retry=True
+overview_failed task=unbound attempt=3 stage=notes_validation type=ValueError reason=Missing note content elapsed_ms=0 retry=False
+..................................................................................................................................................................................................................................Unable to schedule subtitle source: RuntimeError
+.....................................................
+----------------------------------------------------------------------
+Ran 697 tests in 21.802s
+
+OK (skipped=1)

@@ -1,0 +1,7 @@
+{"stage": "native_assembled", "runtime": "<temporary-path>nistrator\\AppData\\Local\\Temp\\tmp2hre7xva\\.local\\native\\runtime", "agentFiles": 3, "criticalFiles": 14, "elapsedSeconds": 0.08}
+
+..
+----------------------------------------------------------------------
+Ran 2 tests in 0.194s
+
+OK

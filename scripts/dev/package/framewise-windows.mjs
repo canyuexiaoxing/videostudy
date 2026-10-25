@@ -13,7 +13,8 @@ const stamp=new Date().toISOString().replace(/[:.]/g,'-'),stage=path.join(root,'
 await mkdir(stage,{recursive:true});await mkdir(out,{recursive:true});
 await cp(path.join(desktop,'dist'),path.join(stage,'dist'),{recursive:true,filter:source=>!source.split(path.sep).includes('framewise-preview')});
 await mkdir(path.join(stage,'electron'));for(const file of await readdir(path.join(desktop,'electron')))if(file.endsWith('.cjs')&&!file.endsWith('.test.cjs'))await cp(path.join(desktop,'electron',file),path.join(stage,'electron',file));
-await writeFile(path.join(stage,'package.json'),JSON.stringify({name:'framewise',productName:'Framewise',author:'Framewise',license:'UNLICENSED',version:pkg.version,main:'electron/main.cjs',description:pkg.description,private:true},null,2));
+await writeFile(path.join(stage,'package.json'),JSON.stringify({name:'framewise',productName:'Framewise',author:'Framewise',license:pkg.license,version:pkg.version,main:'electron/main.cjs',description:pkg.description,private:true},null,2));
+for(const name of ['LICENSE','NOTICE','THIRD_PARTY_NOTICES.md'])await cp(path.join(root,name),path.join(stage,name));
 const {packager}=await import(pathToFileURL(path.join(desktop,'node_modules/@electron/packager/dist/index.js')).href);
 const cache=path.join(root,'.local/dev/electron-cache');const zip=path.join(cache,`electron-v${electron.version}-win32-x64.zip`);let localZip=false;try{localZip=(await stat(zip)).isFile()}catch{}
 const apps=await packager({dir:stage,name:'Framewise',executableName:'Framewise',platform:'win32',arch:'x64',electronVersion:electron.version,appVersion:pkg.version,asar:true,prune:false,out,icon:path.join(desktop,'public/favicon.ico'),win32metadata:{ProductName:'Framewise',FileDescription:'Framewise classroom learning workspace'},...(localZip?{electronZipDir:cache}:{})});

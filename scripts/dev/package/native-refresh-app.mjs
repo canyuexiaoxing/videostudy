@@ -14,7 +14,8 @@ const stage=path.join(root,'.local/dev/framewise-package','asar-refresh-'+Date.n
 await fs.mkdir(path.join(stage,'electron'),{recursive:true});
 await fs.cp(path.join(root,'desktop/dist'),path.join(stage,'dist'),{recursive:true,filter:source=>!source.split(path.sep).includes('framewise-preview')});
 for(const file of await fs.readdir(path.join(root,'desktop/electron')))if(file.endsWith('.cjs')&&!file.endsWith('.test.cjs'))await fs.copyFile(path.join(root,'desktop/electron',file),path.join(stage,'electron',file));
-await fs.writeFile(path.join(stage,'package.json'),JSON.stringify({name:'framewise',productName:'Framewise',author:'Framewise',license:'UNLICENSED',version:pkg.version,main:'electron/main.cjs',description:pkg.description,private:true},null,2));
+await fs.writeFile(path.join(stage,'package.json'),JSON.stringify({name:'framewise',productName:'Framewise',author:'Framewise',license:pkg.license,version:pkg.version,main:'electron/main.cjs',description:pkg.description,private:true},null,2));
+for(const name of ['LICENSE','NOTICE','THIRD_PARTY_NOTICES.md'])await fs.copyFile(path.join(root,name),path.join(stage,name));
 const temporary=path.join(folder,'resources/app-next.asar');
 await asar.createPackage(stage,temporary);await fs.rename(temporary,path.join(folder,'resources/app.asar'));
 console.log(JSON.stringify({stage:'asar_refreshed',folder}));

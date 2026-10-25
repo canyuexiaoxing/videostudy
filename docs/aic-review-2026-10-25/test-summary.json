@@ -1,0 +1,67 @@
+{
+  "date": "2026-10-25",
+  "suites": [
+    {
+      "suite": "desktop",
+      "exitCode": 0,
+      "passed": 207,
+      "skipped": 0,
+      "commandElapsedSeconds": 5.094,
+      "log": "test-desktop.log",
+      "logSha256": "4c2715877f7eb4b27177ef654d02e08e118ef134278159bcd0249bca71a67c76",
+      "testDate": "2026-10-25",
+      "baseline": "40173c8462cbfeeeb53ff44ebd70111e14c6db04",
+      "scope": "archived offline regression before license-only packaging changes"
+    },
+    {
+      "suite": "python",
+      "exitCode": 0,
+      "passed": 696,
+      "skipped": 1,
+      "commandElapsedSeconds": 23.172,
+      "log": "test-python.log",
+      "logSha256": "11e1db875f03fea1a0aaa3fdbab5f831dcaabf8a5e0d9a14dd634ca9d19c7c14",
+      "testDate": "2026-10-25",
+      "baseline": "40173c8462cbfeeeb53ff44ebd70111e14c6db04",
+      "scope": "archived offline regression before license-only packaging changes"
+    },
+    {
+      "suite": "java",
+      "exitCode": 0,
+      "passed": 163,
+      "skipped": 0,
+      "commandElapsedSeconds": 17.188,
+      "log": "test-java.log",
+      "logSha256": "6958cff85b08efa1e0a4809fad0365903cf366caca5dac1510ddbd0efdf53150",
+      "testDate": "2026-10-25",
+      "baseline": "40173c8462cbfeeeb53ff44ebd70111e14c6db04",
+      "scope": "archived offline regression before license-only packaging changes"
+    },
+    {
+      "suite": "frontend-typecheck",
+      "exitCode": 0,
+      "passed": null,
+      "skipped": 0,
+      "commandElapsedSeconds": 4.469,
+      "log": "test-frontend-typecheck.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "testDate": "2026-10-25",
+      "baseline": "40173c8462cbfeeeb53ff44ebd70111e14c6db04",
+      "scope": "archived offline regression before license-only packaging changes"
+    },
+    {
+      "suite": "frontend-build",
+      "exitCode": 0,
+      "passed": null,
+      "skipped": 0,
+      "commandElapsedSeconds": 4.593,
+      "log": "test-frontend-build.log",
+      "logSha256": "620af9d3fe8cb7f83a56757ec5f550f7ecb34235366b6ef921a5f4bc5fe81b4e",
+      "testDate": "2026-10-25",
+      "baseline": "40173c8462cbfeeeb53ff44ebd70111e14c6db04",
+      "scope": "archived offline regression before license-only packaging changes"
+    }
+  ],
+  "newInterfaceVerification": "interface-verification.json",
+  "newPaidModelCalls": 0
+}

@@ -1,0 +1,9 @@
+{
+  "exitCode": 0,
+  "tests": 2,
+  "checks": [
+    "notice files copied byte-for-byte",
+    "missing runtime rejects manifest"
+  ],
+  "newBinaryPackageProduced": false
+}

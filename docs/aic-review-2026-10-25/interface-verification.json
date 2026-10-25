@@ -1,0 +1,16 @@
+{
+  "source": "running Vue application with authored preloaded API fixtures",
+  "endToEndModelMeasurement": false,
+  "paidModelCalls": 0,
+  "realBackendWrites": 0,
+  "externalRequests": [],
+  "errors": [],
+  "unknownRoutes": [],
+  "checks": {
+    "regionSaved": true,
+    "mapRendered": true,
+    "evidenceSeekSeconds": 10,
+    "practiceFeedback": true,
+    "reviewEnabled": true
+  }
+}
