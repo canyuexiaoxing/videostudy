@@ -23,6 +23,20 @@ for page in body:
   elif block[0]=='table':
    for row in [block[1]]+block[2]:
     for cell in row:assert ''.join(str(cell).split()) in flatten,str(cell)[:40]
+# The appendix footer and contents now use the same independent numbering.
+for index,leaf in enumerate(r.pages[17:],1):
+ compact=''.join((leaf.extract_text() or '').split())
+ assert f'-附{index}-' in compact and f'附录{index}/14' in compact,('appendix_footer',index)
+tenth=''.join((r.pages[9].extract_text() or '').split())
+assert '4.5.1课程理解与回看关联' in tenth and '4.5.2课程出题与按题答疑' in tenth
+assert '4.6原生运行、个人数据和可选云同步' in ''.join((r.pages[10].extract_text() or '').split())
+assert r'\n成果下载' not in text
+for spec in body:
+ if spec['title'].startswith('附录A'):
+  cells=str(spec['blocks'])
+  for stale in ['部分随包','分发待核验','分发核验待闭环','分发审查待闭环','全部传递组件许可待核','分发说明待核']:
+   assert stale not in cells,stale
+assert 'aic-2026-review-20261025-r2' in text
 thumbs=[]
 for i in range(len(d)):
  im=d[i].render(scale=1.35).to_pil().convert('RGB');im.save(q/f'page-{i+1:02}.png')

@@ -11,7 +11,7 @@
 调用第三方依赖时仍须遵守原许可证。旧OBS安装器另属二进制分发，本包不替它作完整许可认证。
 
 固定参赛版本：
-https://github.com/canyuexiaoxing/videostudy/tree/aic-2026-review-20261025
+https://github.com/canyuexiaoxing/videostudy/tree/aic-2026-review-20261025-r2
 
 标签内cailiao目录提供最新版技术报告与源码核验ZIP；本目录提供运行说明、测试摘要和自制界面样例。
 把固定标签地址填入作品其他材料链接。评审期保持可访问；有条件时另备一份网盘或OBS镜像。
