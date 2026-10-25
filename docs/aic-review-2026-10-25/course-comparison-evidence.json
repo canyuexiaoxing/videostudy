@@ -1,0 +1,150 @@
+{
+  "reviewDate": "2026-10-25",
+  "evidenceType": "review of user-supplied archived screenshots and existing project verification records",
+  "newPlatformRuns": 0,
+  "newModelCalls": 0,
+  "thirdPartyScreenshotsRedistributed": false,
+  "screenshots": [
+    {
+      "id": 1,
+      "file": "image1.png",
+      "case": "A",
+      "course": "二维随机变量的独立性与函数",
+      "platform": "Framewise",
+      "kind": "思维导图",
+      "page": 3,
+      "sha256": "78375916374f5dad4311f4e5ca35120c8f29840bf0792465b4651194cc3dea87",
+      "bytes": 109869
+    },
+    {
+      "id": 2,
+      "file": "image5.png",
+      "case": "A",
+      "course": "二维随机变量的独立性与函数",
+      "platform": "BiBiGPT",
+      "kind": "思维导图",
+      "page": 4,
+      "sha256": "b8cabe9a385c9abb7d259cc8be50bf161b986766e83f077d97dc0de45a1fc7a7",
+      "bytes": 393654
+    },
+    {
+      "id": 3,
+      "file": "image10.png",
+      "case": "A",
+      "course": "二维随机变量的独立性与函数",
+      "platform": "夸克网盘",
+      "kind": "思维导图",
+      "page": 5,
+      "sha256": "ec3a79f5f0dcae6547dc6908616c8b102aba7e78221e68eeba8da1d9e8a91b9e",
+      "bytes": 97155
+    },
+    {
+      "id": 4,
+      "file": "image13.png",
+      "case": "B",
+      "course": "函数极限与连续",
+      "platform": "Framewise",
+      "kind": "思维导图",
+      "page": 6,
+      "sha256": "dfd17779119abb2268fbc01a8b58b25424e1666813c6fa272e648faa50f8348d",
+      "bytes": 116606
+    },
+    {
+      "id": 5,
+      "file": "image16.png",
+      "case": "B",
+      "course": "函数极限与连续",
+      "platform": "BiBiGPT",
+      "kind": "思维导图",
+      "page": 7,
+      "sha256": "9a739b1df25f4f6d5949e341bde8dfb9823f6670b629b077be106ac4f5155a35",
+      "bytes": 375783
+    },
+    {
+      "id": 6,
+      "file": "image20.png",
+      "case": "B",
+      "course": "函数极限与连续",
+      "platform": "夸克网盘",
+      "kind": "思维导图",
+      "page": 8,
+      "sha256": "aa5054cc16839aa678619fb2e67ead28ad5fd9291c97d84402078e1e7f198c83",
+      "bytes": 85190
+    },
+    {
+      "id": 7,
+      "file": "baidu-map.png",
+      "case": "C",
+      "course": "幂级数求和函数：利用微分方程",
+      "platform": "百度网盘",
+      "kind": "思维导图",
+      "page": 9,
+      "sha256": "6738a2a68d47ede53c466d4ff7874e66996a19699d28cad33b0565041b2154bc",
+      "bytes": 1248188
+    },
+    {
+      "id": 8,
+      "file": "baidu-quiz.png",
+      "case": "C",
+      "course": "幂级数求和函数：利用微分方程",
+      "platform": "百度网盘",
+      "kind": "AI出题",
+      "page": 10,
+      "sha256": "257529e9cf07e65d95ef6f57686e75f3ccd4d2c74aeb8379b42b74273ae6afdc",
+      "bytes": 149941
+    }
+  ],
+  "findings": [
+    {
+      "case": "A",
+      "course": "二维随机变量的独立性与函数",
+      "figures": [
+        1,
+        2,
+        3
+      ],
+      "Framewise": "七类题型：边缘分布、边缘密度、独立性、和、商、最大值、最小值；分支中包含公式、适用条件或求解步骤。",
+      "BiBiGPT": "摘要、亮点、思考、术语解释与章节总结等栏目。",
+      "夸克网盘": "课程总结与知识分支导图。"
+    },
+    {
+      "case": "B",
+      "course": "函数极限与连续",
+      "figures": [
+        4,
+        5,
+        6
+      ],
+      "Framewise": "五组方法：幂指型极限、变限积分、积分与无穷小等价、已知极限反求参数与未知函数极限、常用等价无穷小与恒等变形。",
+      "BiBiGPT": "摘要、亮点、思考、术语解释与章节总结等栏目。",
+      "夸克网盘": "课程总结、导图及例题图文分析。"
+    },
+    {
+      "case": "C",
+      "course": "幂级数求和函数：利用微分方程",
+      "figures": [
+        7,
+        8
+      ],
+      "百度网盘": "知识分支、题目选项、答案和字幕引用解析；可见导数符号采用“y撇”等文字表达。",
+      "FramewiseExistingHistory": {
+        "task": "41d4c269-b84c-49c4-8d22-fde07c468b25",
+        "knowledgeNodes": 39,
+        "examples": 3,
+        "latexMarkedItems": 36,
+        "source": "archived 2026-10-21 metrics; different saved generation from third-party screenshots"
+      }
+    },
+    {
+      "case": "Framewise practice and interaction evidence",
+      "sources": [
+        "model-synthetic-summary.json",
+        "interface-verification.json"
+      ],
+      "syntheticTextOnlyCalls": 4,
+      "questionsKept": 36,
+      "verifiedInteraction": "预置自制题作答反馈、解析与回看入口；点击知识节点，播放器到达对应00:10；不冒充新生成模型结果。"
+    }
+  ],
+  "comparisonScope": "按指定样例说明可见组织方式与本项目已验证功能；不将截图之外的平台能力或跨样例模型质量推断为结论。"
+}

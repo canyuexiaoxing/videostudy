@@ -36,8 +36,11 @@ for spec in body:
   cells=str(spec['blocks'])
   for stale in ['部分随包','分发待核验','分发核验待闭环','分发审查待闭环','全部传递组件许可待核','分发说明待核']:
    assert stale not in cells,stale
-assert 'aic-2026-review-20261025-r3' in text
-assert 'aic-2026-review-20261025-r2' not in text
+assert 'aic-2026-review-20261025-r4' in text
+assert 'aic-2026-review-20261025-r3' not in text
+assert '6.2同类产品案例对照与本项目特色' in ''.join(text.split())
+assert '有限的同类产品对照' not in text
+assert 'course-comparison-evidence.json' in text
 thumbs=[]
 for i in range(len(d)):
  im=d[i].render(scale=1.35).to_pil().convert('RGB');im.save(q/f'page-{i+1:02}.png')
